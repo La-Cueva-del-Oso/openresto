@@ -10,6 +10,8 @@ How each feature behaves, its API fields and its error codes are in
 
 ## [Unreleased]
 
+## [2.4.1] - 2026-10-14
+
 ### Changed
 
 - The documentation site now matches the look of [get.openres.to](https://get.openres.to): the same warm palette, terracotta accent, Inter type and brand mark, in light and dark.
@@ -19,6 +21,12 @@ How each feature behaves, its API fields and its error codes are in
 - Documentation: upgrading now says to download the new release's `docker-compose.yml`, since the file attached to a release is pinned to its version and `docker compose pull` alone kept the old one.
 - Documentation: Wallet, push and reminder settings are given under the `.env` names the release compose file reads, the backup commands find the volumes whatever the compose project is called, and the admin reset script is downloaded where it can find `.env`.
 - Documentation: confirmation email links, upload limits and rate limits are described as they are; the rate limits are fixed, not configurable.
+- On a phone browser, scrolling back up inside the booking result sheet no longer drags the sheet down at the same time.
+- On iOS, dragging the booking result sheet down no longer makes the booking inside it bounce under your finger.
+
+### Security
+
+- .NET runtime updated to 10.0.13, which fixes the `System.Security.Cryptography.Pkcs` advisories. Expo SDK 57 packages and other npm dependencies updated to their latest patch releases.
 
 ## [2.4.0] - 2026-10-03
 
