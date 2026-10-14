@@ -1,7 +1,7 @@
 {
   "name": "openresto",
-  "version": "2.4.0",
-  "description": "A self-hosted restaurant booking management system. Customers browse restaurants, hold tables in real-time, and book instantly. Admins manage reservations, tables, sections, and branding from a dedicated dashboard.",
+  "version": "2.4.1",
+  "description": "A self-hosted restaurant booking management system. Customers browse restaurants, hold tables in real-time, and book instantly. Admins manage reservations, tables, sections, and bookings. Check metrics, map seating, and manage customer notes. This app works locally or in a controlled cloud environment with a simple self-hosted deployment stack.",
   "main": "index.js",
   "scripts": {
     "dev": "concurrently --kill-others --kill-timeout 5000 --names \"api,fe\" --prefix-colors \"cyan,magenta\" \"dotnet watch --project OpenRestoApi\" \"npm run dev --prefix openresto-frontend\"",
