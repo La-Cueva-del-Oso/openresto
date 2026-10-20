@@ -74,7 +74,7 @@ describe("usePushResubscribe", () => {
 
   it("registers when the session becomes authenticated, and only once across re-renders", async () => {
     setup();
-    const { rerender } = renderHook(({ on }) => usePushResubscribe(on), {
+    const { rerender } = renderHook(({ on }: { on: boolean }) => usePushResubscribe(on), {
       initialProps: { on: false },
     });
     rerender({ on: true });
