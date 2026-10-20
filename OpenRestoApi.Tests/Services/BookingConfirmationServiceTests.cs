@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Moq;
+using OpenRestoApi.Core.Application.Exceptions;
 using OpenRestoApi.Core.Application.Interfaces;
 using OpenRestoApi.Core.Application.Services;
+using OpenRestoApi.Core.Application.Utilities;
 using OpenRestoApi.Core.Domain;
 using OpenRestoApi.Infrastructure.Persistence;
 using OpenRestoApi.Infrastructure.Persistence.Repositories;
@@ -251,7 +253,26 @@ public class BookingConfirmationServiceTests
         var failure = Assert.Single(failures);
         Assert.Equal("ABC123", failure.BookingRef);
         Assert.Equal("guest@example.com", failure.RecipientEmail);
-        Assert.Contains("SMTP failure", failure.ErrorMessage);
+        // Only the category is stored; the exception text goes to the log, not to a table the API lists.
+        Assert.Equal(ErrorCodes.EmailSendFailed, failure.ErrorMessage);
+        Assert.DoesNotContain("SMTP failure", failure.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task SendConfirmationAsync_StoresTheCategoryOfAClassifiedFailure()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(SendConfirmationAsync_StoresTheCategoryOfAClassifiedFailure));
+        (Booking booking, Restaurant restaurant) = MakeBookingAndRestaurant(db);
+        var emailServiceMock = new Mock<IEmailService>();
+        emailServiceMock
+            .Setup(e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ThrowsAsync(new InfrastructureException("535 bob@corp.example") { Code = ErrorCodes.EmailAuthFailed });
+        BookingConfirmationService svc = CreateService(db, emailServiceMock, MockSettingsService(new EmailSettings { SendBookingConfirmations = true }), new EmailFailureRepository(db));
+
+        await svc.SendConfirmationAsync(booking, restaurant);
+
+        EmailFailure failure = Assert.Single(await db.Set<EmailFailure>().ToListAsync());
+        Assert.Equal(ErrorCodes.EmailAuthFailed, failure.ErrorMessage);
     }
 
     [Fact]

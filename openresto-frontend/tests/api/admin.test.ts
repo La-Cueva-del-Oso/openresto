@@ -784,6 +784,23 @@ describe("testEmailConnection", () => {
     expect(result).toEqual({ ok: false, message: "SMTP unreachable" });
   });
 
+  it("translates the failure code instead of showing the server's English", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({
+        message: "The mail server rejected the username or password.",
+        code: "email.auth_failed",
+      }),
+    });
+
+    const result = await testEmailConnection();
+
+    expect(result).toEqual({
+      ok: false,
+      message: "The mail server rejected the username or password. Check them and try again.",
+    });
+  });
+
   it("returns network error on exception", async () => {
     mockFetch.mockRejectedValueOnce(new Error("offline"));
 

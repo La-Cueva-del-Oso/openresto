@@ -363,7 +363,7 @@
       "cancel_email_required": "Für die Stornierung einer Buchung ist eine E-Mail-Adresse erforderlich.",
       "email_fields_required": "Betreff und Nachricht sind erforderlich.",
       "email_invalid": "Diese E-Mail-Adresse scheint nicht zu stimmen.",
-      "email_send_failed": "Senden fehlgeschlagen: {{detail}}",
+      "email_send_failed": "Die E-Mail konnte nicht gesendet werden. Prüfen Sie die E-Mail-Einstellungen und versuchen Sie es erneut.",
       "invalid_table_for_restaurant": "Ungültiger Tisch für dieses Restaurant.",
       "lookup_email_required": "Für die Suche nach einer Buchung ist eine E-Mail-Adresse erforderlich.",
       "lookup_not_found": "Keine Buchung zu dieser Referenz und E-Mail-Adresse gefunden.",
@@ -404,9 +404,12 @@
       "phone_too_long": "Die Telefonnummer darf höchstens {{max}} Zeichen lang sein."
     },
     "email": {
-      "connection_failed": "Verbindung fehlgeschlagen: {{detail}}",
+      "auth_failed": "Der Mailserver hat den Benutzernamen oder das Passwort abgelehnt. Prüfen Sie beides und versuchen Sie es erneut.",
+      "connection_failed": "Es konnte keine Verbindung zum Mailserver hergestellt werden. Prüfen Sie Server und Port.",
       "not_configured": "E-Mail ist nicht konfiguriert.",
-      "password_required": "Um Server, Port, Benutzernamen oder Verschlüsselung zu ändern, geben Sie das E-Mail-Passwort erneut ein."
+      "password_required": "Um Server, Port, Benutzernamen oder Verschlüsselung zu ändern, geben Sie das E-Mail-Passwort erneut ein.",
+      "recipient_rejected": "Der Mailserver hat die Empfängeradresse nicht akzeptiert. Prüfen Sie, ob sie stimmt.",
+      "send_failed": "Die E-Mail konnte nicht gesendet werden. Versuchen Sie es in einigen Minuten erneut."
     },
     "generic": "Etwas ist schiefgelaufen",
     "genericMessage": "Ein unerwarteter Fehler ist aufgetreten. Versuchen Sie es erneut.",

@@ -367,6 +367,8 @@ public class BookingNotificationServiceTests : IDisposable
         Assert.Null(notification.PushSentAt);
         Assert.NotNull(notification.PushError);
         Assert.Contains("500", notification.PushError);
+        // The notifications API lists PushError, so the library's text stays in the log.
+        Assert.DoesNotContain("push failed", notification.PushError);
     }
 
     [Fact]
@@ -487,6 +489,7 @@ public class BookingNotificationServiceTests : IDisposable
         Assert.NotNull(notification.PushSentAt);
         Assert.NotNull(notification.PushError);
         Assert.Contains(nameof(InvalidEncryptionDetailsException), notification.PushError);
+        Assert.DoesNotContain("Unable to encrypt", notification.PushError);
         // A bad key is not a dead endpoint, so the row stays for the browser to refresh.
         Assert.Equal(2, await _db.AdminPushSubscriptions.CountAsync());
     }

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenRestoApi.Core.Application.DTOs;
+using OpenRestoApi.Core.Application.Exceptions;
 using OpenRestoApi.Core.Application.Services;
 using OpenRestoApi.Core.Application.Utilities;
 using OpenRestoApi.Core.Domain;
@@ -17,9 +18,10 @@ namespace OpenRestoApi.Controllers;
 [Route("api/admin/email-settings")]
 [Authorize(Policy = AuthPolicies.RequireAdmin)]
 [NoApiKeyAccess]
-public class EmailSettingsController(EmailSettingsService emailSettings) : ControllerBase
+public class EmailSettingsController(EmailSettingsService emailSettings, ILogger<EmailSettingsController>? logger = null) : ControllerBase
 {
     private readonly EmailSettingsService _emailSettings = emailSettings;
+    private readonly ILogger<EmailSettingsController>? _logger = logger;
 
     [HttpGet]
     public async Task<IActionResult> Get()
@@ -65,12 +67,10 @@ public class EmailSettingsController(EmailSettingsService emailSettings) : Contr
         }
         catch (Exception ex)
         {
-            return BadRequest(new MessageResponse
-            {
-                Message = $"Connection failed: {ex.Message}",
-                Code = ErrorCodes.EmailConnectionFailed,
-                Args = new Dictionary<string, object> { ["detail"] = ex.Message }
-            });
+            // What the SMTP stack said can name the host or the user name: it goes to the log only.
+            _logger?.LogError(ex, "The email connection test failed.");
+            string code = ex is InfrastructureException { Code: ErrorCodes.EmailAuthFailed } ? ErrorCodes.EmailAuthFailed : ErrorCodes.EmailConnectionFailed;
+            return BadRequest(new MessageResponse { Message = EmailFailureReason.Describe(code).Message, Code = code });
         }
     }
 }

@@ -4,6 +4,7 @@ using OpenRestoApi.Controllers;
 using OpenRestoApi.Core.Application.DTOs;
 using OpenRestoApi.Core.Application.Exceptions;
 using OpenRestoApi.Core.Application.Services;
+using OpenRestoApi.Core.Application.Utilities;
 
 namespace OpenRestoApi.Tests.Controllers;
 
@@ -49,28 +50,18 @@ public class AdminControllerUnitTests
     public async Task SendEmail_EmailServiceException_ReturnsBadRequest()
     {
         // SMTP failures propagate as exceptions from SendBookingEmailAsync; the controller
-        // catches them and maps to a 400 with the underlying message.
+        // catches them and maps to a 400 with a fixed message and the stable send-failed code.
         _mockAdminService.Setup(s => s.SendBookingEmailAsync(It.IsAny<int>(), It.IsAny<SendBookingEmailRequest>()))
-            .ThrowsAsync(new InvalidOperationException("Fail"));
+            .ThrowsAsync(new InvalidOperationException("smtp.internal.example: user bob rejected"));
 
         var result = await _controller.SendEmail(1, new SendBookingEmailRequest { Subject = "S", Body = "B" });
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         var response = Assert.IsType<MessageResponse>(badRequest.Value);
-        Assert.Contains("Failed to send: Fail", response.Message);
-    }
-
-    [Fact]
-    public async Task SendEmail_EmailServiceInvalidOp_ReturnsBadRequest()
-    {
-        _mockAdminService.Setup(s => s.SendBookingEmailAsync(It.IsAny<int>(), It.IsAny<SendBookingEmailRequest>()))
-            .ThrowsAsync(new InvalidOperationException("IO Fail"));
-
-        var result = await _controller.SendEmail(1, new SendBookingEmailRequest { Subject = "S", Body = "B" });
-
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
-        var response = Assert.IsType<MessageResponse>(badRequest.Value);
-        Assert.Equal("Failed to send: IO Fail", response.Message);
+        Assert.Equal(ErrorCodes.BookingEmailSendFailed, response.Code);
+        Assert.Equal("The email could not be sent.", response.Message);
+        Assert.DoesNotContain("smtp.internal.example", response.Message);
+        Assert.Null(response.Args);
     }
 
     [Fact]

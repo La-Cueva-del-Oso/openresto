@@ -1,9 +1,10 @@
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react-native";
+import { cleanup, render, screen, fireEvent } from "@testing-library/react-native";
 import { SmtpTestPanel } from "@/components/admin/settings/SmtpTestPanel";
 import { BookingConfirmationToggle } from "@/components/admin/settings/BookingConfirmationToggle";
 import { EmailFailuresList } from "@/components/admin/settings/EmailFailuresList";
 import type { EmailFailureDto } from "@/api/admin";
+import i18n from "@/i18n";
 
 jest.mock("@expo/vector-icons", () => ({
   Ionicons: () => null,
@@ -156,5 +157,57 @@ describe("EmailFailuresList", () => {
       />
     );
     expect(screen.getAllByText(/Ref:/)).toHaveLength(1); // only the ABC123 row
+  });
+
+  describe("reason codes", () => {
+    const renderCode = (code: string, errorMessage = "The email could not be sent.") =>
+      render(
+        <EmailFailuresList
+          failures={[
+            {
+              id: 9,
+              recipientEmail: "g@example.com",
+              attemptedAt: "2026-07-07T10:30:00Z",
+              errorMessage,
+              code,
+              bookingRef: null,
+            },
+          ]}
+          mutedColor="#888"
+          dangerBorder="#d50"
+          dangerSoft="#fee"
+          dangerColor="#d00"
+        />
+      );
+
+    afterEach(async () => {
+      cleanup(); // unmount first, so restoring the language does not re-render a live tree
+      await i18n.changeLanguage("en");
+    });
+
+    it.each([
+      ["en", "The mail server rejected the username or password. Check them and try again."],
+      [
+        "es",
+        "El servidor de correo rechazó el usuario o la contraseña. Revíselos e inténtelo de nuevo.",
+      ],
+      [
+        "fr",
+        "Le serveur de messagerie a refusé l'identifiant ou le mot de passe. Vérifiez-les et réessayez.",
+      ],
+      [
+        "de",
+        "Der Mailserver hat den Benutzernamen oder das Passwort abgelehnt. Prüfen Sie beides und versuchen Sie es erneut.",
+      ],
+    ])("translates email.auth_failed into %s", async (locale, expected) => {
+      await i18n.changeLanguage(locale);
+      renderCode("email.auth_failed");
+      expect(screen.getByText(expected)).toBeTruthy();
+    });
+
+    it("keeps the server's fixed sentence for a code with no copy yet", () => {
+      renderCode("email.something_new", "The email could not be sent.");
+      expect(screen.getByText("The email could not be sent.")).toBeTruthy();
+    });
   });
 });

@@ -363,7 +363,7 @@
       "cancel_email_required": "Email is required to cancel a booking.",
       "email_fields_required": "Subject and body are required.",
       "email_invalid": "That email address doesn't look right.",
-      "email_send_failed": "Failed to send: {{detail}}",
+      "email_send_failed": "The email could not be sent. Check the email settings and try again.",
       "invalid_table_for_restaurant": "Invalid table for this restaurant.",
       "lookup_email_required": "Email is required to look up a booking.",
       "lookup_not_found": "No booking found matching that reference and email.",
@@ -404,9 +404,12 @@
       "phone_too_long": "Phone number cannot exceed {{max}} characters."
     },
     "email": {
-      "connection_failed": "Connection failed: {{detail}}",
+      "auth_failed": "The mail server rejected the username or password. Check them and try again.",
+      "connection_failed": "Could not connect to the mail server. Check the server and the port.",
       "not_configured": "Email is not configured.",
-      "password_required": "To change the server, port, username or encryption, re-enter the email password."
+      "password_required": "To change the server, port, username or encryption, re-enter the email password.",
+      "recipient_rejected": "The mail server did not accept the recipient's address. Check that it is correct.",
+      "send_failed": "The email could not be sent. Try again in a few minutes."
     },
     "generic": "Something went wrong",
     "genericMessage": "An unexpected error occurred. Try again.",

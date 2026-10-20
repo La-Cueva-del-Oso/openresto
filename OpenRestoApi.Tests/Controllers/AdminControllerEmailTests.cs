@@ -194,7 +194,9 @@ namespace OpenRestoApi.Tests.Controllers
             BadRequestObjectResult badRequest = Assert.IsType<BadRequestObjectResult>(result);
             MessageResponse response = Assert.IsType<MessageResponse>(badRequest.Value);
             Assert.Equal(ErrorCodes.BookingEmailSendFailed, response.Code);
-            Assert.Contains("Connection refused.", response.Message);
+            // The transport's own text can name the host and the account; it stays in the log.
+            Assert.DoesNotContain("Connection refused.", response.Message);
+            Assert.Null(response.Args);
         }
 
         /// <summary>

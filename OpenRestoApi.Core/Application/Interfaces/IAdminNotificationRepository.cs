@@ -41,6 +41,9 @@ public interface IAdminNotificationRepository
     /// </summary>
     Task<int> DeleteAllAsync(int? restaurantId, string? type, bool? unreadOnly);
 
+    /// <summary>Bulk <c>ExecuteDelete</c> of every notification created before <paramref name="cutoffUtc"/>, read or not. Returns the count.</summary>
+    Task<int> DeleteOlderThanAsync(DateTime cutoffUtc);
+
     /// <summary>True if any <see cref="NotificationType.RestaurantNearlyFull"/> notification already exists for the UTC day window.</summary>
     Task<bool> ExistsNearlyFullForDayAsync(int restaurantId, DateTime dayStartUtc, DateTime dayEndUtc);
 
