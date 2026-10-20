@@ -123,7 +123,8 @@ public class AuthController(
         if (string.IsNullOrWhiteSpace(req.Question) || string.IsNullOrWhiteSpace(req.Answer))
             throw new ValidationException("Question and answer are required.") { Code = ErrorCodes.AuthPvqFieldsRequired };
 
-        await _securityQuestions.SetupAsync(req.Question, req.Answer);
+        if (!await _securityQuestions.SetupAsync(req.CurrentPassword, req.Question, req.Answer))
+            return Unauthorized(new { message = "Current password is incorrect." });
         return Ok(new { message = "Security question configured." });
     }
 

@@ -17,6 +17,10 @@ public interface ISecurityQuestionsService
     /// <summary>The signed-in caller's own question, for the settings screen.</summary>
     Task<PvqStatusDto> GetStatusForCurrentUserAsync();
 
-    Task SetupAsync(string question, string answer);
+    /// <summary>
+    /// Sets the caller's question. False, with nothing changed, when <paramref name="currentPassword"/>
+    /// is not the caller's: a stolen session must not be able to plant an answer it knows.
+    /// </summary>
+    Task<bool> SetupAsync(string currentPassword, string question, string answer);
     Task<PvqVerifyOutcome> VerifyAsync(string email, string answer);
 }

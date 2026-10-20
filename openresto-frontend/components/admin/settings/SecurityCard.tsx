@@ -34,6 +34,7 @@ export function SecurityCard({
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [pvqQuestion, setPvqQuestion] = useState("");
   const [pvqAnswer, setPvqAnswer] = useState("");
+  const [currentPwForPvq, setCurrentPwForPvq] = useState("");
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
@@ -51,9 +52,9 @@ export function SecurityCard({
   }, []);
 
   const handleSavePvq = async () => {
-    if (!pvqQuestion.trim() || !pvqAnswer.trim()) return;
+    if (!pvqQuestion.trim() || !pvqAnswer.trim() || !currentPwForPvq) return;
     setSaving(true);
-    const result = await setupPvq(pvqQuestion.trim(), pvqAnswer.trim());
+    const result = await setupPvq(currentPwForPvq, pvqQuestion.trim(), pvqAnswer.trim());
     setSaving(false);
     setMsg({ text: result.message, ok: result.ok });
     if (result.ok) {
@@ -61,6 +62,7 @@ export function SecurityCard({
       setShowPvqForm(false);
       setPvqQuestion("");
       setPvqAnswer("");
+      setCurrentPwForPvq("");
     }
   };
 
@@ -223,6 +225,17 @@ export function SecurityCard({
 
           {showPvqForm && (
             <View style={[styles.secForm, { borderTopColor: borderColor }]}>
+              <View style={styles.field}>
+                <ThemedText style={styles.fieldLabel}>
+                  {t("admin.settings.security.currentPasswordLabel")}
+                </ThemedText>
+                <Input
+                  value={currentPwForPvq}
+                  onChangeText={setCurrentPwForPvq}
+                  secureTextEntry
+                  placeholder={t("admin.settings.security.passwordPlaceholder")}
+                />
+              </View>
               <View style={styles.fieldRow}>
                 <View style={[styles.field, styles.fieldFlex]}>
                   <ThemedText style={styles.fieldLabel}>
@@ -260,7 +273,7 @@ export function SecurityCard({
                 <Button
                   size="md"
                   onPress={handleSavePvq}
-                  disabled={saving || !pvqQuestion.trim() || !pvqAnswer.trim()}
+                  disabled={saving || !pvqQuestion.trim() || !pvqAnswer.trim() || !currentPwForPvq}
                 >
                   {saving ? t("common.status.saving") : t("admin.settings.security.saveQuestion")}
                 </Button>
