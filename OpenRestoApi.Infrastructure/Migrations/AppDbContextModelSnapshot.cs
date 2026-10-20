@@ -15,7 +15,7 @@ namespace OpenRestoApi.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.13");
 
             modelBuilder.Entity("OpenRestoApi.Core.Domain.AdminApiKey", b =>
                 {
@@ -308,10 +308,15 @@ namespace OpenRestoApi.Migrations
                     b.Property<string>("UserAgent")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Endpoint")
                         .IsUnique();
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("AdminPushSubscriptions");
                 });
@@ -947,6 +952,17 @@ namespace OpenRestoApi.Migrations
                     b.Navigation("Booking");
 
                     b.Navigation("Restaurant");
+                });
+
+            modelBuilder.Entity("OpenRestoApi.Core.Domain.AdminPushSubscription", b =>
+                {
+                    b.HasOne("OpenRestoApi.Core.Domain.AdminCredential", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("OpenRestoApi.Core.Domain.Booking", b =>

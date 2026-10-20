@@ -19,8 +19,10 @@ public class AuthService(
     IPasswordService passwordService,
     IJwtTokenService jwtTokenService,
     ICurrentUserService currentUser,
+    IAdminPushSubscriptionRepository pushSubscriptionRepository,
     IAuditScope? audit = null) : IAuthService
 {
+    private readonly IAdminPushSubscriptionRepository _pushSubscriptionRepository = pushSubscriptionRepository;
     private readonly IAdminCredentialRepository _credentialRepository = credentialRepository;
     private readonly IPasswordService _passwordService = passwordService;
     private readonly IJwtTokenService _jwtTokenService = jwtTokenService;
@@ -61,6 +63,12 @@ public class AuthService(
         return cred == null ? null : UserMapper.ToCurrentUserDto(cred);
     }
 
+    /// <summary>
+    /// A changed password drops the account's push subscriptions along with its sessions: both
+    /// are credentials a person who knew the old password may still hold.
+    /// </summary>
+    /// <seealso>AuthServiceTests.ChangePasswordAsync_Deletes_The_Callers_Push_Subscriptions_Only</seealso>
+    /// <seealso>AuthServiceTests.ChangePasswordAsync_Keeps_Push_Subscriptions_When_The_Current_Password_Is_Wrong</seealso>
     public virtual async Task<string?> ChangePasswordAsync(string currentPassword, string newPassword)
     {
         UserFields.ValidatePassword(newPassword);
@@ -71,6 +79,7 @@ public class AuthService(
         (cred.PasswordHash, cred.PasswordSalt) = _passwordService.Hash(newPassword);
         cred.RevokeSessions();
         await _credentialRepository.SaveChangesAsync();
+        await _pushSubscriptionRepository.DeleteForUserAsync(cred.Id);
 
         _audit.RecordChange("passwordHash", previousHash, cred.PasswordHash);
         Describe(AuditActions.AuthPasswordChange, cred, $"Changed the password for {cred.Email}");
@@ -102,6 +111,8 @@ public class AuthService(
         return Mint(cred);
     }
 
+    /// <seealso>AuthServiceTests.ResetPasswordAsync_Deletes_The_Resetting_Accounts_Push_Subscriptions_Only</seealso>
+    /// <seealso>AuthServiceTests.ResetPasswordAsync_Keeps_Push_Subscriptions_For_An_Unknown_Token</seealso>
     public virtual async Task<bool> ResetPasswordAsync(string resetToken, string newPassword)
     {
         UserFields.ValidatePassword(newPassword);
@@ -114,6 +125,7 @@ public class AuthService(
         cred.ResetTokenExpiry = null;
         cred.RevokeSessions();
         await _credentialRepository.SaveChangesAsync();
+        await _pushSubscriptionRepository.DeleteForUserAsync(cred.Id);
 
         // The reset arrives with a token rather than a session, so the actor is whoever the token
         // resolved to — the request's claims would name nobody.
@@ -123,6 +135,7 @@ public class AuthService(
         return true;
     }
 
+    /// <seealso>AuthServiceTests.LogoutAsync_Keeps_The_Callers_Push_Subscriptions</seealso>
     public virtual async Task LogoutAsync()
     {
         if (_currentUser.IsApiKeyAuthenticated)

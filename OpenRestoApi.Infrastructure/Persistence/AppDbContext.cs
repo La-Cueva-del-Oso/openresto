@@ -198,6 +198,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // location's notifications to every subscription, so a second row per location
             // would only push the same payload to the same browser twice.
             s.HasIndex(x => x.Endpoint).IsUnique();
+            // Cascade so deleting a user through EF takes their subscriptions with it. The demo
+            // reset applies raw SQL under PRAGMA foreign_keys=OFF where no cascade fires, so
+            // scripts/demo_data.py deletes AdminPushSubscriptions explicitly.
+            s.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            s.HasIndex(x => x.UserId);
         });
 
         modelBuilder.Entity<GuestPushSubscription>(g =>

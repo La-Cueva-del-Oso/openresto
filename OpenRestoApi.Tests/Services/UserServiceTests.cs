@@ -16,7 +16,21 @@ public class UserServiceTests
         => new(
             new AdminCredentialRepository(db),
             new PasswordService(),
-            currentUser ?? FakeCurrentUser.Anonymous());
+            currentUser ?? FakeCurrentUser.Anonymous(),
+            new AdminPushSubscriptionRepository(db));
+
+    private static void SeedPushSubscription(AppDbContext db, int userId, string endpoint)
+    {
+        db.AdminPushSubscriptions.Add(new AdminPushSubscription
+        {
+            UserId = userId,
+            Endpoint = endpoint,
+            P256dh = "p",
+            Auth = "a",
+            CreatedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
+    }
 
     private static AdminCredential Seed(
         AppDbContext db,
@@ -363,14 +377,33 @@ public class UserServiceTests
     }
 
     [Fact]
+    public async Task ResetPasswordAsync_Deletes_The_Accounts_Push_Subscriptions_Only()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Deletes_The_Accounts_Push_Subscriptions_Only));
+        AdminCredential user = Seed(db, "manager@example.com", UserRoles.Manager);
+        AdminCredential other = Seed(db, "owner@example.com");
+        SeedPushSubscription(db, user.Id, "https://ep/theirs");
+        SeedPushSubscription(db, other.Id, "https://ep/owners");
+        UserService svc = CreateService(db);
+
+        await svc.ResetPasswordAsync(user.Id, new ResetUserPasswordRequest { NewPassword = "issued-by-owner" });
+
+        AdminPushSubscription kept = await db.AdminPushSubscriptions.SingleAsync();
+        Assert.Equal(other.Id, kept.UserId);
+    }
+
+    [Fact]
     public async Task ResetPasswordAsync_Rejects_A_Short_Password()
     {
         using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Rejects_A_Short_Password));
         AdminCredential user = Seed(db, "manager@example.com", UserRoles.Manager);
+        SeedPushSubscription(db, user.Id, "https://ep/theirs");
         UserService svc = CreateService(db);
 
         await Assert.ThrowsAsync<ValidationException>(
             () => svc.ResetPasswordAsync(user.Id, new ResetUserPasswordRequest { NewPassword = "123" }));
+
+        Assert.Equal(1, await db.AdminPushSubscriptions.CountAsync());
     }
 
     [Fact]

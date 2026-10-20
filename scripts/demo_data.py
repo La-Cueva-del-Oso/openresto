@@ -748,11 +748,17 @@ def emit_accounts(accounts, now_utc):
     never fires. Without the explicit delete a visitor's key outlived every reset: the wipe
     reseeds AdminCredentials from Id 1, so the orphaned row's UserId lands back on the new
     Owner and the key keeps authenticating, for the whole year until it expires.
+
+    Admin push subscriptions go for the same reason: AdminPushSubscriptions.UserId cascades from
+    AdminCredentials, which never fires here, and a visitor's browser left subscribed would keep
+    receiving every booking the demo takes after each reset, now attributed to the new Owner.
     """
     out = [
         "-- ── Admin accounts: the bootstrap Owner + a demo Manager ──",
         "DELETE FROM AdminApiKeys;",
         "DELETE FROM sqlite_sequence WHERE name = 'AdminApiKeys';",
+        "DELETE FROM AdminPushSubscriptions;",
+        "DELETE FROM sqlite_sequence WHERE name = 'AdminPushSubscriptions';",
         "DELETE FROM AdminCredentials;",
         "DELETE FROM sqlite_sequence WHERE name = 'AdminCredentials';",
     ]

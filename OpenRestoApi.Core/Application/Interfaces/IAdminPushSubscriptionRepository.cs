@@ -11,8 +11,14 @@ public interface IAdminPushSubscriptionRepository
     /// <summary>Finds the subscription for this endpoint, if any.</summary>
     Task<AdminPushSubscription?> GetByEndpointAsync(string endpoint);
 
-    /// <summary>Every subscription (used by the push fan-out — subscriptions are not per-restaurant).</summary>
-    Task<List<AdminPushSubscription>> GetAllAsync();
+    /// <summary>
+    /// Every subscription whose owner is an active account (the push fan-out — subscriptions
+    /// are not per-restaurant, but they are per-owner).
+    /// </summary>
+    Task<List<AdminPushSubscription>> GetForActiveUsersAsync();
+
+    /// <summary>Deletes every subscription the account owns, committing immediately.</summary>
+    Task DeleteForUserAsync(int userId);
 
     /// <summary>Adds and saves a subscription.</summary>
     Task<AdminPushSubscription> AddAsync(AdminPushSubscription subscription);

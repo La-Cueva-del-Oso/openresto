@@ -10,6 +10,14 @@ How each feature behaves, its API fields and its error codes are in
 
 ## [Unreleased]
 
+### Security
+
+- Admin push notifications now belong to the account that enabled them. Before, a subscription had no owner: a deactivated admin kept receiving every booking, and a browser stayed subscribed after its user's password was changed or reset. Bookings are now pushed only to active accounts, a password change or reset removes that account's subscriptions (signing out does not), re-enabling notifications in a browser another admin had used takes it over, and only the account that owns a subscription can remove it. The public demo's reset also clears subscriptions, so a visitor's browser no longer keeps receiving the demo's bookings.
+
+### Changed
+
+- **Action needed after upgrading:** existing admin push subscriptions have no owner to attribute them to and are discarded by the upgrade. Each admin must turn notifications off and on again in Settings, in each browser, to receive push notifications again. Until they do, the notifications page still lists new bookings, but nothing is pushed to the device.
+
 ## [2.4.1] - 2026-10-14
 
 ### Changed

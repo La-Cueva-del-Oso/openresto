@@ -14,9 +14,10 @@ namespace OpenRestoApi.Controllers;
 [Route("api/admin")]
 [Authorize(Policy = AuthPolicies.RequireAdmin)]
 [NoApiKeyAccess]
-public class NotificationsController(INotificationService notificationService) : ControllerBase
+public class NotificationsController(INotificationService notificationService, ICurrentUserService currentUser) : ControllerBase
 {
     private readonly INotificationService _notifications = notificationService;
+    private readonly ICurrentUserService _currentUser = currentUser;
 
     /// <summary>
     /// List notification history with optional filters, newest first.
@@ -104,7 +105,8 @@ public class NotificationsController(INotificationService notificationService) :
     [HttpPost("push/subscribe")]
     public async Task<IActionResult> Subscribe([FromBody] PushSubscribeRequest request)
     {
-        await _notifications.SubscribeAsync(request);
+        if (_currentUser.UserId is not int userId) return Unauthorized();
+        await _notifications.SubscribeAsync(userId, request);
         return Ok();
     }
 
@@ -116,7 +118,8 @@ public class NotificationsController(INotificationService notificationService) :
     [HttpDelete("push/subscribe")]
     public async Task<IActionResult> Unsubscribe([FromBody] string endpoint)
     {
-        await _notifications.UnsubscribeAsync(endpoint);
+        if (_currentUser.UserId is not int userId) return Unauthorized();
+        await _notifications.UnsubscribeAsync(userId, endpoint);
         return NoContent();
     }
 

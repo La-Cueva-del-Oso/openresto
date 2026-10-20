@@ -18,8 +18,10 @@ public class UserService(
     IAdminCredentialRepository credentialRepository,
     IPasswordService passwordService,
     ICurrentUserService currentUser,
+    IAdminPushSubscriptionRepository pushSubscriptionRepository,
     IAuditScope? audit = null)
 {
+    private readonly IAdminPushSubscriptionRepository _pushSubscriptionRepository = pushSubscriptionRepository;
     private readonly IAdminCredentialRepository _credentialRepository = credentialRepository;
     private readonly IPasswordService _passwordService = passwordService;
     private readonly ICurrentUserService _currentUser = currentUser;
@@ -121,8 +123,10 @@ public class UserService(
     /// <summary>
     /// Sets a new password on another account — the out-of-band recovery path for a user who
     /// never configured a security question. Any outstanding self-service reset token is
-    /// dropped so the old one can't be replayed afterwards.
+    /// dropped so the old one can't be replayed afterwards, and so are the account's push
+    /// subscriptions.
     /// </summary>
+    /// <seealso>UserServiceTests.ResetPasswordAsync_Deletes_The_Accounts_Push_Subscriptions_Only</seealso>
     public async Task<UserDto> ResetPasswordAsync(int id, ResetUserPasswordRequest req)
     {
         UserFields.ValidatePassword(req.NewPassword);
@@ -134,6 +138,7 @@ public class UserService(
         user.ResetTokenExpiry = null;
         user.RevokeSessions();
         await _credentialRepository.SaveChangesAsync();
+        await _pushSubscriptionRepository.DeleteForUserAsync(user.Id);
 
         _audit.RecordChange("passwordHash", previousHash, user.PasswordHash);
         Describe(AuditActions.UserPasswordReset, user,

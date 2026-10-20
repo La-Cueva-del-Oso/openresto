@@ -10,11 +10,13 @@ public class NotificationsControllerUnitTests
 {
     private readonly Mock<INotificationService> _mockService;
     private readonly NotificationsController _controller;
+    private readonly FakeCurrentUser _currentUser = new() { UserId = CallerId };
+    private const int CallerId = 7;
 
     public NotificationsControllerUnitTests()
     {
         _mockService = new Mock<INotificationService>();
-        _controller = new NotificationsController(_mockService.Object);
+        _controller = new NotificationsController(_mockService.Object, _currentUser);
     }
 
     // ── GetNotifications ──────────────────────────────────────────────────────
@@ -152,27 +154,49 @@ public class NotificationsControllerUnitTests
     // ── Subscribe ─────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Subscribe_ReturnsOk_WhenValid()
+    public async Task Subscribe_ReturnsOk_AndPassesTheCallersId()
     {
-        _mockService.Setup(s => s.SubscribeAsync(It.IsAny<PushSubscribeRequest>())).Returns(Task.CompletedTask);
+        _mockService.Setup(s => s.SubscribeAsync(It.IsAny<int>(), It.IsAny<PushSubscribeRequest>())).Returns(Task.CompletedTask);
 
         IActionResult result = await _controller.Subscribe(new PushSubscribeRequest("ep", "p256", "auth"));
 
         Assert.IsType<OkResult>(result);
-        _mockService.Verify(s => s.SubscribeAsync(It.IsAny<PushSubscribeRequest>()), Times.Once);
+        _mockService.Verify(s => s.SubscribeAsync(CallerId, It.IsAny<PushSubscribeRequest>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Subscribe_ReturnsUnauthorized_WhenTheTokenNamesNoAccountId()
+    {
+        _currentUser.UserId = null;
+
+        IActionResult result = await _controller.Subscribe(new PushSubscribeRequest("ep", "p256", "auth"));
+
+        Assert.IsType<UnauthorizedResult>(result);
+        _mockService.Verify(s => s.SubscribeAsync(It.IsAny<int>(), It.IsAny<PushSubscribeRequest>()), Times.Never);
     }
 
     // ── Unsubscribe ───────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Unsubscribe_ReturnsNoContent()
+    public async Task Unsubscribe_ReturnsNoContent_AndPassesTheCallersId()
     {
-        _mockService.Setup(s => s.UnsubscribeAsync("https://endpoint")).Returns(Task.CompletedTask);
+        _mockService.Setup(s => s.UnsubscribeAsync(CallerId, "https://endpoint")).Returns(Task.CompletedTask);
 
         IActionResult result = await _controller.Unsubscribe("https://endpoint");
 
         Assert.IsType<NoContentResult>(result);
-        _mockService.Verify(s => s.UnsubscribeAsync("https://endpoint"), Times.Once);
+        _mockService.Verify(s => s.UnsubscribeAsync(CallerId, "https://endpoint"), Times.Once);
+    }
+
+    [Fact]
+    public async Task Unsubscribe_ReturnsUnauthorized_WhenTheTokenNamesNoAccountId()
+    {
+        _currentUser.UserId = null;
+
+        IActionResult result = await _controller.Unsubscribe("https://endpoint");
+
+        Assert.IsType<UnauthorizedResult>(result);
+        _mockService.Verify(s => s.UnsubscribeAsync(It.IsAny<int>(), It.IsAny<string>()), Times.Never);
     }
 
     // ── DeleteAll ─────────────────────────────────────────────────────────────

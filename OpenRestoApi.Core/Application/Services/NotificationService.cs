@@ -48,7 +48,9 @@ public class NotificationService(
     /// <summary>
     /// <seealso>NotificationServiceTests.SubscribeAsync_RejectsAnEndpointThatIsNotAPublicHttpsUrl</seealso>
     /// </summary>
-    public async Task SubscribeAsync(PushSubscribeRequest request)
+    /// <seealso>NotificationServiceTests.SubscribeAsync_AssignsTheCallerAsOwner</seealso>
+    /// <seealso>NotificationServiceTests.SubscribeAsync_TransfersAnEndpointAnotherUserHeld_ToTheCaller</seealso>
+    public async Task SubscribeAsync(int userId, PushSubscribeRequest request)
     {
         if (!PushEndpointValidator.IsValidWebPushEndpoint(request.Endpoint))
         {
@@ -61,6 +63,8 @@ public class NotificationService(
 
         if (existing is not null)
         {
+            // Same browser, now used by someone else: the row follows whoever subscribes last.
+            existing.UserId = userId;
             existing.P256dh = request.P256dh;
             existing.Auth = request.Auth;
             existing.UserAgent = request.UserAgent;
@@ -71,6 +75,7 @@ public class NotificationService(
         {
             await _pushSubscriptionRepository.AddAsync(new AdminPushSubscription
             {
+                UserId = userId,
                 Endpoint = request.Endpoint,
                 P256dh = request.P256dh,
                 Auth = request.Auth,
@@ -86,10 +91,14 @@ public class NotificationService(
             summary: "Enabled push notifications for a device");
     }
 
-    public async Task UnsubscribeAsync(string endpoint)
+    /// <seealso>NotificationServiceTests.UnsubscribeAsync_RemovesTheCallersOwnEndpoint_AndLeavesOtherBrowsersAlone</seealso>
+    /// <seealso>NotificationServiceTests.UnsubscribeAsync_LeavesAnotherUsersEndpointAlone</seealso>
+    public async Task UnsubscribeAsync(int userId, string endpoint)
     {
         AdminPushSubscription? sub = await _pushSubscriptionRepository.GetByEndpointAsync(endpoint);
-        if (sub is not null)
+        // Another user's endpoint is a silent no-op, the same as an unknown one: the caller
+        // learns nothing about who holds it.
+        if (sub is not null && sub.UserId == userId)
         {
             _pushSubscriptionRepository.RemoveRange([sub]);
             await _pushSubscriptionRepository.SaveChangesAsync();

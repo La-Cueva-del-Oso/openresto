@@ -31,7 +31,21 @@ public class AuthServiceTests
             new AdminCredentialRepository(db),
             new PasswordService(),
             new JwtTokenService(BuildConfig()),
-            currentUser ?? FakeCurrentUser.Anonymous());
+            currentUser ?? FakeCurrentUser.Anonymous(),
+            new AdminPushSubscriptionRepository(db));
+    }
+
+    private static void SeedPushSubscription(AppDbContext db, int userId, string endpoint)
+    {
+        db.AdminPushSubscriptions.Add(new AdminPushSubscription
+        {
+            UserId = userId,
+            Endpoint = endpoint,
+            P256dh = "p",
+            Auth = "a",
+            CreatedAt = DateTime.UtcNow,
+        });
+        db.SaveChanges();
     }
 
     private static AdminCredential SeedCredential(
@@ -286,6 +300,35 @@ public class AuthServiceTests
         Assert.Equal("1", version.Value);
     }
 
+    [Fact]
+    public async Task ChangePasswordAsync_Deletes_The_Callers_Push_Subscriptions_Only()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Deletes_The_Callers_Push_Subscriptions_Only));
+        AdminCredential cred = SeedCredential(db, "admin@example.com", "old");
+        AdminCredential other = SeedCredential(db, "other@example.com", "pw");
+        SeedPushSubscription(db, cred.Id, "https://ep/mine");
+        SeedPushSubscription(db, other.Id, "https://ep/theirs");
+        AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
+
+        await svc.ChangePasswordAsync("old", "newpass");
+
+        AdminPushSubscription kept = await db.AdminPushSubscriptions.SingleAsync();
+        Assert.Equal(other.Id, kept.UserId);
+    }
+
+    [Fact]
+    public async Task ChangePasswordAsync_Keeps_Push_Subscriptions_When_The_Current_Password_Is_Wrong()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Keeps_Push_Subscriptions_When_The_Current_Password_Is_Wrong));
+        AdminCredential cred = SeedCredential(db, "admin@example.com", "old");
+        SeedPushSubscription(db, cred.Id, "https://ep/mine");
+        AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
+
+        Assert.Null(await svc.ChangePasswordAsync("wrong", "newpass"));
+
+        Assert.Equal(1, await db.AdminPushSubscriptions.CountAsync());
+    }
+
     // ── ChangeEmailAsync ────────────────────────────────────────────────────────
 
     [Fact]
@@ -371,6 +414,22 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task LogoutAsync_Keeps_The_Callers_Push_Subscriptions()
+    {
+        // Signing out ends the session, not the notifications: the browser keeps delivering
+        // bookings, and the next sign-in on it takes the subscription over if it is someone else.
+        using AppDbContext db = TestDbFactory.Create(nameof(LogoutAsync_Keeps_The_Callers_Push_Subscriptions));
+        AdminCredential cred = SeedCredential(db, "admin@example.com", "pw");
+        SeedPushSubscription(db, cred.Id, "https://ep/mine");
+        AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
+
+        await svc.LogoutAsync();
+
+        Assert.Equal(1, cred.SessionVersion);
+        Assert.Equal(1, await db.AdminPushSubscriptions.CountAsync());
+    }
+
+    [Fact]
     public async Task LogoutAsync_Leaves_Sessions_Alone_For_An_Api_Key()
     {
         using AppDbContext db = TestDbFactory.Create(nameof(LogoutAsync_Leaves_Sessions_Alone_For_An_Api_Key));
@@ -433,6 +492,38 @@ public class AuthServiceTests
         Assert.Equal(1, after.SessionVersion);
         Assert.Null(await svc.LoginAsync("admin@example.com", "pw"));
         Assert.NotNull(await svc.LoginAsync("admin@example.com", "freshpw"));
+    }
+
+    [Fact]
+    public async Task ResetPasswordAsync_Deletes_The_Resetting_Accounts_Push_Subscriptions_Only()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Deletes_The_Resetting_Accounts_Push_Subscriptions_Only));
+        AdminCredential cred = SeedCredential(db, "admin@example.com", "pw");
+        AdminCredential other = SeedCredential(db, "other@example.com", "pw");
+        cred.ResetToken = "valid-token";
+        cred.ResetTokenExpiry = DateTime.UtcNow.AddMinutes(15);
+        await db.SaveChangesAsync();
+        SeedPushSubscription(db, cred.Id, "https://ep/mine");
+        SeedPushSubscription(db, other.Id, "https://ep/theirs");
+        AuthService svc = CreateService(db);
+
+        Assert.True(await svc.ResetPasswordAsync("valid-token", "freshpw"));
+
+        AdminPushSubscription kept = await db.AdminPushSubscriptions.SingleAsync();
+        Assert.Equal(other.Id, kept.UserId);
+    }
+
+    [Fact]
+    public async Task ResetPasswordAsync_Keeps_Push_Subscriptions_For_An_Unknown_Token()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Keeps_Push_Subscriptions_For_An_Unknown_Token));
+        AdminCredential cred = SeedCredential(db, "admin@example.com", "pw");
+        SeedPushSubscription(db, cred.Id, "https://ep/mine");
+        AuthService svc = CreateService(db);
+
+        Assert.False(await svc.ResetPasswordAsync("nonexistent", "freshpw"));
+
+        Assert.Equal(1, await db.AdminPushSubscriptions.CountAsync());
     }
 
     [Theory]
