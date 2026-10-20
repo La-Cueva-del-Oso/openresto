@@ -33,25 +33,6 @@ public class DomainModelTests
     }
 
     [Fact]
-    public void AdminCredential_RevokeSessions_Raises_The_Version_And_Drops_A_Pending_Reset_Token()
-    {
-        var cred = new AdminCredential
-        {
-            ResetToken = "T",
-            ResetTokenExpiry = DateTime.UtcNow.AddMinutes(15),
-            PvqQuestion = "Q",
-        };
-
-        cred.RevokeSessions();
-
-        Assert.Equal(1, cred.SessionVersion);
-        Assert.Null(cred.ResetToken);
-        Assert.Null(cred.ResetTokenExpiry);
-        // The security question is a standing credential, not a pending one: signing out keeps it.
-        Assert.Equal("Q", cred.PvqQuestion);
-    }
-
-    [Fact]
     public void HoldEntry_PropertyAccess()
     {
         var entry = new HoldEntry("ID", 1, 2, 3, DateTime.Now, DateTime.Now.AddMinutes(1));

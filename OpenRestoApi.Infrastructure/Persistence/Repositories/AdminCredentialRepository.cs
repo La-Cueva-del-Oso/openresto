@@ -1,12 +1,14 @@
 using CustomAccessibility.Attributes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Query;
+using Microsoft.EntityFrameworkCore.Storage;
 using OpenRestoApi.Core.Application.Interfaces;
 using OpenRestoApi.Core.Domain;
 
 namespace OpenRestoApi.Infrastructure.Persistence.Repositories;
 
 [OnlyAccessibleBy("OpenRestoApi.Extensions.ServiceCollectionExtensions")]
+[OnlyAccessibleBy("OpenRestoApi.Tests.Infrastructure.AdminCredentialRepositoryTests")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.AdminCredentialConcurrencyTests")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.AuthServiceTests")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.SecurityQuestionsServiceTests")]
@@ -62,6 +64,19 @@ internal class AdminCredentialRepository(AppDbContext db) : IAdminCredentialRepo
             .SetProperty(c => c.ResetTokenExpiry, resetTokenExpiryUtc));
     }
 
+    public async Task RevokeSessionsAsync(AdminCredential credential)
+    {
+        // The execution strategy has to own the transaction: it retries the whole unit on a busy database.
+        await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using IDbContextTransaction tx = await _db.Database.BeginTransactionAsync();
+            await _db.SaveChangesAsync();
+            await _db.AdminCredentials.Where(c => c.Id == credential.Id).ExecuteUpdateAsync(RevokeSessions);
+            await _db.Entry(credential).ReloadAsync();
+            await tx.CommitAsync();
+        });
+    }
+
     // Only an active Owner counts, so deactivating one and then demoting it is not a way around
     // the rule.
     private IQueryable<AdminCredential> UnlessLastActiveOwner(int id)
@@ -70,10 +85,12 @@ internal class AdminCredentialRepository(AppDbContext db) : IAdminCredentialRepo
                 || !c.IsActive
                 || _db.AdminCredentials.Any(o => o.Id != id && o.IsActive && o.Role == UserRoles.Owner)));
 
-    private static void RevokeSessions(UpdateSettersBuilder<AdminCredential> s) => s
-        .SetProperty(c => c.SessionVersion, c => c.SessionVersion + 1)
-        .SetProperty(c => c.ResetToken, (string?)null)
-        .SetProperty(c => c.ResetTokenExpiry, (DateTime?)null);
+    private static void RevokeSessions(UpdateSettersBuilder<AdminCredential> s)
+    {
+        s.SetProperty(c => c.SessionVersion, c => c.SessionVersion + 1);
+        s.SetProperty(c => c.ResetToken, (string?)null);
+        s.SetProperty(c => c.ResetTokenExpiry, (DateTime?)null);
+    }
 
     // ExecuteUpdate bypasses the change tracker, so the entity the caller holds is brought in line.
     private async Task<bool> RefreshAsync(AdminCredential user, int rowsUpdated)

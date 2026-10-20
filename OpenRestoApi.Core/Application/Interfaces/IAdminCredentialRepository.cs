@@ -56,6 +56,19 @@ public interface IAdminCredentialRepository
     /// </summary>
     Task CompletePvqVerificationAsync(int id, string resetToken, DateTime resetTokenExpiryUtc);
 
+    /// <summary>
+    /// Signs the account out everywhere and withdraws any pending self-service reset token: a
+    /// token issued before the credential changed (or the account was shut) must not outlive it.
+    /// Saves whatever else is pending on <paramref name="credential"/> in the same transaction and
+    /// leaves its <see cref="AdminCredential.SessionVersion"/> at the stored value. The version is
+    /// raised in SQL: two revocations that each read it, add one and write it back leave it one
+    /// short, and the second one would not count.
+    /// </summary>
+    /// <seealso>AdminCredentialConcurrencyTests.Concurrent_Revocations_Are_All_Counted</seealso>
+    /// <seealso>AdminCredentialRepositoryTests.RevokeSessionsAsync_Raises_The_Version_By_One_And_Drops_A_Pending_Reset_Token</seealso>
+    /// <seealso>AdminCredentialRepositoryTests.RevokeSessionsAsync_Saves_The_Pending_Changes_With_The_Revocation</seealso>
+    Task RevokeSessionsAsync(AdminCredential credential);
+
     /// <summary>Adds and saves a new credential, returning the persisted entity.</summary>
     Task<AdminCredential> AddAsync(AdminCredential credential);
 

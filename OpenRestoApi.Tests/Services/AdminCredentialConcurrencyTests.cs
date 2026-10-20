@@ -45,7 +45,7 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
     private AppDbContext NewContext()
     {
         var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite($"Data Source={_path}")
+            .UseSqlite($"Data Source={_path}", o => o.ExecutionStrategy(d => new SqliteRetryingExecutionStrategy(d)))
             .AddInterceptors(new SqlitePragmaInterceptor())
             .Options);
         db.Database.OpenConnection();
@@ -237,6 +237,28 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
 
             Assert.All(outcomes, Assert.Null);
             Assert.Equal(1, await ActiveOwnersAsync());
+        }
+    }
+
+    // ── Session revocation ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Concurrent_Revocations_Are_All_Counted()
+    {
+        const int Revocations = 4;
+        for (int round = 0; round < Rounds; round++)
+        {
+            AdminCredential account = (await SeedOwnersAsync(1)).Single();
+            var staleReaders = new List<(AdminCredentialRepository Repository, AdminCredential Account)>();
+            for (int i = 0; i < Revocations; i++)
+            {
+                var repository = new AdminCredentialRepository(NewContext());
+                staleReaders.Add((repository, (await repository.GetByIdAsync(account.Id))!));
+            }
+
+            await RunTogetherAsync([.. staleReaders.Select(r => (Func<Task>)(() => r.Repository.RevokeSessionsAsync(r.Account)))]);
+
+            Assert.Equal(Revocations, (await ReloadAsync(account.Id)).SessionVersion);
         }
     }
 

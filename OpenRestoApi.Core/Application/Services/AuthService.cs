@@ -79,8 +79,7 @@ public class AuthService(
             return null;
         string previousHash = cred.PasswordHash;
         (cred.PasswordHash, cred.PasswordSalt) = _passwordService.Hash(newPassword);
-        cred.RevokeSessions();
-        await _credentialRepository.SaveChangesAsync();
+        await _credentialRepository.RevokeSessionsAsync(cred);
         await _pushSubscriptionRepository.DeleteForUserAsync(cred.Id);
 
         _audit.RecordChange("passwordHash", previousHash, cred.PasswordHash);
@@ -128,8 +127,7 @@ public class AuthService(
             return false;
         string previousHash = cred.PasswordHash;
         (cred.PasswordHash, cred.PasswordSalt) = _passwordService.Hash(newPassword);
-        cred.RevokeSessions();
-        await _credentialRepository.SaveChangesAsync();
+        await _credentialRepository.RevokeSessionsAsync(cred);
         await _pushSubscriptionRepository.DeleteForUserAsync(cred.Id);
 
         // The reset arrives with a token rather than a session, so the actor is whoever the token
@@ -148,8 +146,7 @@ public class AuthService(
         AdminCredential? cred = await ResolveCurrentUserAsync();
         if (cred == null)
             return;
-        cred.RevokeSessions();
-        await _credentialRepository.SaveChangesAsync();
+        await _credentialRepository.RevokeSessionsAsync(cred);
     }
 
     private string Mint(AdminCredential cred)

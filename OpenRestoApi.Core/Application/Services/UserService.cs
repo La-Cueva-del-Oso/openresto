@@ -149,8 +149,7 @@ public class UserService(
         user.PvqAnswerSalt = null;
         user.PvqFailedAttempts = 0;
         user.PvqLockedUntil = null;
-        user.RevokeSessions();
-        await _credentialRepository.SaveChangesAsync();
+        await _credentialRepository.RevokeSessionsAsync(user);
         await _pushSubscriptionRepository.DeleteForUserAsync(user.Id);
 
         _audit.RecordChange("passwordHash", previousHash, user.PasswordHash);

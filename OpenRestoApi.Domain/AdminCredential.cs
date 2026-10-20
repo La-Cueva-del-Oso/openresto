@@ -30,21 +30,11 @@ public class AdminCredential
 
     /// <summary>
     /// Stamped into every token minted for this account. A token carrying an older value is
-    /// refused, so raising it signs the account out everywhere.
+    /// refused, so raising it signs the account out everywhere. Raised only through
+    /// <c>IAdminCredentialRepository.RevokeSessionsAsync</c> (or the deactivation that revokes in
+    /// the same statement), never by assignment: it is incremented in SQL.
     /// </summary>
     public int SessionVersion { get; set; }
-
-    /// <summary>
-    /// Signs the account out everywhere and withdraws any pending self-service reset token: a
-    /// token issued before the credential changed (or the account was shut) must not outlive it.
-    /// </summary>
-    /// <seealso>DomainModelTests.AdminCredential_RevokeSessions_Raises_The_Version_And_Drops_A_Pending_Reset_Token</seealso>
-    public void RevokeSessions()
-    {
-        SessionVersion++;
-        ResetToken = null;
-        ResetTokenExpiry = null;
-    }
 
     // ── Personal Verification Question ──────────────────────────────────────
     public string? PvqQuestion { get; set; }
