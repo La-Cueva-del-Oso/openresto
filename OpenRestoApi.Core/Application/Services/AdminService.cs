@@ -469,9 +469,14 @@ public class AdminService(
             throw new BusinessRuleException("Booking is already active.") { Code = ErrorCodes.BookingAlreadyActive };
         }
 
-        booking.IsCancelled = false;
-        booking.CancelledAt = null;
-        await _bookingRepository.UpdateAsync(booking);
+        using (await _writeGate.EnterAsync())
+        {
+            await RejectIfUnitTakenSinceAsync(booking);
+
+            booking.IsCancelled = false;
+            booking.CancelledAt = null;
+            await _bookingRepository.UpdateAsync(booking);
+        }
 
         DescribeBooking(AuditActions.BookingRestore, booking,
             $"Restored cancelled booking {booking.BookingRef}");
@@ -673,6 +678,30 @@ public class AdminService(
         if (taken)
         {
             throw new BusinessRuleException("This update would cause a conflict with an existing booking.") { Code = ErrorCodes.BookingMoveConflict };
+        }
+    }
+
+    /// <summary>
+    /// A cancelled booking no longer holds its table, so someone else may have taken it since;
+    /// bringing the booking back must not seat the same unit twice.
+    /// </summary>
+    /// <seealso>AdminServiceTests.RestoreBookingAsync_RejectsWhenTheTableWasTakenSinceTheCancellation</seealso>
+    /// <seealso>AdminServiceTests.RestoreBookingAsync_ReactivatesWhenTheTableIsStillFree</seealso>
+    private async Task RejectIfUnitTakenSinceAsync(Booking booking)
+    {
+        bool taken = await _bookingRepository.IsUnitBookedOnDateAsync(
+            booking.TableId,
+            booking.TableGroupId,
+            AsUtc(booking.Date),
+            OccupancyMinutes(booking, BookingDuration.FallbackMinutes),
+            excludeBookingId: booking.Id);
+
+        if (taken)
+        {
+            throw new BusinessRuleException("Another booking has taken this table since it was cancelled.")
+            {
+                Code = booking.TableGroupId.HasValue ? ErrorCodes.TableGroupBookingConflict : ErrorCodes.BookingTableConflict
+            };
         }
     }
 
