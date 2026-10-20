@@ -26,6 +26,7 @@ How each feature behaves, its API fields and its error codes are in
 - Email errors no longer expose the mail server's own error text. The connection test and the booking email endpoints return a stable code (`email.auth_failed`, `email.connection_failed`, `email.recipient_rejected`, `email.send_failed`) shown to the admin as a plain sentence, and the failures list keeps only that code.
 - The command-line client refuses plain `http://` server addresses unless they point at the same machine, or `OPENRESTO_ALLOW_HTTP=1` is set, so an API key never travels unencrypted by accident.
 - Text that comes from the API can no longer drive the terminal of someone using the command-line client: control and escape characters in tables, records, errors and `--json` output are shown as visible `\xNN` escapes. The server also refuses control characters in a booking's name and special requests (`booking.name_invalid`, `booking.special_requests_invalid`).
+- Web Push requests now give up after 15 seconds and read at most 64 KiB of the push service's answer. Before, a push address chosen by a guest could answer with an endless body and tie up the server while a reminder or notification was being sent; such a send is now just that subscription's failure.
 
 ### Changed
 

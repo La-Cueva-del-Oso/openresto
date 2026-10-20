@@ -23,6 +23,7 @@ namespace OpenRestoApi.Infrastructure.Notifications;
 [OnlyAccessibleBy("OpenRestoApi.Infrastructure.NativeClients.WellKnownProbe")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Infrastructure.PublicOnlyConnectorTests")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Infrastructure.WellKnownProbeTests")]
+[OnlyAccessibleBy("OpenRestoApi.Tests.Infrastructure.WebPushResponseLimitTests")]
 [ExternalAccessAllowed]
 internal sealed class PublicOnlyConnector(Func<string, CancellationToken, Task<IPAddress[]>>? resolve = null)
 {

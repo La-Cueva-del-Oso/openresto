@@ -334,6 +334,12 @@ public static class ServiceCollectionExtensions
     /// before reporting it unreachable — the admin screen blocks on them, so this is short.</summary>
     private static readonly TimeSpan WellKnownProbeTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>The most response body the Web Push client will buffer from a push service: the
+    /// endpoint is chosen by a guest, and the library reads the whole body of a refusal.</summary>
+    public const int WebPushMaxResponseBytes = 64 * 1024;
+
+    private static readonly TimeSpan WebPushTimeout = TimeSpan.FromSeconds(15);
+
     public static IServiceCollection AddProjectDependencies(this IServiceCollection services, IHostEnvironment env)
     {
         services.Configure<ForwardedHeadersOptions>(options =>
@@ -448,7 +454,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationService, OpenRestoApi.Core.Application.Services.NotificationService>();
         // Endpoints come from browsers and guests, so the connection is only ever opened to a
         // public address — see PublicOnlyConnector.
-        services.AddHttpClient(OpenRestoApi.Infrastructure.Notifications.PublicOnlyConnector.HttpClientName)
+        services.AddHttpClient(OpenRestoApi.Infrastructure.Notifications.PublicOnlyConnector.HttpClientName,
+            client =>
+            {
+                client.Timeout = WebPushTimeout;
+                client.MaxResponseContentBufferSize = WebPushMaxResponseBytes;
+            })
             .ConfigurePrimaryHttpMessageHandler(() => new OpenRestoApi.Infrastructure.Notifications.PublicOnlyConnector().CreateHandler());
         services.AddScoped<IWebPushClient>(sp => new WebPushClient(
             sp.GetRequiredService<IHttpClientFactory>().CreateClient(OpenRestoApi.Infrastructure.Notifications.PublicOnlyConnector.HttpClientName)));
