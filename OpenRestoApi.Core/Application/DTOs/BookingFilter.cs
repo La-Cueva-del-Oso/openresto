@@ -22,4 +22,13 @@ public sealed class BookingFilter
     /// narrow single-field filters the deep links use.
     /// </summary>
     public string? Query { get; init; }
+
+    /// <summary>
+    /// Whether <see cref="Query"/> may match the customer name and email. False for a caller
+    /// <c>BookingGuestVisibility</c> redacts, so the search cannot be used to read back the
+    /// identity the response hides.
+    /// </summary>
+    /// <seealso>AdminServiceTests.GetBookingsAsync_QueryDoesNotMatchGuestIdentity_ForAnApiKeyWithoutGuestsRead</seealso>
+    /// <seealso>AdminServiceTests.GetBookingsAsync_QueryMatchesGuestIdentity_ForAnApiKeyWithGuestsRead</seealso>
+    public bool QueryMatchesGuestIdentity { get; init; } = true;
 }

@@ -122,6 +122,37 @@ describe("bookings list status column", () => {
   });
 });
 
+describe("bookings list --email refused by the server", () => {
+  test("shows the server's own message and code instead of a generic failure", async () => {
+    const message =
+      "This key can't search by email: it has no permission to see guest details.";
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({ message, code: "booking.guest_filter_forbidden" }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      )) as typeof fetch;
+    const originalExitCode = process.exitCode;
+    const { lines, restore } = captureLogs();
+
+    try {
+      await buildProgram().parseAsync(
+        ["bookings", "list", "--email", "@example.com"],
+        { from: "user" },
+      );
+    } finally {
+      restore();
+      const failed = process.exitCode === 1;
+      process.exitCode = originalExitCode;
+      assert.ok(failed, "a refused request must exit non-zero");
+    }
+
+    const output = lines.join("\n");
+    assert.match(output, /400/);
+    assert.ok(output.includes(message));
+    assert.match(output, /booking\.guest_filter_forbidden/);
+  });
+});
+
 function capturingFetch(sent: { body: unknown }[]): typeof fetch {
   return (async (_input: string, init?: { body?: string }) => {
     sent.push({ body: init?.body ? JSON.parse(init.body) : undefined });

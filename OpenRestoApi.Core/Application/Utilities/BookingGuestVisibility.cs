@@ -1,4 +1,5 @@
 using OpenRestoApi.Core.Application.DTOs;
+using OpenRestoApi.Core.Application.Exceptions;
 using OpenRestoApi.Core.Application.Interfaces;
 
 namespace OpenRestoApi.Core.Application.Utilities;
@@ -19,6 +20,23 @@ public static class BookingGuestVisibility
     /// <summary>True when the caller must not see who a booking belongs to.</summary>
     public static bool IsRedactedFor(ICurrentUserService currentUser)
         => currentUser.IsApiKeyAuthenticated && !currentUser.HasScope(ApiKeyScopes.Guests, ApiKeyScopes.Read);
+
+    /// <summary>
+    /// Refuses a customer-email filter from a caller who may not see emails: a substring match
+    /// runs before redaction, so successive queries would spell the hidden address out.
+    /// </summary>
+    /// <seealso>AdminServiceTests.GetBookingsAsync_RejectsTheEmailFilter_ForAnApiKeyWithoutGuestsRead</seealso>
+    /// <seealso>AdminServiceTests.GetBookingsAsync_EmailFilter_FindsTheBooking_ForAnApiKeyWithGuestsRead</seealso>
+    public static void RequireGuestAccessToFilterByEmail(string? email, ICurrentUserService currentUser)
+    {
+        if (!string.IsNullOrWhiteSpace(email) && IsRedactedFor(currentUser))
+        {
+            throw new ValidationException("This key can't search by email: it has no permission to see guest details.")
+            {
+                Code = ErrorCodes.BookingGuestFilterForbidden,
+            };
+        }
+    }
 
     public static BookingDetailDto Apply(BookingDetailDto dto, ICurrentUserService currentUser)
     {
