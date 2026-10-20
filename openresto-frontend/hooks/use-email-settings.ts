@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   getEmailSettings,
   saveEmailSettings,
@@ -19,6 +20,7 @@ export type EmailTestState = "idle" | "testing" | "ok" | "fail";
  * API stores them as a single record, so the toggle stays in the card that owns that save.
  */
 export function useEmailSettings() {
+  const { t } = useTranslation();
   const [host, setHost] = useState("");
   const [port, setPort] = useState("587");
   const [username, setUsername] = useState("");
@@ -94,7 +96,10 @@ export function useEmailSettings() {
       setIsConfigured(true);
       setStored(destinationOf(payload));
     } else {
-      setSaveMsg({ text: result?.message ?? "Failed to save.", ok: false });
+      setSaveMsg({
+        text: result?.message ?? t("admin.settings.saveStatus.saveFailed"),
+        ok: false,
+      });
     }
   };
 
@@ -106,7 +111,7 @@ export function useEmailSettings() {
     // Testing after a refused save would report on the old server, not on what is in the fields.
     if (!saved?.ok) {
       setTestState("fail");
-      setTestMsg(saved?.message ?? "Failed to save.");
+      setTestMsg(saved?.message ?? t("admin.settings.saveStatus.saveFailed"));
       return;
     }
     setIsConfigured(true);

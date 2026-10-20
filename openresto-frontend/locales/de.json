@@ -347,6 +347,18 @@
     "admin": {
       "password_not_configured": "Admin:Password muss vor der ersten Nutzung konfiguriert werden. Legen Sie es über die Umgebungsvariable ADMIN_PASSWORD fest."
     },
+    "api_key": {
+      "expires_at_in_past": "Das Ablaufdatum muss in der Zukunft liegen. Wählen Sie ein späteres Datum.",
+      "expires_at_with_never_expires": "Ein Schlüssel ohne Ablauf kann kein Ablaufdatum haben. Entfernen Sie eine der beiden Angaben.",
+      "name_required": "Geben Sie einen Namen für den API-Schlüssel ein.",
+      "name_too_long": "Der Name des API-Schlüssels darf höchstens {{max}} Zeichen lang sein.",
+      "not_a_session": "Diese Anfrage funktioniert nur mit einem API-Schlüssel, nicht mit einem angemeldeten Konto.",
+      "not_allowed": "Diese Aktion ist mit einem API-Schlüssel nicht verfügbar. Melden Sie sich mit Ihrem Konto an, um sie auszuführen.",
+      "not_found": "Dieser API-Schlüssel wurde nicht gefunden. Möglicherweise wurde er bereits widerrufen. Aktualisieren Sie die Liste und versuchen Sie es erneut.",
+      "scope_invalid": "Eine der gewählten Berechtigungen ist ungültig. Prüfen Sie die Auswahl und versuchen Sie es erneut.",
+      "scope_missing": "Dieser API-Schlüssel hat keine Berechtigung für diese Aktion. Verwenden Sie einen Schlüssel mit der passenden Berechtigung.",
+      "scopes_required": "Wählen Sie mindestens eine Berechtigung aus."
+    },
     "auth": {
       "email_already_in_use": "Diese E-Mail-Adresse wird bereits verwendet.",
       "email_unchanged": "Die neue E-Mail-Adresse muss sich von der aktuellen unterscheiden.",
@@ -364,6 +376,7 @@
       "email_fields_required": "Betreff und Nachricht sind erforderlich.",
       "email_invalid": "Diese E-Mail-Adresse scheint nicht zu stimmen.",
       "email_send_failed": "Die E-Mail konnte nicht gesendet werden. Prüfen Sie die E-Mail-Einstellungen und versuchen Sie es erneut.",
+      "guest_filter_forbidden": "Dieser API-Schlüssel kann nicht nach E-Mail-Adresse suchen, da er keine Gästedaten einsehen darf.",
       "invalid_table_for_restaurant": "Ungültiger Tisch für dieses Restaurant.",
       "lookup_email_required": "Für die Suche nach einer Buchung ist eine E-Mail-Adresse erforderlich.",
       "lookup_not_found": "Keine Buchung zu dieser Referenz und E-Mail-Adresse gefunden.",
@@ -376,6 +389,11 @@
       "past_date": "Eine Buchung in der Vergangenheit kann nicht erstellt werden.",
       "paused": "Buchungen sind bis {{until}} Uhr pausiert. Bitte wählen Sie eine spätere Zeit.",
       "paused_indefinitely": "Buchungen für dieses Restaurant sind derzeit pausiert. Bitte versuchen Sie es später erneut.",
+      "reminder_cancelled": "Diese Buchung wurde storniert, daher können keine Erinnerungen aktiviert werden.",
+      "reminder_channel_invalid": "Dieses Gerät kann keine Erinnerungen von dieser Website empfangen.",
+      "reminder_endpoint_invalid": "Dieses Gerät kann keine Erinnerungen von dieser Website empfangen.",
+      "reminder_keys_required": "Die Erinnerungen konnten auf diesem Gerät nicht eingerichtet werden. Aktivieren Sie sie erneut und versuchen Sie es noch einmal.",
+      "reminder_too_late": "Diese Buchung hat bereits begonnen, daher können keine Erinnerungen mehr aktiviert werden.",
       "section_mismatch": "Dieser Bereich gehört nicht zu diesem Restaurant.",
       "special_requests_invalid": "Die Sonderwünsche dürfen keine Steuerzeichen enthalten. Bitte geben Sie sie erneut ein.",
       "status_cancelled": "Eine stornierte Buchung kann ihren Status nicht ändern.",
@@ -387,7 +405,9 @@
       "table_not_in_section": "Tisch im angegebenen Bereich nicht gefunden.",
       "walk_in_only": "Dieser Standort nimmt nur spontane Gäste an und akzeptiert keine Onlinebuchungen.",
       "walk_in_only_today": "Dieser Standort nimmt am gewählten Tag nur spontane Gäste an. Bitte wählen Sie einen anderen Tag oder kommen Sie einfach vorbei.",
-      "pacing_full": "Um {{time}} können nur noch {{remaining}} Gäste ankommen. Bitte wählen Sie eine andere Uhrzeit."
+      "pacing_full": "Um {{time}} können nur noch {{remaining}} Gäste ankommen. Bitte wählen Sie eine andere Uhrzeit.",
+      "wallet_cancelled": "Diese Buchung wurde storniert und kann daher nicht zu Ihrem Wallet hinzugefügt werden.",
+      "wallet_not_configured": "Diese Website bietet noch keine Pässe für Apple Wallet oder Google Wallet an."
     },
     "brand": {
       "accent_color_invalid": "Ungültiger Hexcode für die Akzentfarbe.",
@@ -397,8 +417,11 @@
       "header_image_fit_invalid": "HeaderImageFit muss einer dieser Werte sein: {{allowed}}.",
       "highlights_heading_too_long": "Die Überschrift der Highlights darf höchstens 60 Zeichen lang sein.",
       "highlights_subheading_too_long": "Die Unterüberschrift der Highlights darf höchstens 60 Zeichen lang sein.",
+      "minimum_app_version_invalid": "Die Mindestversion der App muss aus drei durch Punkte getrennten Zahlen bestehen, zum Beispiel 1.9.0.",
       "primary_color_invalid": "Ungültiger Hexcode für die Primärfarbe.",
-      "subtitle_too_long": "Der Untertitel darf höchstens 160 Zeichen lang sein."
+      "privacy_policy_url_invalid": "Die Adresse der Datenschutzerklärung muss mit http:// oder https:// beginnen. Prüfen Sie sie und versuchen Sie es erneut.",
+      "subtitle_too_long": "Der Untertitel darf höchstens 160 Zeichen lang sein.",
+      "website_url_invalid": "Die Adresse der Website muss mit http:// oder https:// beginnen. Prüfen Sie sie und versuchen Sie es erneut."
     },
     "contact": {
       "email_invalid": "Die E-Mail-Adresse muss gültig sein.",
@@ -437,6 +460,9 @@
       "menu_too_large": "Die Menüdatei muss kleiner als 10 MB sein.",
       "unsupported_image_type": "Es werden nur JPEG-, PNG- und WebP-Bilder akzeptiert.",
       "unsupported_menu_type": "Es werden nur Menüdateien im PDF-Format akzeptiert."
+    },
+    "notification": {
+      "push_endpoint_invalid": "Dieses Gerät kann keine Benachrichtigungen von dieser Website empfangen."
     },
     "restaurant": {
       "archive_before_delete": "Archivieren Sie diesen Standort, bevor Sie ihn löschen. Das Archivieren nimmt ihn von der öffentlichen Website und lässt sich rückgängig machen – das Löschen nicht.",
