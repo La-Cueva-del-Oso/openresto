@@ -10,6 +10,7 @@ import { useBrand } from "@/context/BrandContext";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import PageLoader from "@/components/common/PageLoader";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { usePushResubscribe } from "@/hooks/use-push-resubscribe";
 import { focusTarget } from "@/utils/focusRegistry";
 import KeyboardShortcutsHelp from "@/components/common/KeyboardShortcutsHelp";
 import { styles } from "@/styles/admin/layout.styles";
@@ -75,6 +76,7 @@ function AdminLayoutInner() {
   const isAdminRouteActive = segments[0] === "admin";
   const brand = useBrand();
   const { status: authState } = useAuth();
+  usePushResubscribe(authState === "authenticated");
 
   useEffect(() => {
     /* istanbul ignore next */

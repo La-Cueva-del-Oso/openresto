@@ -14,6 +14,7 @@ import { useWindowDimensions } from "react-native";
 import AdminLayout from "@/app/admin/_layout";
 import { checkSession } from "@/api/auth";
 import { useRouter, usePathname } from "expo-router";
+import { usePushResubscribe } from "@/hooks/use-push-resubscribe";
 
 jest.mock("@/api/auth", () => ({
   checkSession: jest.fn(),
@@ -44,6 +45,10 @@ jest.mock("@/components/layout/AdminSidebar", () => {
 
 jest.mock("@expo/vector-icons", () => ({
   Ionicons: () => null,
+}));
+
+jest.mock("@/hooks/use-push-resubscribe", () => ({
+  usePushResubscribe: jest.fn(),
 }));
 
 jest.mock("@/context/BrandContext", () => ({
@@ -81,6 +86,20 @@ describe("AdminLayout", () => {
     render(<AdminLayout />);
     await waitFor(() => expect(screen.getByTestId("sidebar")).toBeTruthy());
     expect(screen.getByTestId("slot")).toBeTruthy();
+  });
+
+  it("re-registers the browser's push subscription only for a signed-in admin", async () => {
+    (checkSession as jest.Mock).mockResolvedValue({ user: "admin" });
+    render(<AdminLayout />);
+    await waitFor(() => expect(usePushResubscribe).toHaveBeenCalledWith(true));
+    expect(usePushResubscribe).toHaveBeenCalledWith(false);
+  });
+
+  it("does not re-register push when there is no session", async () => {
+    (checkSession as jest.Mock).mockResolvedValue(null);
+    render(<AdminLayout />);
+    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith("/admin/login"));
+    expect(usePushResubscribe).not.toHaveBeenCalledWith(true);
   });
 
   it("sends a native visitor to the guest home rather than mounting the admin", async () => {
