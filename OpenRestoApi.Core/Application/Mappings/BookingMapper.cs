@@ -73,6 +73,35 @@ public partial class BookingMapper
     [MapperIgnoreSource(nameof(BookingDto.TableSeats))]
     public partial Booking ToEntity(BookingDto dto);
 
+    /// <summary>
+    /// Maps a public booking request onto a new row. The fields the server owns — identity and the
+    /// cancellation flags — are never read from the request: a client-supplied <c>Id</c> turns the
+    /// insert into a primary-key collision with someone else's booking.
+    /// </summary>
+    /// <seealso>BookingMapperTests.ToNewEntity_IgnoresServerOwnedFields</seealso>
+    /// <seealso>BookingMapperTests.ToNewEntity_KeepsTheGuestSuppliedFields</seealso>
+    [MapperIgnoreTarget(nameof(Booking.Id))]
+    [MapperIgnoreTarget(nameof(Booking.IsCancelled))]
+    [MapperIgnoreTarget(nameof(Booking.CancelledAt))]
+    [MapperIgnoreTarget(nameof(Booking.Table))]
+    [MapperIgnoreTarget(nameof(Booking.Section))]
+    [MapperIgnoreTarget(nameof(Booking.Restaurant))]
+    [MapperIgnoreTarget(nameof(Booking.BookingRef))]
+    [MapperIgnoreTarget(nameof(Booking.EndTime))]
+    [MapperIgnoreTarget(nameof(Booking.TableGroup))]
+    [MapperIgnoreSource(nameof(BookingDto.Id))]
+    [MapperIgnoreSource(nameof(BookingDto.IsCancelled))]
+    [MapperIgnoreSource(nameof(BookingDto.CancelledAt))]
+    [MapperIgnoreSource(nameof(BookingDto.isHeld))]
+    [MapperIgnoreSource(nameof(BookingDto.HoldId))]
+    [MapperIgnoreSource(nameof(BookingDto.MemberTableIds))]
+    [MapperIgnoreSource(nameof(BookingDto.BookingRef))]
+    [MapperIgnoreSource(nameof(BookingDto.EndTime))]
+    [MapperIgnoreSource(nameof(BookingDto.TableName))]
+    [MapperIgnoreSource(nameof(BookingDto.SectionName))]
+    [MapperIgnoreSource(nameof(BookingDto.TableSeats))]
+    public partial Booking ToNewEntity(BookingDto dto);
+
     public partial IEnumerable<BookingDto> ToDtoList(IEnumerable<Booking> bookings);
 
     /// <summary>List variant of <see cref="ToDtoWithGroup"/> for the restaurant bookings feed.</summary>

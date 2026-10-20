@@ -12,6 +12,17 @@ namespace OpenRestoApi.Core.Application.Services;
 /// </summary>
 public static class OpeningHoursHelper
 {
+    public const string ClosedMessage = "The restaurant is closed at the requested time.";
+
+    /// <summary>
+    /// True when <paramref name="utc"/> falls outside the location's opening hours or on a day it
+    /// is closed. Booking creation and hold placement turn a sitting away on this one test, with
+    /// <see cref="ClosedMessage"/> and <see cref="ErrorCodes.RestaurantClosedAtTime"/>.
+    /// </summary>
+    /// <seealso>BookingServiceTests.CreateBookingAsync_RejectsBooking_OutsideOpeningHours</seealso>
+    /// <seealso>BookingServiceTests.CreateBookingAsync_AcceptsBooking_InsideOpeningHours</seealso>
+    public static bool IsClosedAt(Restaurant restaurant, DateTime utc) => !restaurant.IsOpenAt(utc);
+
     /// <summary>
     /// Full week of resolved hours (always 7 entries, day 1..7) for API responses.
     /// </summary>
