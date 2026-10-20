@@ -1,3 +1,4 @@
+using OpenRestoApi.Core.Application.Exceptions;
 using OpenRestoApi.Core.Application.Interfaces;
 using OpenRestoApi.Core.Application.Utilities;
 using OpenRestoApi.Core.Domain;
@@ -22,6 +23,8 @@ public class EmailSettingsService(
         IEmailService email)
         : this(settings, failures, credentialProtector, email, null) { }
 
+    private const string PasswordMask = "••••••••";
+
     private readonly IAuditScope _audit = audit ?? NullAuditScope.Instance;
     private readonly IEmailSettingsRepository _settingsRepository = settingsRepository;
     private readonly IEmailFailureRepository _emailFailureRepository = emailFailureRepository;
@@ -33,6 +36,13 @@ public class EmailSettingsService(
         return await _settingsRepository.GetAsync();
     }
 
+    /// <summary>
+    /// The stored password stays usable only against the destination it was saved for: moving the
+    /// host, port, username or encryption needs the password typed again.
+    /// </summary>
+    /// <seealso>EmailSettingsServiceTests.SaveAsync_KeepsStoredPassword_WhenDestinationIsUnchanged</seealso>
+    /// <seealso>EmailSettingsServiceTests.SaveAsync_RejectsChangedDestination_WhenNoNewPassword</seealso>
+    /// <seealso>EmailSettingsServiceTests.SaveAsync_AcceptsChangedDestination_WhenNewPasswordIsTyped</seealso>
     public virtual async Task SaveAsync(
         string host, int port, string username, string? password,
         bool enableSsl, string? fromName, string? fromEmail,
@@ -44,6 +54,16 @@ public class EmailSettingsService(
         {
             settings = new EmailSettings();
             isNew = true;
+        }
+
+        bool hasNewPassword = !string.IsNullOrEmpty(password) && password != PasswordMask;
+        if (!hasNewPassword
+            && !string.IsNullOrEmpty(settings.EncryptedPassword)
+            && !SameDestination(settings, host, port, username, enableSsl))
+        {
+            throw new ValidationException(
+                "Re-enter the email password to change the server, port, username or encryption.")
+            { Code = ErrorCodes.EmailPasswordRequired };
         }
 
         // Named one by one rather than serialized from the request: the request also carries the
@@ -64,7 +84,7 @@ public class EmailSettingsService(
         settings.FromEmail = fromEmail;
         settings.SendBookingConfirmations = sendBookingConfirmations;
 
-        if (!string.IsNullOrEmpty(password) && password != "••••••••")
+        if (hasNewPassword)
         {
             string? previous = settings.EncryptedPassword;
             settings.EncryptedPassword = _protector.Encrypt(password);
@@ -85,6 +105,12 @@ public class EmailSettingsService(
         _audit.Describe(AuditActions.EmailSettingsUpdate, AuditTargets.EmailSettings,
             summary: $"Updated the outgoing email settings ({host}:{port})");
     }
+
+    private static bool SameDestination(EmailSettings stored, string host, int port, string username, bool enableSsl)
+        => string.Equals(stored.Host?.Trim(), host?.Trim(), StringComparison.OrdinalIgnoreCase)
+           && stored.Port == port
+           && string.Equals(stored.Username, username, StringComparison.Ordinal)
+           && stored.EnableSsl == enableSsl;
 
     public virtual async Task<bool> TestConnectionAsync()
     {

@@ -25,6 +25,10 @@ Press **Send a test email** before you rely on it. It saves the settings and tri
 so a wrong host or password shows up straight away. The same page shows a preview of the
 confirmation guests receive, and a list of recent send failures.
 
+The stored password is only reused for the host, port, username and encryption it was saved
+with. Changing any of them means typing the password again, so the saved one can never be sent
+to a server you did not set it up for.
+
 ### Port and encryption
 
 - **Port 587** always uses STARTTLS, whatever the SSL toggle says. Most providers use this.

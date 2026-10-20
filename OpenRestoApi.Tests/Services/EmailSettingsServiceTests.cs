@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using OpenRestoApi.Core.Application.Exceptions;
 using OpenRestoApi.Core.Application.Interfaces;
 using OpenRestoApi.Core.Application.Services;
+using OpenRestoApi.Core.Application.Utilities;
 using OpenRestoApi.Core.Domain;
 using OpenRestoApi.Infrastructure.Persistence;
 using OpenRestoApi.Infrastructure.Persistence.Repositories;
@@ -92,7 +94,7 @@ public class EmailSettingsServiceTests
     public async Task SaveAsync_SkipsEncryption_WhenPasswordIsMask()
     {
         using AppDbContext db = TestDbFactory.Create(nameof(SaveAsync_SkipsEncryption_WhenPasswordIsMask));
-        db.Set<EmailSettings>().Add(new EmailSettings { Host = "smtp", Port = 587, EncryptedPassword = "existing-encrypted" });
+        db.Set<EmailSettings>().Add(new EmailSettings { Host = "smtp", Port = 587, Username = "user", EncryptedPassword = "existing-encrypted" });
         await db.SaveChangesAsync();
 
         var protectorMock = new Mock<ICredentialProtector>();
@@ -105,14 +107,103 @@ public class EmailSettingsServiceTests
     }
 
     [Fact]
-    public async Task SaveAsync_SkipsEncryption_WhenPasswordIsNull()
+    public async Task SaveAsync_SkipsEncryption_WhenNoPasswordIsStoredYet()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(SaveAsync_SkipsEncryption_WhenPasswordIsNull));
+        using AppDbContext db = TestDbFactory.Create(nameof(SaveAsync_SkipsEncryption_WhenNoPasswordIsStoredYet));
         var protectorMock = new Mock<ICredentialProtector>();
         var svc = CreateService(db, protectorMock);
         await svc.SaveAsync("smtp.test.com", 587, "user", null, true, null, null);
 
         protectorMock.Verify(p => p.Encrypt(It.IsAny<string>()), Times.Never);
+    }
+
+    private static async Task<AppDbContext> SeedStoredPasswordAsync(string name)
+    {
+        AppDbContext db = TestDbFactory.Create(name);
+        db.Set<EmailSettings>().Add(new EmailSettings
+        {
+            Host = "smtp.real.com",
+            Port = 587,
+            Username = "user@real.com",
+            EnableSsl = true,
+            EncryptedPassword = "existing-encrypted",
+        });
+        await db.SaveChangesAsync();
+        return db;
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("••••••••")]
+    public async Task SaveAsync_KeepsStoredPassword_WhenDestinationIsUnchanged(string? password)
+    {
+        using AppDbContext db = await SeedStoredPasswordAsync($"{nameof(SaveAsync_KeepsStoredPassword_WhenDestinationIsUnchanged)}-{password}");
+        var protectorMock = new Mock<ICredentialProtector>();
+
+        await CreateService(db, protectorMock).SaveAsync(
+            "smtp.real.com", 587, "user@real.com", password, true, "New Name", "new@real.com", sendBookingConfirmations: true);
+
+        EmailSettings result = await db.Set<EmailSettings>().FirstAsync();
+        Assert.Equal("existing-encrypted", result.EncryptedPassword);
+        Assert.Equal("New Name", result.FromName);
+        Assert.True(result.SendBookingConfirmations);
+        protectorMock.Verify(p => p.Encrypt(It.IsAny<string>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("  SMTP.Real.COM  ")]
+    [InlineData("SMTP.REAL.COM")]
+    public async Task SaveAsync_TreatsHostAsSameDestination_IgnoringCaseAndPadding(string host)
+    {
+        using AppDbContext db = await SeedStoredPasswordAsync($"{nameof(SaveAsync_TreatsHostAsSameDestination_IgnoringCaseAndPadding)}-{host.Trim()}");
+
+        await CreateService(db).SaveAsync(host, 587, "user@real.com", null, true, null, null);
+
+        EmailSettings result = await db.Set<EmailSettings>().FirstAsync();
+        Assert.Equal("existing-encrypted", result.EncryptedPassword);
+    }
+
+    [Theory]
+    [InlineData("attacker.example", 587, "user@real.com", true, null)]
+    [InlineData("smtp.real.com", 465, "user@real.com", true, null)]
+    [InlineData("smtp.real.com", 587, "someone@else.com", true, null)]
+    [InlineData("smtp.real.com", 587, "user@real.com", false, null)]
+    [InlineData("attacker.example", 465, "user@real.com", true, "••••••••")]
+    [InlineData("attacker.example", 465, "user@real.com", true, "")]
+    public async Task SaveAsync_RejectsChangedDestination_WhenNoNewPassword(
+        string host, int port, string username, bool enableSsl, string? password)
+    {
+        using AppDbContext db = await SeedStoredPasswordAsync(
+            $"{nameof(SaveAsync_RejectsChangedDestination_WhenNoNewPassword)}-{host}-{port}-{username}-{enableSsl}-{password}");
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(
+            () => CreateService(db).SaveAsync(host, port, username, password, enableSsl, null, null));
+
+        Assert.Equal(ErrorCodes.EmailPasswordRequired, ex.Code);
+        EmailSettings stored = await db.Set<EmailSettings>().FirstAsync();
+        Assert.Equal("smtp.real.com", stored.Host);
+        Assert.Equal(587, stored.Port);
+        Assert.Equal("user@real.com", stored.Username);
+        Assert.True(stored.EnableSsl);
+        Assert.Equal("existing-encrypted", stored.EncryptedPassword);
+    }
+
+    [Fact]
+    public async Task SaveAsync_AcceptsChangedDestination_WhenNewPasswordIsTyped()
+    {
+        using AppDbContext db = await SeedStoredPasswordAsync(nameof(SaveAsync_AcceptsChangedDestination_WhenNewPasswordIsTyped));
+        var protectorMock = new Mock<ICredentialProtector>();
+        protectorMock.Setup(p => p.Encrypt("fresh")).Returns("fresh-encrypted");
+
+        await CreateService(db, protectorMock).SaveAsync("other.host", 465, "other@user.com", "fresh", false, null, null);
+
+        EmailSettings result = await db.Set<EmailSettings>().FirstAsync();
+        Assert.Equal("other.host", result.Host);
+        Assert.Equal(465, result.Port);
+        Assert.Equal("other@user.com", result.Username);
+        Assert.False(result.EnableSsl);
+        Assert.Equal("fresh-encrypted", result.EncryptedPassword);
     }
 
     [Fact]

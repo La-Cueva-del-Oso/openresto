@@ -405,7 +405,8 @@
     },
     "email": {
       "connection_failed": "Verbindung fehlgeschlagen: {{detail}}",
-      "not_configured": "E-Mail ist nicht konfiguriert."
+      "not_configured": "E-Mail ist nicht konfiguriert.",
+      "password_required": "Um Server, Port, Benutzernamen oder Verschlüsselung zu ändern, geben Sie das E-Mail-Passwort erneut ein."
     },
     "generic": "Etwas ist schiefgelaufen",
     "genericMessage": "Ein unerwarteter Fehler ist aufgetreten. Versuchen Sie es erneut.",
@@ -1747,6 +1748,7 @@
         "fromEmailLabel": "Absender-E-Mail",
         "footerHintVerified": "Verbindung geprüft · Bestätigungen bereit",
         "footerHintUnverified": "Testen Sie die Verbindung, bevor Sie Bestätigungen aktivieren",
+        "passwordRequiredNotice": "Um Server, Port, Benutzernamen oder Verschlüsselung zu ändern, geben Sie das E-Mail-Passwort erneut ein.",
         "saveButton": "SMTP-Einstellungen speichern"
       },
       "users": {

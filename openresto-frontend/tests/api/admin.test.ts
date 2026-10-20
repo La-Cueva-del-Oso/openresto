@@ -720,10 +720,38 @@ describe("saveEmailSettings", () => {
 
     const result = await saveEmailSettings(data);
 
-    expect(result).toEqual({ message: "Saved" });
+    expect(result).toEqual({ ok: true, data: { message: "Saved" } });
     const [url, opts] = mockFetch.mock.calls[0];
     expect(url).toContain("/api/admin/email-settings");
     expect(opts.method).toBe("PATCH");
+  });
+
+  it("returns the translated message when the server asks for the password again", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({
+        message: "Re-enter the email password to change the server, port, username or encryption.",
+        code: "email.password_required",
+      }),
+    });
+
+    const result = await saveEmailSettings(data);
+
+    expect(result).toEqual({
+      ok: false,
+      message: "To change the server, port, username or encryption, re-enter the email password.",
+    });
+  });
+
+  it("returns a generic message when a rejection carries no body", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => {
+        throw new Error("no json");
+      },
+    });
+
+    expect(await saveEmailSettings(data)).toEqual({ ok: false, message: "Failed to save." });
   });
 
   it("returns null on network error", async () => {
