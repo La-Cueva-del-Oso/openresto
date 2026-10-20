@@ -40,8 +40,11 @@ public class AdminService(
     BrandService? brandService = null,
     INotificationQueue? notificationQueue = null,
     IAuditScope? audit = null,
-    ICurrentUserService? currentUser = null)
+    ICurrentUserService? currentUser = null,
+    BookingWriteGate? writeGate = null)
 {
+    private readonly BookingWriteGate _writeGate = writeGate ?? new BookingWriteGate();
+
     /// <summary>
     /// Castle's generated proxy constructors drop default values, so a Moq class mock reaches only
     /// a constructor of exactly matching arity. This is that constructor.
@@ -339,18 +342,6 @@ public class AdminService(
         int durationMinutes = BookingDuration.For(table.Section.Restaurant, req.Seats);
         DateTime newEnd = newStart.AddMinutes(durationMinutes);
 
-        bool conflict = await _bookingRepository.HasConflictAsync(req.TableId, newStart, newEnd, durationMinutes);
-
-        if (conflict)
-        {
-            throw new ConflictException("This table already has a booking that overlaps with the requested time.") { Code = ErrorCodes.BookingTableConflict };
-        }
-
-        if (req.Seats > table.Seats)
-        {
-            throw new ConflictException($"This table only has {table.Seats} seats, but {req.Seats} guests were requested.") { Code = ErrorCodes.TableSeatsExceeded, Args = new Dictionary<string, object> { ["seats"] = table.Seats, ["requested"] = req.Seats } };
-        }
-
         var booking = new Booking
         {
             RestaurantId = req.RestaurantId,
@@ -364,7 +355,22 @@ public class AdminService(
             BookingRef = BookingRefFactory.GenerateFor(table.Section.Restaurant),
         };
 
-        await _bookingRepository.AddAsync(booking);
+        using (await _writeGate.EnterAsync())
+        {
+            bool conflict = await _bookingRepository.HasConflictAsync(req.TableId, newStart, newEnd, durationMinutes);
+
+            if (conflict)
+            {
+                throw new ConflictException("This table already has a booking that overlaps with the requested time.") { Code = ErrorCodes.BookingTableConflict };
+            }
+
+            if (req.Seats > table.Seats)
+            {
+                throw new ConflictException($"This table only has {table.Seats} seats, but {req.Seats} guests were requested.") { Code = ErrorCodes.TableSeatsExceeded, Args = new Dictionary<string, object> { ["seats"] = table.Seats, ["requested"] = req.Seats } };
+            }
+
+            await _bookingRepository.AddAsync(booking);
+        }
 
         Booking? reloaded = await _bookingRepository.GetByIdAsync(booking.Id);
         if (reloaded != null)
@@ -463,9 +469,14 @@ public class AdminService(
             throw new BusinessRuleException("Booking is already active.") { Code = ErrorCodes.BookingAlreadyActive };
         }
 
-        booking.IsCancelled = false;
-        booking.CancelledAt = null;
-        await _bookingRepository.UpdateAsync(booking);
+        using (await _writeGate.EnterAsync())
+        {
+            await RejectIfUnitTakenSinceAsync(booking);
+
+            booking.IsCancelled = false;
+            booking.CancelledAt = null;
+            await _bookingRepository.UpdateAsync(booking);
+        }
 
         DescribeBooking(AuditActions.BookingRestore, booking,
             $"Restored cancelled booking {booking.BookingRef}");
@@ -525,35 +536,38 @@ public class AdminService(
             booking.EndTime = booking.Date.AddMinutes(durationMinutes);
         }
 
-        await RejectIfMovedOntoATakenUnitAsync(booking, before, id, durationMinutes);
-
-        if (req.Seats.HasValue)
+        using (await _writeGate.EnterAsync())
         {
-            int? resolvedTableId = req.TableId ?? booking.TableId;
-            if (resolvedTableId.HasValue)
+            await RejectIfMovedOntoATakenUnitAsync(booking, before, id, durationMinutes);
+
+            if (req.Seats.HasValue)
             {
-                Table? currentTable = await _tableRepository.FindByIdAsync(resolvedTableId.Value);
-                if (currentTable != null && req.Seats.Value > currentTable.Seats)
+                int? resolvedTableId = req.TableId ?? booking.TableId;
+                if (resolvedTableId.HasValue)
                 {
-                    throw new BusinessRuleException($"This table only has {currentTable.Seats} seats, but {req.Seats.Value} guests were requested.") { Code = ErrorCodes.TableSeatsExceeded, Args = new Dictionary<string, object> { ["seats"] = currentTable.Seats, ["requested"] = req.Seats.Value } };
+                    Table? currentTable = await _tableRepository.FindByIdAsync(resolvedTableId.Value);
+                    if (currentTable != null && req.Seats.Value > currentTable.Seats)
+                    {
+                        throw new BusinessRuleException($"This table only has {currentTable.Seats} seats, but {req.Seats.Value} guests were requested.") { Code = ErrorCodes.TableSeatsExceeded, Args = new Dictionary<string, object> { ["seats"] = currentTable.Seats, ["requested"] = req.Seats.Value } };
+                    }
                 }
+                booking.Seats = req.Seats.Value;
             }
-            booking.Seats = req.Seats.Value;
-        }
-        if (req.CustomerEmail != null)
-        {
-            booking.CustomerEmail = req.CustomerEmail;
-        }
-        if (req.CustomerName != null)
-        {
-            booking.CustomerName = string.IsNullOrWhiteSpace(req.CustomerName) ? null : req.CustomerName.Trim();
-        }
-        if (req.SpecialRequests != null)
-        {
-            booking.SpecialRequests = req.SpecialRequests;
-        }
+            if (req.CustomerEmail != null)
+            {
+                booking.CustomerEmail = req.CustomerEmail;
+            }
+            if (req.CustomerName != null)
+            {
+                booking.CustomerName = string.IsNullOrWhiteSpace(req.CustomerName) ? null : req.CustomerName.Trim();
+            }
+            if (req.SpecialRequests != null)
+            {
+                booking.SpecialRequests = req.SpecialRequests;
+            }
 
-        await _bookingRepository.UpdateAsync(booking);
+            await _bookingRepository.UpdateAsync(booking);
+        }
 
         RecordBookingChanges(before, BookingFields.From(booking));
         DescribeBooking(AuditActions.BookingUpdate, booking, $"Updated booking {booking.BookingRef}");
@@ -664,6 +678,30 @@ public class AdminService(
         if (taken)
         {
             throw new BusinessRuleException("This update would cause a conflict with an existing booking.") { Code = ErrorCodes.BookingMoveConflict };
+        }
+    }
+
+    /// <summary>
+    /// A cancelled booking no longer holds its table, so someone else may have taken it since;
+    /// bringing the booking back must not seat the same unit twice.
+    /// </summary>
+    /// <seealso>AdminServiceTests.RestoreBookingAsync_RejectsWhenTheTableWasTakenSinceTheCancellation</seealso>
+    /// <seealso>AdminServiceTests.RestoreBookingAsync_ReactivatesWhenTheTableIsStillFree</seealso>
+    private async Task RejectIfUnitTakenSinceAsync(Booking booking)
+    {
+        bool taken = await _bookingRepository.IsUnitBookedOnDateAsync(
+            booking.TableId,
+            booking.TableGroupId,
+            AsUtc(booking.Date),
+            OccupancyMinutes(booking, BookingDuration.FallbackMinutes),
+            excludeBookingId: booking.Id);
+
+        if (taken)
+        {
+            throw new BusinessRuleException("Another booking has taken this table since it was cancelled.")
+            {
+                Code = booking.TableGroupId.HasValue ? ErrorCodes.TableGroupBookingConflict : ErrorCodes.BookingTableConflict
+            };
         }
     }
 

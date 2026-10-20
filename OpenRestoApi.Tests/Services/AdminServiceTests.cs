@@ -1229,6 +1229,55 @@ public partial class AdminServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RestoreBookingAsync_RejectsWhenTheTableWasTakenSinceTheCancellation()
+    {
+        AdminService svc = CreateService();
+        SeedBase(1);
+        DateTime start = DateTime.UtcNow.AddDays(5);
+        _db.Bookings.AddRange(
+            new Booking
+            {
+                Id = 1, RestaurantId = 1, SectionId = 1, TableId = 1, Date = start, EndTime = start.AddMinutes(60),
+                IsCancelled = true, CancelledAt = DateTime.UtcNow, BookingRef = "B1",
+            },
+            new Booking
+            {
+                Id = 2, RestaurantId = 1, SectionId = 1, TableId = 1, Date = start.AddMinutes(30), EndTime = start.AddMinutes(90),
+                BookingRef = "B2",
+            });
+        await _db.SaveChangesAsync();
+
+        BusinessRuleException ex = await Assert.ThrowsAsync<BusinessRuleException>(() => svc.RestoreBookingAsync(1));
+
+        Assert.Equal(OpenRestoApi.Core.Application.Utilities.ErrorCodes.BookingTableConflict, ex.Code);
+        Assert.True((await _db.Bookings.SingleAsync(b => b.Id == 1)).IsCancelled);
+    }
+
+    [Fact]
+    public async Task RestoreBookingAsync_ReactivatesWhenTheTableIsStillFree()
+    {
+        AdminService svc = CreateService();
+        SeedBase(1);
+        DateTime start = DateTime.UtcNow.AddDays(5);
+        _db.Bookings.AddRange(
+            new Booking
+            {
+                Id = 1, RestaurantId = 1, SectionId = 1, TableId = 1, Date = start, EndTime = start.AddMinutes(60),
+                IsCancelled = true, CancelledAt = DateTime.UtcNow, BookingRef = "B1",
+            },
+            new Booking
+            {
+                Id = 2, RestaurantId = 1, SectionId = 1, TableId = 1, Date = start.AddMinutes(60), EndTime = start.AddMinutes(120),
+                BookingRef = "B2",
+            });
+        await _db.SaveChangesAsync();
+
+        BookingDetailDto? result = await svc.RestoreBookingAsync(1);
+
+        Assert.False(result!.IsCancelled);
+    }
+
+    [Fact]
     public async Task CancelBookingAsync_ReturnsTrue_WhenAlreadyCancelled()
     {
         // Idempotent re-cancel: IsCancelled short-circuits the "already passed" guard so a

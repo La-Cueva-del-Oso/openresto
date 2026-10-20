@@ -394,6 +394,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<UserService>();
         services.AddScoped<ApiKeyService>();
+        services.AddSingleton<BookingWriteGate>();
         services.AddScoped<BookingService>();
         services.AddScoped<AdminService>();
         services.AddScoped<RestaurantManagementService>();

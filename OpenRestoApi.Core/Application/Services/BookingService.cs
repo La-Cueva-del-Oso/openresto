@@ -17,8 +17,10 @@ public class BookingService(
     ITableGroupRepository tableGroupRepository,
     IBookingConfirmationService? confirmationService = null,
     INotificationQueue? notificationQueue = null,
-    ICurrentUserService? currentUser = null)
+    ICurrentUserService? currentUser = null,
+    BookingWriteGate? writeGate = null)
 {
+    private readonly BookingWriteGate _writeGate = writeGate ?? new BookingWriteGate();
     private readonly IBookingRepository _bookingRepository = bookingRepository;
     private readonly ITableRepository _tableRepository = tableRepository;
     private readonly IRestaurantRepository _restaurantRepository = restaurantRepository;
@@ -95,36 +97,42 @@ public class BookingService(
         Table table = await _tableRepository.GetForRestaurantAsync(tableId, sectionId, restaurant.Id)
             ?? throw new ValidationException("Invalid table for this restaurant.") { Code = ErrorCodes.BookingInvalidTableForRestaurant };
 
-        bool alreadyBooked = await _bookingRepository.IsUnitBookedOnDateAsync(
-            tableId, tableGroupId: null, bookingDate, durationMinutes);
-        if (alreadyBooked)
+        Booking newBooking;
+        using (await _writeGate.EnterAsync())
         {
-            throw new ConflictException("This table is already booked for that time.") { Code = ErrorCodes.BookingTableConflict };
+            await RejectIfOverCoverCapAsync(restaurant, bookingDate, bookingDto.Seats);
+
+            bool alreadyBooked = await _bookingRepository.IsUnitBookedOnDateAsync(
+                tableId, tableGroupId: null, bookingDate, durationMinutes);
+            if (alreadyBooked)
+            {
+                throw new ConflictException("This table is already booked for that time.") { Code = ErrorCodes.BookingTableConflict };
+            }
+
+            bool heldByOther = _holdService.IsTableHeld(
+                tableId, bookingDate, excludeHoldId: bookingDto.HoldId,
+                durationMinutes: durationMinutes);
+            if (heldByOther)
+            {
+                throw new ConflictException("This table is currently being held by another user. Please try again shortly.") { Code = ErrorCodes.BookingTableHeld };
+            }
+
+            RejectIfTableCannotSeat(table, restaurant, bookingDto.Seats);
+            if (table.WalkInOnly)
+            {
+                throw WalkInOnlyTable();
+            }
+
+            Booking booking = _mapper.ToNewEntity(bookingDto);
+            booking.Date = bookingDate;
+            booking.BookingRef = BookingRefFactory.GenerateFor(restaurant);
+            booking.EndTime = bookingDate.AddMinutes(durationMinutes);
+            booking.Table = table;
+            booking.Section = table.Section;
+            booking.Restaurant = restaurant;
+
+            newBooking = await _bookingRepository.AddAsync(booking);
         }
-
-        bool heldByOther = _holdService.IsTableHeld(
-            tableId, bookingDate, excludeHoldId: bookingDto.HoldId,
-            durationMinutes: durationMinutes);
-        if (heldByOther)
-        {
-            throw new ConflictException("This table is currently being held by another user. Please try again shortly.") { Code = ErrorCodes.BookingTableHeld };
-        }
-
-        RejectIfTableCannotSeat(table, restaurant, bookingDto.Seats);
-        if (table.WalkInOnly)
-        {
-            throw WalkInOnlyTable();
-        }
-
-        Booking booking = _mapper.ToNewEntity(bookingDto);
-        booking.Date = bookingDate;
-        booking.BookingRef = BookingRefFactory.GenerateFor(restaurant);
-        booking.EndTime = bookingDate.AddMinutes(durationMinutes);
-        booking.Table = table;
-        booking.Section = table.Section;
-        booking.Restaurant = restaurant;
-
-        Booking newBooking = await _bookingRepository.AddAsync(booking);
 
         if (!string.IsNullOrEmpty(bookingDto.HoldId))
         {
@@ -373,33 +381,39 @@ public class BookingService(
         var memberIds = group.Members.Select(m => m.TableId).ToList();
         int durationMinutes = BookingDuration.For(restaurant, bookingDto.Seats);
 
-        bool groupConflict = await _bookingRepository.IsUnitBookedOnDateAsync(
-            tableId: null, tableGroupId: group.Id, bookingDate, durationMinutes);
-        if (groupConflict)
+        Booking newBooking;
+        using (await _writeGate.EnterAsync())
         {
-            throw new ConflictException("One of the combined tables is already booked for that time.") { Code = ErrorCodes.TableGroupBookingConflict };
+            await RejectIfOverCoverCapAsync(restaurant, bookingDate, bookingDto.Seats);
+
+            bool groupConflict = await _bookingRepository.IsUnitBookedOnDateAsync(
+                tableId: null, tableGroupId: group.Id, bookingDate, durationMinutes);
+            if (groupConflict)
+            {
+                throw new ConflictException("One of the combined tables is already booked for that time.") { Code = ErrorCodes.TableGroupBookingConflict };
+            }
+
+            bool anyMemberHeldByOther = memberIds.Any(id => _holdService.IsTableHeld(
+                id, bookingDate, excludeHoldId: bookingDto.HoldId, durationMinutes: durationMinutes));
+            if (anyMemberHeldByOther)
+            {
+                throw new ConflictException("One of the combined tables is currently being held by another user. Please try again shortly.") { Code = ErrorCodes.TableGroupHoldConflict };
+            }
+
+            Booking booking = _mapper.ToNewEntity(bookingDto);
+            booking.Date = bookingDate;
+            booking.BookingRef = BookingRefFactory.GenerateFor(restaurant);
+            booking.EndTime = bookingDate.AddMinutes(durationMinutes);
+            booking.TableId = null;
+            booking.TableGroupId = group.Id;
+            booking.TableGroup = group;
+            // Kept so the admin grid can still group the booking by section.
+            booking.SectionId = bookingDto.SectionId
+                ?? group.Members.OrderBy(m => m.TableId).FirstOrDefault()?.Table?.SectionId;
+            booking.Restaurant = restaurant;
+
+            newBooking = await _bookingRepository.AddAsync(booking);
         }
-
-        bool anyMemberHeldByOther = memberIds.Any(id => _holdService.IsTableHeld(
-            id, bookingDate, excludeHoldId: bookingDto.HoldId, durationMinutes: durationMinutes));
-        if (anyMemberHeldByOther)
-        {
-            throw new ConflictException("One of the combined tables is currently being held by another user. Please try again shortly.") { Code = ErrorCodes.TableGroupHoldConflict };
-        }
-
-        Booking booking = _mapper.ToNewEntity(bookingDto);
-        booking.Date = bookingDate;
-        booking.BookingRef = BookingRefFactory.GenerateFor(restaurant);
-        booking.EndTime = bookingDate.AddMinutes(durationMinutes);
-        booking.TableId = null;
-        booking.TableGroupId = group.Id;
-        booking.TableGroup = group;
-        // Kept so the admin grid can still group the booking by section.
-        booking.SectionId = bookingDto.SectionId
-            ?? group.Members.OrderBy(m => m.TableId).FirstOrDefault()?.Table?.SectionId;
-        booking.Restaurant = restaurant;
-
-        Booking newBooking = await _bookingRepository.AddAsync(booking);
 
         if (!string.IsNullOrEmpty(bookingDto.HoldId))
         {
