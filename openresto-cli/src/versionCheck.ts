@@ -1,3 +1,4 @@
+import { neutralizeControl } from "./output.js";
 import { ApiError, type Client } from "./transport.js";
 
 /**
@@ -48,8 +49,10 @@ export async function warnOnServerVersionMismatch(
 
   if (server.major !== cli.major || server.minor !== cli.minor) {
     console.error(
-      `warning: server is ${response.version}, CLI is ${cliVersion} — commands may not match ` +
-        "the server's API",
+      neutralizeControl(
+        `warning: server is ${response.version}, CLI is ${cliVersion} — commands may not match ` +
+          "the server's API",
+      ),
     );
   }
 }

@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { resolveProfile, type ResolvedProfile } from "./config.js";
 import { ApiError, Client } from "./transport.js";
 import { ConfirmationRequiredError } from "./confirm.js";
+import { neutralizeControl } from "./output.js";
 
 export interface GlobalOptions {
   json?: boolean;
@@ -40,15 +41,18 @@ export function handle<TArgs extends unknown[]>(
   };
 }
 
+/** Messages can carry API-supplied text (an ApiError's body, a redirect's Location), so every
+ * branch goes through `neutralizeControl`. */
 export function printError(err: unknown): void {
+  const say = (line: string) => console.error(neutralizeControl(line, true));
   if (err instanceof ApiError) {
     const codePart = err.code ? ` [${err.code}]` : "";
-    console.error(`Error (${err.status})${codePart}: ${err.message}`);
+    say(`Error (${err.status})${codePart}: ${err.message}`);
   } else if (err instanceof ConfirmationRequiredError) {
-    console.error(`Error: ${err.message}`);
+    say(`Error: ${err.message}`);
   } else if (err instanceof Error) {
-    console.error(`Error: ${err.message}`);
+    say(`Error: ${err.message}`);
   } else {
-    console.error("Error:", err);
+    say(`Error: ${String(err)}`);
   }
 }

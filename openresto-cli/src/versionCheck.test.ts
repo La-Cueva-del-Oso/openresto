@@ -38,6 +38,19 @@ async function run(fn: () => Promise<void>): Promise<string[]> {
 }
 
 describe("warnOnServerVersionMismatch", () => {
+  test("a server-supplied version carrying escape sequences is warned about escaped, not raw", async () => {
+    const client = clientReturning(() => ({
+      status: 200,
+      body: { version: "1.2.0\x1b[2J\x1b]0;x\x07" },
+    }));
+
+    const lines = await run(() => warnOnServerVersionMismatch(client, "2.4.1"));
+
+    assert.equal(lines.length, 1);
+    assert.doesNotMatch(lines[0], /[\u0000-\u001f\u007f-\u009f]/);
+    assert.match(lines[0], /1\.2\.0\\x1b\[2J\\x1b\]0;x\\x07/);
+  });
+
   test("matching version: no warning", async () => {
     const client = clientReturning(() => ({
       status: 200,

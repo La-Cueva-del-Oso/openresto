@@ -50,6 +50,29 @@ describe("printError", () => {
     assert.match(lines[0], /A server URL is required\./);
   });
 
+  test("an API message carrying escape sequences is printed escaped, never raw", () => {
+    const lines = captureConsoleError(() =>
+      printError(
+        new ApiError(400, "bad \x1b[2J name\r\u009b\x08", "x.\x1b[0m"),
+      ),
+    );
+
+    assert.doesNotMatch(
+      lines.join(""),
+      /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/,
+    );
+    assert.match(lines[0], /bad \\x1b\[2J name\\x0d\\x9b\\x08/);
+    assert.match(lines[0], /\[x\.\\x1b\[0m\]/);
+  });
+
+  test("a plain Error's message is neutralized and keeps its line breaks", () => {
+    const lines = captureConsoleError(() =>
+      printError(new Error("one\ntwo\x1b]0;t\x07")),
+    );
+
+    assert.equal(lines[0], "Error: one\ntwo\\x1b]0;t\\x07");
+  });
+
   test("renders a non-Error thrown value without crashing", () => {
     const lines = captureConsoleError(() => printError("just a string"));
 
