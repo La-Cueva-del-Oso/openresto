@@ -19,10 +19,23 @@ How each feature behaves, its API fields and its error codes are in
 - Deactivating an account now ends its sessions, so reactivating it no longer brings old logins back. `scripts/reset-admin.sh` ends the account's sessions too.
 - An API key without permission to see guest details can no longer search bookings by email, and its text search no longer matches guest names or emails. Before, those searches could be used to work out a hidden address.
 - Behind a TLS proxy, the stack can now recover each visitor's real address when you list the proxy in `OPENRESTO_TRUSTED_PROXIES` (see the HTTPS guide). Before, every visitor shared one rate limit, so one person could lock everyone else out of signing in.
+- Two Owners demoting or deactivating each other at the same moment can no longer leave the instance without an active Owner. Wrong answers to the security question are now counted before they are checked, so a burst of guesses reaches the lockout instead of all starting from the same count, and two session revocations at once (a password change and a deactivation, say) are both counted.
+- The native-app readiness check now opens its connection only to a public address, closing a gap where a hostile DNS answer could point its `/.well-known/` request at an internal service.
+- `scripts/reset-admin.sh` no longer accepts `--password`, which any user on the host could read with `ps`; pipe the password to `--password-stdin` instead (see the admin accounts guide). A reset also clears the account's security-question lockout.
+- Purging a booking, or deleting it through the API, now also erases the guest's admin notifications, email-failure records and waitlist entry, which kept their name, email and reference before.
+- Email errors no longer expose the mail server's own error text. The connection test and the booking email endpoints return a stable code (`email.auth_failed`, `email.connection_failed`, `email.recipient_rejected`, `email.send_failed`) shown to the admin as a plain sentence, and the failures list keeps only that code.
+- The command-line client refuses plain `http://` server addresses unless they point at the same machine, or `OPENRESTO_ALLOW_HTTP=1` is set, so an API key never travels unencrypted by accident.
+- Text that comes from the API can no longer drive the terminal of someone using the command-line client: control and escape characters in tables, records, errors and `--json` output are shown as visible `\xNN` escapes. The server also refuses control characters in a booking's name and special requests (`booking.name_invalid`, `booking.special_requests_invalid`).
 
 ### Changed
 
 - Existing admin push subscriptions have no owner to attribute them to and are discarded by the upgrade. A browser that already had notifications on registers itself again the next time an admin opens the admin area, so most installs need no action; if notifications stay silent, turn them off and on again in Settings. Until then, the notifications page still lists new bookings, but nothing is pushed to the device.
+- Failed-email records now expire after 30 days and admin notifications after 90 (`Retention:EmailFailureDays`, `Retention:NotificationDays`; a value of 0 or less keeps them forever). Before, they were kept indefinitely along with the guest's address and name.
+
+### Fixed
+
+- Two simultaneous bookings for the same table and time could both succeed, whether they came from the website, the admin, the waitlist or a booking being moved. Creating, moving and seating now go through one lock, so the second request gets the usual "table taken" answer. The cover limit per slot is checked inside the same lock.
+- Restoring a cancelled booking now refuses when its table was booked in the meantime, instead of seating two parties at once.
 
 ## [2.4.1] - 2026-10-14
 

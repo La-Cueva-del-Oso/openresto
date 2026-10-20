@@ -15,7 +15,7 @@ public class WaitlistSweepWorkerTests
     private static readonly TimeSpan Immediately = TimeSpan.Zero;
     private static readonly TimeSpan Rapidly = TimeSpan.FromMilliseconds(20);
 
-    private static Mock<WaitlistService> ServiceMock() => new(null!, null!, null!, null!, null!, null!, null!, null!, null!);
+    private static Mock<WaitlistService> ServiceMock() => new(null!, null!, null!, null!, null!, null!, null!, null!, null!, null!);
 
     private static WaitlistSweepWorker CreateWorker(Mock<WaitlistService> service, TimeSpan? startupDelay = null)
     {

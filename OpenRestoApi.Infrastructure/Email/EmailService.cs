@@ -84,7 +84,7 @@ public class EmailService(AppDbContext db, ICredentialProtector protector, Func<
     /// Turns whatever the SMTP stack threw into a category with a fixed message. The original rides
     /// along as the inner exception for the server log; its text must never be copied into the
     /// message, since it can name the host, the user name or the provider's internals.
-    /// <seealso>EmailServiceTests.SendEmailAsync_WrapsAnAuthenticationFailure_WithoutItsText</seealso>
+    /// <seealso>EmailServiceTests.TestConnectionAsync_WrapsAnAuthenticationFailure_WithoutItsText</seealso>
     /// </summary>
     private static InfrastructureException Classify(Exception ex)
     {
