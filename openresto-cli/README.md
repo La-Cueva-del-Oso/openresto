@@ -135,6 +135,11 @@ OPENRESTO_URL=https://booking.example.com OPENRESTO_API_KEY="$CI_OPENRESTO_KEY" 
   openresto bookings list --json
 ```
 
+The CLI sends your API key on every request, so it only talks to `https://` addresses. A plain
+`http://` address is accepted only for this machine (`localhost`, `127.0.0.0/8`, `::1`). For a
+server on a trusted private network without TLS, set `OPENRESTO_ALLOW_HTTP=1`; the key you type
+at `auth login` and the one sent with every request then travel unencrypted.
+
 `openresto auth logout` removes the saved key for the active profile (the server URL stays, so
 `auth login` next time only needs to ask for a new key).
 
