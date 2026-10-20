@@ -43,6 +43,25 @@ internal class AdminCredentialRepository(AppDbContext db) : IAdminCredentialRepo
         return await RefreshAsync(user, rows);
     }
 
+    public async Task<bool> TryCountPvqAttemptAsync(int id, DateTime nowUtc, int maxAttempts, DateTime lockedUntilUtc)
+    {
+        int rows = await _db.AdminCredentials
+            .Where(c => c.Id == id && (c.PvqLockedUntil == null || c.PvqLockedUntil <= nowUtc))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.PvqLockedUntil, c => c.PvqFailedAttempts + 1 >= maxAttempts ? lockedUntilUtc : c.PvqLockedUntil)
+                .SetProperty(c => c.PvqFailedAttempts, c => c.PvqFailedAttempts + 1 >= maxAttempts ? 0 : c.PvqFailedAttempts + 1));
+        return rows > 0;
+    }
+
+    public async Task CompletePvqVerificationAsync(int id, string resetToken, DateTime resetTokenExpiryUtc)
+    {
+        await _db.AdminCredentials.Where(c => c.Id == id).ExecuteUpdateAsync(s => s
+            .SetProperty(c => c.PvqFailedAttempts, 0)
+            .SetProperty(c => c.PvqLockedUntil, (DateTime?)null)
+            .SetProperty(c => c.ResetToken, resetToken)
+            .SetProperty(c => c.ResetTokenExpiry, resetTokenExpiryUtc));
+    }
+
     // Only an active Owner counts, so deactivating one and then demoting it is not a way around
     // the rule.
     private IQueryable<AdminCredential> UnlessLastActiveOwner(int id)

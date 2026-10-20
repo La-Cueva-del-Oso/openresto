@@ -39,6 +39,23 @@ public interface IAdminCredentialRepository
     /// <seealso>AdminCredentialConcurrencyTests.Three_Owners_Deactivated_Concurrently_Keep_Exactly_One</seealso>
     Task<bool> TryDeactivateAsync(AdminCredential user);
 
+    /// <summary>
+    /// Counts one security-answer attempt against the account, locking it until
+    /// <paramref name="lockedUntilUtc"/> (and zeroing the count) on the <paramref name="maxAttempts"/>th.
+    /// False when the account is locked at <paramref name="nowUtc"/> and so takes no attempt. The
+    /// lock test and the count are one statement, and it runs before the answer is checked:
+    /// reading the count, checking and writing it back lets a burst of guesses all start from
+    /// the same number.
+    /// </summary>
+    /// <seealso>AdminCredentialConcurrencyTests.Concurrent_Wrong_Answers_Lock_The_Account_After_The_Limit</seealso>
+    /// <seealso>AdminCredentialConcurrencyTests.Concurrent_Wrong_Answers_Below_The_Limit_Are_All_Counted</seealso>
+    Task<bool> TryCountPvqAttemptAsync(int id, DateTime nowUtc, int maxAttempts, DateTime lockedUntilUtc);
+
+    /// <summary>
+    /// A right answer: clears the attempt count and any lock, and stores the reset token it earns.
+    /// </summary>
+    Task CompletePvqVerificationAsync(int id, string resetToken, DateTime resetTokenExpiryUtc);
+
     /// <summary>Adds and saves a new credential, returning the persisted entity.</summary>
     Task<AdminCredential> AddAsync(AdminCredential credential);
 

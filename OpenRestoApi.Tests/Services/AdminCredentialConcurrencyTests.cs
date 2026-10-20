@@ -80,11 +80,8 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
     }
 
     private static async Task<Exception?[]> RunTogetherAsync(params Func<Task>[] operations)
-    {
-        var start = new TaskCompletionSource();
-        Task<Exception?>[] running = [.. operations.Select(op => Task.Run(async () =>
+        => await RunTogetherForResultsAsync([.. operations.Select(op => (Func<Task<Exception?>>)(async () =>
         {
-            await start.Task;
             try
             {
                 await op();
@@ -94,6 +91,15 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
             {
                 return ex;
             }
+        }))]);
+
+    private static async Task<T[]> RunTogetherForResultsAsync<T>(Func<Task<T>>[] operations)
+    {
+        var start = new TaskCompletionSource();
+        Task<T>[] running = [.. operations.Select(op => Task.Run(async () =>
+        {
+            await start.Task;
+            return await op();
         }))];
         start.SetResult();
         return await Task.WhenAll(running);
@@ -103,6 +109,37 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
     {
         using AppDbContext db = NewContext();
         return await db.AdminCredentials.CountAsync(c => c.IsActive && c.Role == UserRoles.Owner);
+    }
+
+    private async Task<AdminCredential> SeedAccountWithAnswerAsync(string answer)
+    {
+        using AppDbContext db = NewContext();
+        await db.AdminCredentials.ExecuteDeleteAsync();
+        (string hash, string salt) = new PasswordService().Hash(answer);
+        var account = new AdminCredential
+        {
+            Email = "owner@example.com",
+            PasswordHash = "h",
+            PasswordSalt = "s",
+            PvqQuestion = "Q?",
+            PvqAnswerHash = hash,
+            PvqAnswerSalt = salt,
+        };
+        db.AdminCredentials.Add(account);
+        await db.SaveChangesAsync();
+        return account;
+    }
+
+    private SecurityQuestionsService SecurityQuestions()
+    {
+        AppDbContext db = NewContext();
+        return new SecurityQuestionsService(new AdminCredentialRepository(db), new PasswordService(), FakeCurrentUser.Anonymous());
+    }
+
+    private async Task<AdminCredential> ReloadAsync(int id)
+    {
+        using AppDbContext db = NewContext();
+        return await db.AdminCredentials.AsNoTracking().SingleAsync(c => c.Id == id);
     }
 
     private static void AssertRefusedAs(string code, Exception? refusal)
@@ -200,6 +237,55 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
 
             Assert.All(outcomes, Assert.Null);
             Assert.Equal(1, await ActiveOwnersAsync());
+        }
+    }
+
+    // ── Security-question lockout ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task Concurrent_Wrong_Answers_Lock_The_Account_After_The_Limit()
+    {
+        const int Max = SecurityQuestionsService.MaxFailedAttempts;
+        for (int round = 0; round < Rounds; round++)
+        {
+            AdminCredential account = await SeedAccountWithAnswerAsync("right");
+            PvqVerifyOutcome[] outcomes = await RunTogetherForResultsAsync(
+                [.. Enumerable.Range(0, Max * 2).Select(_ =>
+                {
+                    SecurityQuestionsService svc = SecurityQuestions();
+                    return (Func<Task<PvqVerifyOutcome>>)(() => svc.VerifyAsync(account.Email, "wrong"));
+                })]);
+
+            Assert.Equal(Max, outcomes.Count(o => o.Status == PvqVerifyStatus.WrongAnswer));
+            Assert.Equal(Max, outcomes.Count(o => o.Status == PvqVerifyStatus.LockedOut));
+            AdminCredential stored = await ReloadAsync(account.Id);
+            Assert.True(stored.PvqLockedUntil > DateTime.UtcNow);
+            Assert.Equal(0, stored.PvqFailedAttempts);
+            Assert.Equal(PvqVerifyStatus.LockedOut, (await SecurityQuestions().VerifyAsync(account.Email, "right")).Status);
+        }
+    }
+
+    [Fact]
+    public async Task Concurrent_Wrong_Answers_Below_The_Limit_Are_All_Counted()
+    {
+        const int Max = SecurityQuestionsService.MaxFailedAttempts;
+        for (int round = 0; round < Rounds; round++)
+        {
+            AdminCredential account = await SeedAccountWithAnswerAsync("right");
+            PvqVerifyOutcome[] outcomes = await RunTogetherForResultsAsync(
+                [.. Enumerable.Range(0, Max - 1).Select(_ =>
+                {
+                    SecurityQuestionsService svc = SecurityQuestions();
+                    return (Func<Task<PvqVerifyOutcome>>)(() => svc.VerifyAsync(account.Email, "wrong"));
+                })]);
+
+            Assert.All(outcomes, o => Assert.Equal(PvqVerifyStatus.WrongAnswer, o.Status));
+            AdminCredential counted = await ReloadAsync(account.Id);
+            Assert.Equal(Max - 1, counted.PvqFailedAttempts);
+            Assert.Null(counted.PvqLockedUntil);
+
+            Assert.Equal(PvqVerifyStatus.Success, (await SecurityQuestions().VerifyAsync(account.Email, "right")).Status);
+            Assert.Equal(0, (await ReloadAsync(account.Id)).PvqFailedAttempts);
         }
     }
 }
