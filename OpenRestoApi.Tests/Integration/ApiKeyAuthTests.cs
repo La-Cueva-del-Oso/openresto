@@ -96,6 +96,23 @@ public class ApiKeyAuthTests(TestWebAppFactory factory) : IClassFixture<TestWebA
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    /// <seealso>AdminServiceTests.GetBookingsAsync_RejectsTheEmailFilter_ForAnApiKeyWithoutGuestsRead</seealso>
+    [Fact]
+    public async Task BookingsEmailFilter_Returns400WithTheGuestFilterCode_ForAKeyWithoutGuestsRead()
+    {
+        AdminCredential owner = _factory.GetSeededAdmin();
+        string secret = await CreateKeyAsync(owner, BookingsRead("NoGuestsEmailFilter"));
+        HttpClient client = ClientWithKey(secret);
+
+        HttpResponseMessage rejected = await client.GetAsync("/api/admin/bookings?email=%40example.com");
+        HttpResponseMessage allowed = await client.GetAsync("/api/admin/bookings?bookingRef=REF1");
+
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        JsonElement body = await rejected.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(ErrorCodes.BookingGuestFilterForbidden, body.GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+    }
+
     [Fact]
     public async Task MalformedKey_Returns401()
     {

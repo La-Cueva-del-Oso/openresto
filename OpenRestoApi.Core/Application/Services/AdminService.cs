@@ -194,6 +194,8 @@ public class AdminService(
 
     public virtual async Task<List<BookingDetailDto>> GetBookingsAsync(int? restaurantId, DateTime? bookingDate, string status, string? email = null, string? bookingRef = null, string? query = null)
     {
+        BookingGuestVisibility.RequireGuestAccessToFilterByEmail(email, _currentUser);
+
         List<Booking> bookings = await _bookingFilterRepository.QueryAsync(new BookingFilter
         {
             RestaurantId = restaurantId,
@@ -202,6 +204,7 @@ public class AdminService(
             Email = email,
             BookingRef = bookingRef,
             Query = query,
+            QueryMatchesGuestIdentity = !BookingGuestVisibility.IsRedactedFor(_currentUser),
         });
 
         return await WithNoShowHistoryAsync(bookings);
