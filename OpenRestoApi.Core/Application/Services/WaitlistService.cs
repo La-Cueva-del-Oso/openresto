@@ -21,8 +21,11 @@ public class WaitlistService(
     IWaitlistReadyNotifier? readyNotifier = null,
     INotificationQueue? notificationQueue = null,
     ICurrentUserService? currentUser = null,
-    IAuditScope? audit = null)
+    IAuditScope? audit = null,
+    BookingWriteGate? writeGate = null)
 {
+    private readonly BookingWriteGate _writeGate = writeGate ?? new BookingWriteGate();
+
     /// <summary>A party still queued this long after joining has almost certainly gone, and would clog the queue.</summary>
     public static readonly TimeSpan StaleAfter = TimeSpan.FromHours(6);
 
@@ -239,25 +242,29 @@ public class WaitlistService(
         Restaurant restaurant = await LoadRestaurantAsync(entry.RestaurantId);
         DateTime now = _clock.UtcNow;
 
-        IReadOnlyList<TableCandidate> free = await _autoAssigner.BuildCandidatesAsync(restaurant, entry.Seats, now, includeWalkInOnly: true);
-        TableCandidate unit = PickUnit(free, req)
-            ?? throw new ConflictException("No free table can seat this party right now.") { Code = ErrorCodes.WaitlistNoTableFree };
-
-        var booking = new Booking
+        Booking booking;
+        using (await _writeGate.EnterAsync())
         {
-            RestaurantId = restaurant.Id,
-            SectionId = unit.SectionId,
-            TableId = unit.IsGroup ? null : unit.TableId,
-            TableGroupId = unit.TableGroupId,
-            Date = now,
-            EndTime = now.AddMinutes(BookingDuration.For(restaurant, entry.Seats)),
-            CustomerName = entry.Name,
-            CustomerEmail = entry.Email,
-            Seats = entry.Seats,
-            BookingRef = BookingRefFactory.GenerateFor(restaurant),
-            Status = BookingStatus.Seated,
-        };
-        await _bookings.AddAsync(booking);
+            IReadOnlyList<TableCandidate> free = await _autoAssigner.BuildCandidatesAsync(restaurant, entry.Seats, now, includeWalkInOnly: true);
+            TableCandidate unit = PickUnit(free, req)
+                ?? throw new ConflictException("No free table can seat this party right now.") { Code = ErrorCodes.WaitlistNoTableFree };
+
+            booking = new Booking
+            {
+                RestaurantId = restaurant.Id,
+                SectionId = unit.SectionId,
+                TableId = unit.IsGroup ? null : unit.TableId,
+                TableGroupId = unit.TableGroupId,
+                Date = now,
+                EndTime = now.AddMinutes(BookingDuration.For(restaurant, entry.Seats)),
+                CustomerName = entry.Name,
+                CustomerEmail = entry.Email,
+                Seats = entry.Seats,
+                BookingRef = BookingRefFactory.GenerateFor(restaurant),
+                Status = BookingStatus.Seated,
+            };
+            await _bookings.AddAsync(booking);
+        }
 
         Close(entry, WaitlistStatus.Seated);
         entry.BookingId = booking.Id;
