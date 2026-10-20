@@ -40,6 +40,7 @@ How each feature behaves, its API fields and its error codes are in
 - Restoring a cancelled booking now refuses when its table was booked in the meantime, instead of seating two parties at once.
 - 22 error messages (API keys, brand settings, booking reminders, wallet passes, push notifications) were shown in English whatever the language; they are now translated into English, Spanish, French and German, and a test fails when a new error code ships without its translations. Spanish addresses everyone as _tú_.
 - A booking made with stray spaces around the email (`" guest@example.com "`) could not be found afterwards: the lookup answered "not found" for the right reference. The address is now stored trimmed, and the lookup also finds bookings already saved with spaces.
+- Seating the same waitlist ticket twice at the same moment (two staff pressing Seat, or a double tap) created two bookings on two tables. The ticket is now checked and closed inside the same lock as the booking, so the second request gets the "already left the waitlist" answer.
 
 ## [2.4.1] - 2026-10-14
 
