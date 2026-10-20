@@ -4579,6 +4579,7 @@ export interface components {
             status?: string;
         };
         SetupPvqRequest: {
+            currentPassword?: string;
             question?: string;
             answer?: string;
         };

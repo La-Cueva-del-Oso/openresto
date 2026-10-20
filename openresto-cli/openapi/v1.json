@@ -5065,6 +5065,9 @@
       "SetupPvqRequest": {
         "type": "object",
         "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
           "question": {
             "type": "string"
           },
