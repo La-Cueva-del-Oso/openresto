@@ -633,7 +633,7 @@ def emit_media(ds, media_dir):
     from pathlib import Path
 
     root = Path(media_dir)
-    out = [f"-- ── Media: URLs derived from the files in {media_dir} ──"]
+    out = ["-- ── Media: URLs derived from the files in the media directory ──"]
     if not root.is_dir():
         out.append(f"-- directory not found, nothing to link")
         return out, 0
