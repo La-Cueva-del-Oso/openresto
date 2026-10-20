@@ -184,6 +184,7 @@ public class CreateRestaurantRequest
 
 public class SetupPvqRequest
 {
+    public string CurrentPassword { get; set; } = null!;
     public string Question { get; set; } = null!;
     public string Answer { get; set; } = null!;
 }

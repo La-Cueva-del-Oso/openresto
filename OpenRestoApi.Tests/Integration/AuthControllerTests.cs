@@ -377,6 +377,7 @@ public class AuthControllerTests(TestWebAppFactory factory) : IClassFixture<Test
         // 1. Set up the security question on the account.
         HttpResponseMessage setupResponse = await client.PostAsJsonAsync("/api/admin/auth/pvq/setup", new
         {
+            currentPassword = TestWebAppFactory.AdminPassword,
             question = "What is your favorite color?",
             answer = "Purple"
         });
@@ -428,6 +429,7 @@ public class AuthControllerTests(TestWebAppFactory factory) : IClassFixture<Test
         // 1. Setup PVQ
         HttpResponseMessage setupResponse = await client.PostAsJsonAsync("/api/admin/auth/pvq/setup", new
         {
+            currentPassword = TestWebAppFactory.AdminPassword,
             question = "What is your pet's name?",
             answer = "Fluffy"
         });
@@ -484,6 +486,7 @@ public class AuthControllerTests(TestWebAppFactory factory) : IClassFixture<Test
         // Ensure PVQ is set up
         await client.PostAsJsonAsync("/api/admin/auth/pvq/setup", new
         {
+            currentPassword = TestWebAppFactory.AdminPassword,
             question = "What color?",
             answer = "Blue"
         });
@@ -538,11 +541,65 @@ public class AuthControllerTests(TestWebAppFactory factory) : IClassFixture<Test
 
         HttpResponseMessage response = await client.PostAsJsonAsync("/api/admin/auth/pvq/setup", new
         {
+            currentPassword = TestWebAppFactory.AdminPassword,
             question = "",
             answer = ""
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PvqSetup_WithAWrongCurrentPassword_Returns401_AndKeepsTheExistingQuestion()
+    {
+        HttpClient client = _factory.CreateAuthenticatedClient();
+        await client.PostAsJsonAsync("/api/admin/auth/pvq/setup", new
+        {
+            currentPassword = TestWebAppFactory.AdminPassword,
+            question = "Original question?",
+            answer = "original"
+        });
+
+        HttpResponseMessage response = await client.PostAsJsonAsync("/api/admin/auth/pvq/setup", new
+        {
+            currentPassword = "not-the-password",
+            question = "Planted question?",
+            answer = "planted"
+        });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        JsonElement body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Current password is incorrect.", body.GetProperty("message").GetString());
+        JsonElement mine = await (await client.GetAsync("/api/admin/auth/pvq/me")).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Original question?", mine.GetProperty("question").GetString());
+        HttpResponseMessage planted = await _factory.CreateClient().PostAsJsonAsync("/api/admin/auth/pvq/verify", new
+        {
+            email = TestWebAppFactory.AdminEmail,
+            answer = "planted"
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, planted.StatusCode);
+    }
+
+    [Fact]
+    public async Task PvqSetup_WithoutACurrentPassword_Returns400_AndKeepsTheExistingQuestion()
+    {
+        HttpClient client = _factory.CreateAuthenticatedClient();
+        await client.PostAsJsonAsync("/api/admin/auth/pvq/setup", new
+        {
+            currentPassword = TestWebAppFactory.AdminPassword,
+            question = "Original question?",
+            answer = "original"
+        });
+
+        HttpResponseMessage response = await client.PostAsJsonAsync("/api/admin/auth/pvq/setup", new
+        {
+            question = "Planted question?",
+            answer = "planted"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        JsonElement mine = await (await client.GetAsync("/api/admin/auth/pvq/me")).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Original question?", mine.GetProperty("question").GetString());
     }
 
     [Fact]
@@ -645,7 +702,7 @@ public class AuthControllerTests(TestWebAppFactory factory) : IClassFixture<Test
     public async Task ResetPassword_WithShortPassword_Returns400()
     {
         HttpClient client = _factory.CreateAuthenticatedClient();
-        await client.PostAsJsonAsync("/api/admin/auth/pvq/setup", new { question = "Q", answer = "A" });
+        await client.PostAsJsonAsync("/api/admin/auth/pvq/setup", new { currentPassword = TestWebAppFactory.AdminPassword, question = "Q", answer = "A" });
 
         HttpClient unauth = _factory.CreateClient();
         HttpResponseMessage verifyResp = await unauth.PostAsJsonAsync("/api/admin/auth/pvq/verify", new { email = TestWebAppFactory.AdminEmail, answer = "A" });
@@ -778,6 +835,7 @@ public class AuthControllerTests(TestWebAppFactory factory) : IClassFixture<Test
         HttpClient client = _factory.CreateAuthenticatedClient();
         await client.PostAsJsonAsync("/api/admin/auth/pvq/setup", new
         {
+            currentPassword = TestWebAppFactory.AdminPassword,
             question = "Which street?",
             answer = "Baker"
         });

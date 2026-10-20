@@ -44,10 +44,15 @@ public sealed class SecurityQuestionsService(
         return ToStatus(await ResolveCurrentUserAsync());
     }
 
-    public async Task SetupAsync(string question, string answer)
+    /// <seealso>SecurityQuestionsServiceTests.SetupAsync_Saves_The_Question_When_The_Current_Password_Is_Right</seealso>
+    /// <seealso>SecurityQuestionsServiceTests.SetupAsync_Refuses_And_Keeps_The_Existing_Question_When_The_Current_Password_Is_Wrong</seealso>
+    /// <seealso>SecurityQuestionsServiceTests.SetupAsync_Refuses_A_Missing_Current_Password</seealso>
+    public async Task<bool> SetupAsync(string currentPassword, string question, string answer)
     {
         AdminCredential cred = await ResolveCurrentUserAsync()
             ?? throw new NotFoundException("No account matches the signed-in session.") { Code = ErrorCodes.AuthNoAccountForSession };
+        if (string.IsNullOrEmpty(currentPassword) || !CredentialHelper.VerifyPassword(cred, currentPassword, _passwordService))
+            return false;
         (cred.PvqAnswerHash, cred.PvqAnswerSalt) = _passwordService.Hash(NormaliseAnswer(answer));
         cred.PvqQuestion = question.Trim();
         await _credentialRepository.SaveChangesAsync();
@@ -56,6 +61,7 @@ public sealed class SecurityQuestionsService(
         // question alone narrows a guess at the answer.
         _audit.Describe(AuditActions.AuthPvqSetup, AuditTargets.User, AuditTargets.IdOf(cred.Id),
             UserFields.PersonLabel(cred.DisplayName, cred.Email), summary: "Configured a security question");
+        return true;
     }
 
     public async Task<PvqVerifyOutcome> VerifyAsync(string email, string answer)
