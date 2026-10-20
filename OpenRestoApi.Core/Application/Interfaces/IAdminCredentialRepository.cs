@@ -22,10 +22,22 @@ public interface IAdminCredentialRepository
     Task<List<AdminCredential>> GetAllAsync();
 
     /// <summary>
-    /// Count of active users holding <paramref name="role"/>. Backs the last-Owner guard, which
-    /// must not be satisfiable by a deactivated row.
+    /// Gives <paramref name="user"/> the role unless that would leave the instance without an
+    /// active Owner; false means refused and nothing changed. The check and the write are one
+    /// statement: counting first and writing after lets two Owners demoting each other both pass.
     /// </summary>
-    Task<int> CountActiveByRoleAsync(string role);
+    /// <seealso>AdminCredentialConcurrencyTests.Two_Owners_Demoting_Each_Other_Concurrently_Leave_One_Active_Owner</seealso>
+    /// <seealso>AdminCredentialConcurrencyTests.Demotions_Succeed_Concurrently_While_Another_Active_Owner_Remains</seealso>
+    Task<bool> TrySetRoleAsync(AdminCredential user, string role);
+
+    /// <summary>
+    /// Deactivates <paramref name="user"/> and ends its sessions, under the same one-statement
+    /// last-Owner rule as <see cref="TrySetRoleAsync"/>.
+    /// </summary>
+    /// <seealso>AdminCredentialConcurrencyTests.Two_Owners_Deactivating_Each_Other_Concurrently_Leave_One_Active_Owner</seealso>
+    /// <seealso>AdminCredentialConcurrencyTests.Deactivations_Succeed_Concurrently_While_Another_Active_Owner_Remains</seealso>
+    /// <seealso>AdminCredentialConcurrencyTests.Three_Owners_Deactivated_Concurrently_Keep_Exactly_One</seealso>
+    Task<bool> TryDeactivateAsync(AdminCredential user);
 
     /// <summary>Adds and saves a new credential, returning the persisted entity.</summary>
     Task<AdminCredential> AddAsync(AdminCredential credential);
