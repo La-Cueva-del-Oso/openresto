@@ -1,8 +1,8 @@
-using System.Net;
 using System.Net.Sockets;
 using CustomAccessibility.Attributes;
 using OpenRestoApi.Core.Application.Interfaces;
 using OpenRestoApi.Core.Application.Utilities;
+using OpenRestoApi.Infrastructure.Notifications;
 
 namespace OpenRestoApi.Infrastructure.NativeClients;
 
@@ -13,29 +13,27 @@ namespace OpenRestoApi.Infrastructure.NativeClients;
 /// on the request — because a probe that fetched a caller-supplied URL would be an SSRF
 /// primitive reachable with a read-only API key. That address is itself writable by anyone
 /// with <c>brand:write</c>, so the URL is composed by <c>NativeAppChecks.TryBuildWellKnownUrl</c>
-/// rather than concatenated, the host is resolved here and refused when it lands on a private
-/// network, redirects are never followed, and the body is capped: what comes back is a status,
-/// a content type and a JSON shape, and it never came from inside the deployment.
+/// rather than concatenated, the connection goes through <see cref="PublicOnlyConnector"/> (the
+/// one lookup, the one check, the socket opened to what was checked — a lookup of the probe's own
+/// would leave the client a second one to be rebound on), redirects are never followed, and the
+/// body is capped: what comes back is a status, a content type and a JSON shape, and it never
+/// came from inside the deployment.
 /// </summary>
 /// <seealso>WellKnownProbeTests.FetchAsync_RefusesAHostThatResolvesToAPrivateAddress</seealso>
 /// <seealso>WellKnownProbeTests.FetchAsync_ReportsTheStatusAndContentTypeOfAPublicHost</seealso>
+/// <seealso>WellKnownProbeTests.TheRegisteredClientRefusesALoopbackAddress</seealso>
 [OnlyAccessibleBy("OpenRestoApi.Extensions.ServiceCollectionExtensions")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Infrastructure.WellKnownProbeTests")]
 [ExternalAccessAllowed]
-internal sealed class WellKnownProbe(
-    IHttpClientFactory httpClientFactory,
-    Func<string, CancellationToken, Task<IPAddress[]>>? resolve = null) : IWellKnownProbe
+internal sealed class WellKnownProbe(IHttpClientFactory httpClientFactory) : IWellKnownProbe
 {
-    /// <summary>Named client, configured with the timeout, redirect and size limits in <c>ServiceCollectionExtensions</c>.</summary>
+    /// <summary>Named client, configured with the timeout and size limits in <c>ServiceCollectionExtensions</c>.</summary>
     public const string HttpClientName = "well-known";
 
     /// <summary>The largest body worth reading; both verification files are a few hundred bytes.</summary>
     public const long MaxBodyBytes = 64 * 1024;
 
-    public const string PrivateAddressError = "the address resolves to a private network";
-
-    private readonly Func<string, CancellationToken, Task<IPAddress[]>> _resolve =
-        resolve ?? Dns.GetHostAddressesAsync;
+    public const string PrivateAddressError = PublicOnlyConnector.PrivateAddressError;
 
     public async Task<WellKnownProbeResult> FetchAsync(Uri url, CancellationToken cancellationToken = default)
     {
@@ -46,15 +44,6 @@ internal sealed class WellKnownProbe(
                 return WellKnownProbeResult.Unreachable(PrivateAddressError);
             }
 
-            if (url.HostNameType == UriHostNameType.Dns)
-            {
-                IPAddress[] addresses = await _resolve(url.Host, cancellationToken);
-                if (addresses.Length == 0 || addresses.Any(address => !PublicAddress.IsPublic(address)))
-                {
-                    return WellKnownProbeResult.Unreachable(PrivateAddressError);
-                }
-            }
-
             using HttpClient client = httpClientFactory.CreateClient(HttpClientName);
             using HttpResponseMessage response = await client.GetAsync(url, cancellationToken);
             string body = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -63,6 +52,10 @@ internal sealed class WellKnownProbe(
                 response.Content.Headers.ContentType?.MediaType,
                 body,
                 Error: null);
+        }
+        catch (HttpRequestException ex) when (ex.Message.StartsWith(PrivateAddressError, StringComparison.Ordinal))
+        {
+            return WellKnownProbeResult.Unreachable(PrivateAddressError);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or UriFormatException or SocketException)
         {
