@@ -29,6 +29,7 @@ How each feature behaves, its API fields and its error codes are in
 - Text that comes from the API can no longer drive the terminal of someone using the command-line client: control and escape characters in tables, records, errors and `--json` output are shown as visible `\xNN` escapes. The server also refuses control characters in a booking's name and special requests (`booking.name_invalid`, `booking.special_requests_invalid`).
 - Two places still printed API text raw and are now neutralized the same way: the command-line client's confirmation prompt (a location's name in `locations delete`) and `npm run native:init` (the brand name it prints and any error that echoes a response). A Manager could otherwise have put escape sequences in a location or brand name to drive the terminal of whoever ran them.
 - `scripts/demo_data.py media` no longer copies the `--media-dir` path into the SQL it generates. A line break in that path ended the SQL comment it was written into, so the rest of the path ran as statements when the output was applied.
+- A backend image built from a clone no longer includes `OpenRestoApi/appsettings.Local.json`. The file is git-ignored but the build context sent it, and the backend loads it in every environment, so credentials kept there could end up inside the image.
 
 ### Changed
 
