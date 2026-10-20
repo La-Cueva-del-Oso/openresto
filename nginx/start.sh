@@ -27,7 +27,9 @@ echo "  Proxying /api/* -> http://$BACKEND_HOST:$BACKEND_PORT"
 echo "  Proxying /*      -> http://$FRONTEND_HOST:$FRONTEND_PORT"
 
 # 3. Substitute env vars in template
-envsubst '${PORT} ${BACKEND_HOST} ${BACKEND_PORT} ${FRONTEND_HOST} ${FRONTEND_PORT} ${RESOLVER}' \
+REAL_IP_CONFIG=$(sh /real-ip.sh)
+export REAL_IP_CONFIG
+envsubst '${PORT} ${BACKEND_HOST} ${BACKEND_PORT} ${FRONTEND_HOST} ${FRONTEND_PORT} ${RESOLVER} ${REAL_IP_CONFIG}' \
   < /tmp/default.conf.template \
   > /etc/nginx/conf.d/default.conf
 

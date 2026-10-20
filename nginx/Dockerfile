@@ -10,6 +10,7 @@ RUN rm /etc/nginx/conf.d/default.conf
 COPY default.conf.template /tmp/default.conf.template
 COPY security-headers.conf /etc/nginx/conf.d/security-headers.conf
 COPY start.sh /start.sh
+COPY real-ip.sh /real-ip.sh
 RUN chmod +x /start.sh
 
 # These are defaults for local development
