@@ -23,7 +23,7 @@ const missing = !probe("bash", ["-c", "true"])
  * A `python3` stand-in records its argv, because the hash is computed there and the password
  * must not reach it (or anything else) as an argument.
  */
-function sandbox() {
+function sandbox({ pushTable = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "reset-admin-"));
   const db = join(dir, "openresto.db").replaceAll("\\", "/");
   const log = join(dir, "argv.log").replaceAll("\\", "/");
@@ -54,6 +54,9 @@ function sandbox() {
     INSERT INTO AdminCredentials VALUES
       (1,'a@b.com','old','old','Manager',0,4,'q','h','s',3,'2999-01-01','t','2999-01-01'),
       (2,'other@b.com','keep','keep','Manager',1,7,'q','h','s',2,'2999-01-01',NULL,NULL);`);
+  if (pushTable)
+    sql(`CREATE TABLE AdminPushSubscriptions (Id INTEGER PRIMARY KEY, UserId INTEGER, Endpoint TEXT);
+      INSERT INTO AdminPushSubscriptions VALUES (1,1,'https://push/intruder'),(2,1,'https://push/second'),(3,2,'https://push/other');`);
 
   const run = (args, input = "") =>
     spawnSync("bash", [script, ...args], {
@@ -71,7 +74,8 @@ function sandbox() {
       'session',SessionVersion,'pvq',PvqQuestion,'failed',PvqFailedAttempts,'locked',PvqLockedUntil,
       'token',ResetToken) FROM AdminCredentials WHERE Id=${id};`).stdout.trim();
   const argv = () => (existsSync(log) ? readFileSync(log, "utf8") : "");
-  return { run, row: (id) => JSON.parse(row(id)), argv };
+  const pushOwners = () => sql("SELECT group_concat(UserId) FROM AdminPushSubscriptions ORDER BY Id;").stdout.trim();
+  return { run, row: (id) => JSON.parse(row(id)), argv, pushOwners };
 }
 
 const pbkdf2 = (password, saltB64) =>
@@ -100,6 +104,22 @@ describe("scripts/reset-admin.sh", { skip: missing }, () => {
       ["keep", 2, 7],
       "other accounts are left alone",
     );
+  });
+
+  it("drops the recovered account's push subscriptions and keeps other accounts'", () => {
+    const box = sandbox();
+    assert.equal(box.pushOwners(), "1,1,2");
+    const { status, stderr } = box.run(["--email", "a@b.com", "--password-stdin"], `${fresh}\n`);
+    assert.equal(status, 0, stderr);
+    assert.equal(box.pushOwners(), "2", "a browser registered on the recovered account must stop receiving bookings");
+  });
+
+  it("rolls the whole reset back when the subscriptions cannot be dropped", () => {
+    const box = sandbox({ pushTable: false });
+    const { status } = box.run(["--email", "a@b.com", "--password-stdin"], `${fresh}\n`);
+    assert.notEqual(status, 0, "a recovery that left the push rows in place reported success");
+    assert.equal(box.row(1).hash, "old", "the credential change was committed without the push drop");
+    assert.equal(box.row(1).session, 4);
   });
 
   it("never lets the password reach a command line", () => {
