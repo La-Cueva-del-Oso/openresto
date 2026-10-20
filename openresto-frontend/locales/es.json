@@ -348,16 +348,16 @@
       "password_not_configured": "Admin:Password debe configurarse antes del primer uso. Defínelo mediante la variable de entorno ADMIN_PASSWORD."
     },
     "api_key": {
-      "expires_at_in_past": "La fecha de vencimiento debe ser posterior a hoy. Elija otra fecha.",
-      "expires_at_with_never_expires": "Una clave que no vence no puede tener fecha de vencimiento. Quite una de las dos opciones.",
-      "name_required": "Escriba un nombre para la clave de API.",
+      "expires_at_in_past": "La fecha de vencimiento debe ser posterior a hoy. Elige otra fecha.",
+      "expires_at_with_never_expires": "Una clave que no vence no puede tener fecha de vencimiento. Quita una de las dos opciones.",
+      "name_required": "Escribe un nombre para la clave de API.",
       "name_too_long": "El nombre de la clave de API no puede superar los {{max}} caracteres.",
       "not_a_session": "Esta consulta solo funciona con una clave de API, no con una cuenta que haya iniciado sesión.",
-      "not_allowed": "Esta acción no está disponible con una clave de API. Inicie sesión con su cuenta para hacerla.",
-      "not_found": "No se encontró esa clave de API. Puede que ya se haya revocado. Actualice la lista e inténtelo de nuevo.",
-      "scope_invalid": "Uno de los permisos seleccionados no es válido. Revise la selección e inténtelo de nuevo.",
-      "scope_missing": "Esta clave de API no tiene permiso para hacer esto. Use una clave con el permiso necesario.",
-      "scopes_required": "Seleccione al menos un permiso."
+      "not_allowed": "Esta acción no está disponible con una clave de API. Inicia sesión con tu cuenta para hacerla.",
+      "not_found": "No se encontró esa clave de API. Puede que ya se haya revocado. Actualiza la lista e inténtalo de nuevo.",
+      "scope_invalid": "Uno de los permisos seleccionados no es válido. Revisa la selección e inténtalo de nuevo.",
+      "scope_missing": "Esta clave de API no tiene permiso para hacer esto. Usa una clave con el permiso necesario.",
+      "scopes_required": "Selecciona al menos un permiso."
     },
     "auth": {
       "email_already_in_use": "Esa dirección de correo electrónico ya está en uso.",
@@ -375,7 +375,7 @@
       "cancel_email_required": "Se necesita un correo electrónico para cancelar una reserva.",
       "email_fields_required": "El asunto y el mensaje son obligatorios.",
       "email_invalid": "Esa dirección de correo no parece correcta.",
-      "email_send_failed": "No se pudo enviar el correo. Revise la configuración del correo e inténtelo de nuevo.",
+      "email_send_failed": "No se pudo enviar el correo. Revisa la configuración del correo e inténtalo de nuevo.",
       "guest_filter_forbidden": "Esta clave de API no puede buscar por correo electrónico porque no tiene permiso para ver los datos de los clientes.",
       "invalid_table_for_restaurant": "Mesa no válida para este restaurante.",
       "lookup_email_required": "Se necesita un correo electrónico para buscar una reserva.",
@@ -419,9 +419,9 @@
       "highlights_subheading_too_long": "El subtítulo de los destacados no puede superar los 60 caracteres.",
       "minimum_app_version_invalid": "La versión mínima de la aplicación debe ser tres números separados por puntos, por ejemplo 1.9.0.",
       "primary_color_invalid": "Código hexadecimal de color principal no válido.",
-      "privacy_policy_url_invalid": "La dirección de la política de privacidad debe comenzar con http:// o https://. Revísela e inténtelo de nuevo.",
+      "privacy_policy_url_invalid": "La dirección de la política de privacidad debe comenzar con http:// o https://. Revísala e inténtalo de nuevo.",
       "subtitle_too_long": "El subtítulo no puede superar los 160 caracteres.",
-      "website_url_invalid": "La dirección del sitio web debe comenzar con http:// o https://. Revísela e inténtelo de nuevo."
+      "website_url_invalid": "La dirección del sitio web debe comenzar con http:// o https://. Revísala e inténtalo de nuevo."
     },
     "contact": {
       "email_invalid": "La dirección de correo electrónico debe ser válida.",
@@ -429,12 +429,12 @@
       "phone_too_long": "El número de teléfono no puede superar los {{max}} caracteres."
     },
     "email": {
-      "auth_failed": "El servidor de correo rechazó el usuario o la contraseña. Revíselos e inténtelo de nuevo.",
-      "connection_failed": "No se pudo conectar con el servidor de correo. Revise el servidor y el puerto.",
+      "auth_failed": "El servidor de correo rechazó el usuario o la contraseña. Revísalos e inténtalo de nuevo.",
+      "connection_failed": "No se pudo conectar con el servidor de correo. Revisa el servidor y el puerto.",
       "not_configured": "El correo electrónico no está configurado.",
-      "password_required": "Para cambiar el servidor, el puerto, el usuario o el cifrado, vuelva a escribir la contraseña de correo.",
-      "recipient_rejected": "El servidor de correo no aceptó la dirección del destinatario. Revise que esté bien escrita.",
-      "send_failed": "No se pudo enviar el correo. Inténtelo de nuevo en unos minutos."
+      "password_required": "Para cambiar el servidor, el puerto, el usuario o el cifrado, vuelve a escribir la contraseña de correo.",
+      "recipient_rejected": "El servidor de correo no aceptó la dirección del destinatario. Revisa que esté bien escrita.",
+      "send_failed": "No se pudo enviar el correo. Inténtalo de nuevo en unos minutos."
     },
     "generic": "Ha ocurrido un error",
     "genericMessage": "Se ha producido un error inesperado. Inténtalo de nuevo.",
@@ -1779,7 +1779,7 @@
         "fromEmailLabel": "Correo del remitente",
         "footerHintVerified": "Conexión verificada · confirmaciones listas",
         "footerHintUnverified": "Pruebe la conexión antes de activar las confirmaciones",
-        "passwordRequiredNotice": "Para cambiar el servidor, el puerto, el usuario o el cifrado, vuelva a escribir la contraseña de correo.",
+        "passwordRequiredNotice": "Para cambiar el servidor, el puerto, el usuario o el cifrado, vuelve a escribir la contraseña de correo.",
         "saveButton": "Guardar configuración SMTP"
       },
       "users": {

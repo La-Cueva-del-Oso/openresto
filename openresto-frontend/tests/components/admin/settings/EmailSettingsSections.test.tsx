@@ -189,7 +189,7 @@ describe("EmailFailuresList", () => {
       ["en", "The mail server rejected the username or password. Check them and try again."],
       [
         "es",
-        "El servidor de correo rechazó el usuario o la contraseña. Revíselos e inténtelo de nuevo.",
+        "El servidor de correo rechazó el usuario o la contraseña. Revísalos e inténtalo de nuevo.",
       ],
       [
         "fr",
