@@ -13,10 +13,16 @@ How each feature behaves, its API fields and its error codes are in
 ### Security
 
 - Admin push notifications now belong to the account that enabled them. Before, a subscription had no owner: a deactivated admin kept receiving every booking, and a browser stayed subscribed after its user's password was changed or reset. Bookings are now pushed only to active accounts, a password change or reset removes that account's subscriptions (signing out does not), re-enabling notifications in a browser another admin had used takes it over, and only the account that owns a subscription can remove it. The public demo's reset also clears subscriptions, so a visitor's browser no longer keeps receiving the demo's bookings.
+- A guest's booking request can no longer set another booking's id or its cancellation flags, and a request that fails no longer leaves a table held for five minutes. Bookings made over the API are also refused outside opening hours and on closed days, as holds already were.
+- Changing the mail server, port, username or encryption in the email settings now requires typing the mail password again. Before, an account with access to those settings could point the saved password at a server of their own.
+- Setting the security question now asks for the current password, and a password reset by an Owner clears the account's security question. Changing a password also invalidates a pending reset link.
+- Deactivating an account now ends its sessions, so reactivating it no longer brings old logins back. `scripts/reset-admin.sh` ends the account's sessions too.
+- An API key without permission to see guest details can no longer search bookings by email, and its text search no longer matches guest names or emails. Before, those searches could be used to work out a hidden address.
+- Behind a TLS proxy, the stack can now recover each visitor's real address when you list the proxy in `OPENRESTO_TRUSTED_PROXIES` (see the HTTPS guide). Before, every visitor shared one rate limit, so one person could lock everyone else out of signing in.
 
 ### Changed
 
-- **Action needed after upgrading:** existing admin push subscriptions have no owner to attribute them to and are discarded by the upgrade. Each admin must turn notifications off and on again in Settings, in each browser, to receive push notifications again. Until they do, the notifications page still lists new bookings, but nothing is pushed to the device.
+- Existing admin push subscriptions have no owner to attribute them to and are discarded by the upgrade. A browser that already had notifications on registers itself again the next time an admin opens the admin area, so most installs need no action; if notifications stay silent, turn them off and on again in Settings. Until then, the notifications page still lists new bookings, but nothing is pushed to the device.
 
 ## [2.4.1] - 2026-10-14
 
