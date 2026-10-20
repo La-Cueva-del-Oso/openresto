@@ -66,13 +66,19 @@ public class EmailStatusController(
     {
         IReadOnlyList<EmailFailure> failures = await _emailSettings.GetFailuresAsync();
         bool redact = BookingGuestVisibility.IsRedactedFor(_currentUser);
-        var response = failures.Select(f => new EmailFailureResponse
+        var response = failures.Select(f =>
         {
-            Id = f.Id,
-            BookingRef = f.BookingRef,
-            RecipientEmail = redact ? null : f.RecipientEmail,
-            ErrorMessage = f.ErrorMessage,
-            AttemptedAt = f.AttemptedAt,
+            // Rows from before reasons were codes hold raw exception text; Describe flattens those.
+            (string code, string message) = EmailFailureReason.Describe(f.ErrorMessage);
+            return new EmailFailureResponse
+            {
+                Id = f.Id,
+                BookingRef = f.BookingRef,
+                RecipientEmail = redact ? null : f.RecipientEmail,
+                Code = code,
+                ErrorMessage = message,
+                AttemptedAt = f.AttemptedAt,
+            };
         });
         return Ok(response);
     }
@@ -101,6 +107,7 @@ public class EmailFailureResponse
     public int Id { get; set; }
     public string? BookingRef { get; set; }
     public string? RecipientEmail { get; set; }
+    public string Code { get; set; } = string.Empty;
     public string ErrorMessage { get; set; } = string.Empty;
     public DateTime AttemptedAt { get; set; }
 }

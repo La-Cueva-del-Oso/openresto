@@ -185,6 +185,9 @@ public static class ErrorCodes
     // ── Infrastructure ───────────────────────────────────────────────────────
     public const string EmailNotConfigured = "email.not_configured";
     public const string EmailConnectionFailed = "email.connection_failed";
+    public const string EmailAuthFailed = "email.auth_failed";
+    public const string EmailRecipientRejected = "email.recipient_rejected";
+    public const string EmailSendFailed = "email.send_failed";
     public const string EmailPasswordRequired = "email.password_required";
     public const string AdminPasswordNotConfigured = "admin.password_not_configured";
     public const string NotificationPushEndpointInvalid = "notification.push_endpoint_invalid";

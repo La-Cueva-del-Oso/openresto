@@ -5,6 +5,7 @@ using MimeKit;
 using Moq;
 using OpenRestoApi.Core.Application.Exceptions;
 using OpenRestoApi.Core.Application.Interfaces;
+using OpenRestoApi.Core.Application.Utilities;
 using OpenRestoApi.Core.Domain;
 using OpenRestoApi.Infrastructure.Email;
 using OpenRestoApi.Infrastructure.Persistence;
@@ -150,5 +151,79 @@ public class EmailServiceTests
             ((MailboxAddress)m.From[0]).Address == "user@test.com"),
             It.IsAny<System.Threading.CancellationToken>(),
             It.IsAny<ITransferProgress>()), Times.Once);
+    }
+
+    private const string Sensitive = "535 5.7.8 user bob@corp.example rejected by smtp.internal.example";
+
+    private static EmailService ServiceWithClient(string dbName, Mock<ISmtpClient> client)
+    {
+        AppDbContext db = TestDbFactory.Create(dbName);
+        db.Set<EmailSettings>().Add(new EmailSettings
+        {
+            Host = "smtp.internal.example",
+            Port = 587,
+            Username = "bob@corp.example",
+            EncryptedPassword = "encrypted",
+        });
+        db.SaveChanges();
+        var protector = new Mock<ICredentialProtector>();
+        protector.Setup(p => p.Decrypt("encrypted")).Returns("decrypted");
+        return new EmailService(db, protector.Object, () => client.Object);
+    }
+
+    /// <summary>
+    /// Whatever the SMTP stack throws becomes a category with a fixed message; its text rides only
+    /// as the inner exception, which the log keeps and no response or table does.
+    /// </summary>
+    /// <seealso>EmailServiceTests.SendEmailAsync_SendsMessage_WhenSettingsExist</seealso>
+    [Theory]
+    [MemberData(nameof(SmtpFailures))]
+    public async Task SendEmailAsync_WrapsAnSmtpFailure_InAFixedCategory(Exception thrown, string expectedCode)
+    {
+        var client = new Mock<ISmtpClient>();
+        client.Setup(c => c.ConnectAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<SecureSocketOptions>(), default))
+            .ThrowsAsync(thrown);
+        EmailService service = ServiceWithClient(nameof(SendEmailAsync_WrapsAnSmtpFailure_InAFixedCategory) + expectedCode, client);
+
+        InfrastructureException ex = await Assert.ThrowsAsync<InfrastructureException>(
+            () => service.SendEmailAsync("to@test.com", "S", "B"));
+
+        Assert.Equal(expectedCode, ex.Code);
+        Assert.DoesNotContain("smtp.internal.example", ex.Message);
+        Assert.DoesNotContain("bob@corp.example", ex.Message);
+        Assert.Same(thrown, ex.InnerException);
+    }
+
+    public static TheoryData<Exception, string> SmtpFailures() => new()
+    {
+        { new AuthenticationException(Sensitive), ErrorCodes.EmailAuthFailed },
+        { new System.Net.Sockets.SocketException(), ErrorCodes.EmailConnectionFailed },
+        { new SmtpCommandException(SmtpErrorCode.RecipientNotAccepted, SmtpStatusCode.MailboxUnavailable, Sensitive), ErrorCodes.EmailRecipientRejected },
+        { new InvalidOperationException(Sensitive), ErrorCodes.EmailSendFailed },
+    };
+
+    [Fact]
+    public async Task SendEmailAsync_RejectsAnUnparseableRecipient_AsARecipientFailure()
+    {
+        EmailService service = ServiceWithClient(nameof(SendEmailAsync_RejectsAnUnparseableRecipient_AsARecipientFailure), new Mock<ISmtpClient>());
+
+        InfrastructureException ex = await Assert.ThrowsAsync<InfrastructureException>(
+            () => service.SendEmailAsync("not an address", "S", "B"));
+
+        Assert.Equal(ErrorCodes.EmailRecipientRejected, ex.Code);
+    }
+
+    [Fact]
+    public async Task TestConnectionAsync_WrapsAnAuthenticationFailure_WithoutItsText()
+    {
+        var client = new Mock<ISmtpClient>();
+        client.Setup(c => c.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>(), default))
+            .ThrowsAsync(new AuthenticationException(Sensitive));
+        EmailService service = ServiceWithClient(nameof(TestConnectionAsync_WrapsAnAuthenticationFailure_WithoutItsText), client);
+
+        InfrastructureException ex = await Assert.ThrowsAsync<InfrastructureException>(service.TestConnectionAsync);
+
+        Assert.Equal(ErrorCodes.EmailAuthFailed, ex.Code);
+        Assert.DoesNotContain("corp.example", ex.Message);
     }
 }

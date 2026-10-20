@@ -218,8 +218,9 @@ public sealed class BookingNotificationService(
             }
             catch (WebPushException ex)
             {
-                lastError = $"HTTP {(int)ex.StatusCode}: {ex.Message}";
-                _log.LogError("[Push] Failed sub={SubId}: {Error}", sub.Id, lastError);
+                // PushError is listed by the notifications API: keep the status, log the text.
+                lastError = $"HTTP {(int)ex.StatusCode}";
+                _log.LogError(ex, "[Push] Failed sub={SubId}: {Error}", sub.Id, lastError);
             }
             catch (Exception ex)
             {
@@ -227,7 +228,7 @@ public sealed class BookingNotificationService(
                 // WebPush throws outside WebPushException — InvalidEncryptionDetailsException
                 // for key material the browser's endpoint will not accept, for one — and an
                 // escape here aborts the loop and leaves PushSentAt/PushError unwritten.
-                lastError = $"{ex.GetType().Name}: {ex.Message}";
+                lastError = ex.GetType().Name;
                 _log.LogError(ex, "[Push] Failed sub={SubId}: {Error}", sub.Id, lastError);
             }
         }

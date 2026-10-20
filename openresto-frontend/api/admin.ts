@@ -290,7 +290,7 @@ export async function sendBookingEmail(
   try {
     const res = await post(`/admin/bookings/${bookingId}/email`, { subject, body });
     const data = await res.json();
-    return { ok: res.ok, message: data.message };
+    return { ok: res.ok, message: res.ok ? data.message : apiErrorMessage(data, data.message) };
   } catch {
     return { ok: false, message: "Network error." };
   }
@@ -506,6 +506,8 @@ export interface EmailFailureDto {
   id: number;
   bookingRef: string | null;
   recipientEmail: string;
+  /** Stable reason code (`email.auth_failed`, ...); `errorMessage` is its fixed English sentence. */
+  code?: string;
   errorMessage: string;
   attemptedAt: string;
 }
@@ -599,7 +601,7 @@ export async function testEmailConnection(): Promise<{ ok: boolean; message: str
   try {
     const res = await post("/admin/email-settings/test");
     const data = await res.json();
-    return { ok: res.ok, message: data.message };
+    return { ok: res.ok, message: res.ok ? data.message : apiErrorMessage(data, data.message) };
   } catch {
     return { ok: false, message: "Network error." };
   }
