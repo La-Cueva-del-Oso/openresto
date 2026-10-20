@@ -72,7 +72,7 @@ namespace OpenRestoApi.Controllers
             }
 
             BookingDto? booking = await _bookingService.GetBookingByRefAsync(bookingRef);
-            if (booking == null || !string.Equals(booking.CustomerEmail, email.Trim(), StringComparison.OrdinalIgnoreCase))
+            if (booking == null || !string.Equals(booking.CustomerEmail?.Trim(), email.Trim(), StringComparison.OrdinalIgnoreCase))
             {
                 return NotFound(new MessageResponse { Message = "No booking found matching that reference and email.", Code = ErrorCodes.BookingLookupNotFound });
             }

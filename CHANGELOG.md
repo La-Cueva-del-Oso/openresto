@@ -39,6 +39,7 @@ How each feature behaves, its API fields and its error codes are in
 - Two simultaneous bookings for the same table and time could both succeed, whether they came from the website, the admin, the waitlist or a booking being moved. Creating, moving and seating now go through one lock, so the second request gets the usual "table taken" answer. The cover limit per slot is checked inside the same lock.
 - Restoring a cancelled booking now refuses when its table was booked in the meantime, instead of seating two parties at once.
 - 22 error messages (API keys, brand settings, booking reminders, wallet passes, push notifications) were shown in English whatever the language; they are now translated into English, Spanish, French and German, and a test fails when a new error code ships without its translations. Spanish addresses everyone as _tú_.
+- A booking made with stray spaces around the email (`" guest@example.com "`) could not be found afterwards: the lookup answered "not found" for the right reference. The address is now stored trimmed, and the lookup also finds bookings already saved with spaces.
 
 ## [2.4.1] - 2026-10-14
 

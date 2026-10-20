@@ -41,6 +41,7 @@ public class BookingService(
             throw new ValidationException("That email address doesn't look right.") { Code = ErrorCodes.BookingEmailInvalid };
         }
 
+        bookingDto.CustomerEmail = bookingDto.CustomerEmail!.Trim();
         GuestText.RejectControlCharacters(bookingDto.CustomerName, bookingDto.SpecialRequests);
 
         Restaurant restaurant = await _restaurantRepository.GetByIdAsync(bookingDto.RestaurantId)
