@@ -27,6 +27,7 @@ How each feature behaves, its API fields and its error codes are in
 - Email errors no longer expose the mail server's own error text. The connection test and the booking email endpoints return a stable code (`email.auth_failed`, `email.connection_failed`, `email.recipient_rejected`, `email.send_failed`) shown to the admin as a plain sentence, and the failures list keeps only that code.
 - The command-line client refuses plain `http://` server addresses unless they point at the same machine, or `OPENRESTO_ALLOW_HTTP=1` is set, so an API key never travels unencrypted by accident.
 - Text that comes from the API can no longer drive the terminal of someone using the command-line client: control and escape characters in tables, records, errors and `--json` output are shown as visible `\xNN` escapes. The server also refuses control characters in a booking's name and special requests (`booking.name_invalid`, `booking.special_requests_invalid`).
+- Two places still printed API text raw and are now neutralized the same way: the command-line client's confirmation prompt (a location's name in `locations delete`) and `npm run native:init` (the brand name it prints and any error that echoes a response). A Manager could otherwise have put escape sequences in a location or brand name to drive the terminal of whoever ran them.
 
 ### Changed
 
