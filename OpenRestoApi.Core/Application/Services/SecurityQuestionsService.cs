@@ -53,9 +53,9 @@ public sealed class SecurityQuestionsService(
             ?? throw new NotFoundException("No account matches the signed-in session.") { Code = ErrorCodes.AuthNoAccountForSession };
         if (string.IsNullOrEmpty(currentPassword) || !CredentialHelper.VerifyPassword(cred, currentPassword, _passwordService))
             return false;
-        (cred.PvqAnswerHash, cred.PvqAnswerSalt) = _passwordService.Hash(NormaliseAnswer(answer));
-        cred.PvqQuestion = question.Trim();
-        await _credentialRepository.SaveChangesAsync();
+        (string answerHash, string answerSalt) = _passwordService.Hash(NormaliseAnswer(answer));
+        if (!await _credentialRepository.TrySetSecurityQuestionAsync(cred, question.Trim(), answerHash, answerSalt))
+            return false;
 
         // Neither the question nor the answer is recorded: together they are a credential, and the
         // question alone narrows a guess at the answer.
@@ -80,7 +80,8 @@ public sealed class SecurityQuestionsService(
             return new PvqVerifyOutcome(PvqVerifyStatus.WrongAnswer);
 
         string token = Guid.NewGuid().ToString("N");
-        await _credentialRepository.CompletePvqVerificationAsync(cred.Id, token, DateTime.UtcNow.AddMinutes(15));
+        if (!await _credentialRepository.TryCompletePvqVerificationAsync(cred, token, DateTime.UtcNow.AddMinutes(15)))
+            return new PvqVerifyOutcome(PvqVerifyStatus.WrongAnswer);
         return new PvqVerifyOutcome(PvqVerifyStatus.Success, token);
     }
 

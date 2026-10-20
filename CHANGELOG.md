@@ -27,6 +27,7 @@ How each feature behaves, its API fields and its error codes are in
 - The command-line client refuses plain `http://` server addresses unless they point at the same machine, or `OPENRESTO_ALLOW_HTTP=1` is set, so an API key never travels unencrypted by accident.
 - Text that comes from the API can no longer drive the terminal of someone using the command-line client: control and escape characters in tables, records, errors and `--json` output are shown as visible `\xNN` escapes. The server also refuses control characters in a booking's name and special requests (`booking.name_invalid`, `booking.special_requests_invalid`).
 - Two admins saving the email settings at the same moment can no longer leave one's mail server beside the other's password. Before, an account that changed the server while an Owner was entering a new password could end up with that password pointed at its own server.
+- A security-question answer being checked while an Owner resets that account's password, or while the account's question is changed, no longer earns a reset link once the reset has landed. Setting up a security question likewise fails if the account's password is reset or its sessions end while the request is in flight.
 
 ### Changed
 

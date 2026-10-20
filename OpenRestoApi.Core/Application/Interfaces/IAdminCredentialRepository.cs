@@ -53,8 +53,24 @@ public interface IAdminCredentialRepository
 
     /// <summary>
     /// A right answer: clears the attempt count and any lock, and stores the reset token it earns.
+    /// False, and nothing stored, unless the account is still active, at the
+    /// <see cref="AdminCredential.SessionVersion"/> and with the answer <paramref name="verified"/>
+    /// was read with: an Owner's reset landing while the answer was being checked must not be
+    /// followed by a token minted from the answer it cleared.
     /// </summary>
-    Task CompletePvqVerificationAsync(int id, string resetToken, DateTime resetTokenExpiryUtc);
+    /// <seealso>AdminCredentialConcurrencyTests.A_Security_Answer_Checked_Before_An_Owner_Reset_Earns_No_Reset_Token</seealso>
+    /// <seealso>AdminCredentialConcurrencyTests.A_Security_Answer_Checked_Before_The_Question_Changed_Earns_No_Reset_Token</seealso>
+    /// <seealso>SecurityQuestionsServiceTests.VerifyAsync_Returns_Success_And_Mints_Reset_Token_On_Correct_Answer</seealso>
+    Task<bool> TryCompletePvqVerificationAsync(AdminCredential verified, string resetToken, DateTime resetTokenExpiryUtc);
+
+    /// <summary>
+    /// Stores the security question on <paramref name="credential"/> unless its sessions were
+    /// revoked (a password change or reset, a deactivation, a sign-out) since it was read; false
+    /// means refused and nothing changed.
+    /// </summary>
+    /// <seealso>AdminCredentialConcurrencyTests.A_Security_Question_Set_Up_While_An_Owner_Resets_The_Password_Is_Not_Stored</seealso>
+    /// <seealso>SecurityQuestionsServiceTests.SetupAsync_Saves_The_Question_When_The_Current_Password_Is_Right</seealso>
+    Task<bool> TrySetSecurityQuestionAsync(AdminCredential credential, string question, string answerHash, string answerSalt);
 
     /// <summary>
     /// Signs the account out everywhere and withdraws any pending self-service reset token: a
