@@ -277,7 +277,7 @@ describe("EmailSettingsCard", () => {
       fireEvent.press(screen.getByText("Save SMTP settings"));
     });
     await waitFor(() => {
-      expect(screen.getByText("Failed to save.")).toBeTruthy();
+      expect(screen.getByText("Save failed")).toBeTruthy();
     });
   });
 

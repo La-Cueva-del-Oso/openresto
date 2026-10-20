@@ -347,6 +347,18 @@
     "admin": {
       "password_not_configured": "Admin:Password doit être configuré avant la première utilisation. Définissez-le via la variable d'environnement ADMIN_PASSWORD."
     },
+    "api_key": {
+      "expires_at_in_past": "La date d'expiration doit être dans le futur. Choisissez une date plus tardive.",
+      "expires_at_with_never_expires": "Une clé qui n'expire jamais ne peut pas avoir de date d'expiration. Retirez l'une des deux options.",
+      "name_required": "Saisissez un nom pour la clé d'API.",
+      "name_too_long": "Le nom de la clé d'API ne peut pas dépasser {{max}} caractères.",
+      "not_a_session": "Cette requête ne fonctionne qu'avec une clé d'API, pas avec un compte connecté.",
+      "not_allowed": "Cette action n'est pas disponible avec une clé d'API. Connectez-vous à votre compte pour l'effectuer.",
+      "not_found": "Cette clé d'API est introuvable. Elle a peut-être déjà été révoquée. Actualisez la liste puis réessayez.",
+      "scope_invalid": "Une des autorisations sélectionnées n'est pas valide. Vérifiez la sélection puis réessayez.",
+      "scope_missing": "Cette clé d'API n'a pas l'autorisation d'effectuer cette action. Utilisez une clé disposant de la bonne autorisation.",
+      "scopes_required": "Sélectionnez au moins une autorisation."
+    },
     "auth": {
       "email_already_in_use": "Cette adresse e-mail est déjà utilisée.",
       "email_unchanged": "La nouvelle adresse e-mail doit être différente de l'actuelle.",
@@ -364,6 +376,7 @@
       "email_fields_required": "L'objet et le message sont obligatoires.",
       "email_invalid": "Cette adresse e-mail ne semble pas valide.",
       "email_send_failed": "L'e-mail n'a pas pu être envoyé. Vérifiez les paramètres de messagerie et réessayez.",
+      "guest_filter_forbidden": "Cette clé d'API ne peut pas rechercher par e-mail car elle n'a pas le droit de voir les coordonnées des clients.",
       "invalid_table_for_restaurant": "Table invalide pour ce restaurant.",
       "lookup_email_required": "Une adresse e-mail est requise pour retrouver une réservation.",
       "lookup_not_found": "Aucune réservation ne correspond à cette référence et à cette adresse e-mail.",
@@ -376,6 +389,11 @@
       "past_date": "Impossible de créer une réservation dans le passé.",
       "paused": "Les réservations sont suspendues jusqu'à {{until}}. Veuillez choisir un horaire plus tardif.",
       "paused_indefinitely": "Les réservations pour ce restaurant sont actuellement suspendues. Veuillez réessayer plus tard.",
+      "reminder_cancelled": "Cette réservation est annulée : les rappels ne peuvent pas être activés.",
+      "reminder_channel_invalid": "Cet appareil ne peut pas recevoir de rappels de ce site.",
+      "reminder_endpoint_invalid": "Cet appareil ne peut pas recevoir de rappels de ce site.",
+      "reminder_keys_required": "Nous n'avons pas pu activer les rappels sur cet appareil. Réactivez-les puis réessayez.",
+      "reminder_too_late": "Cette réservation a déjà commencé : les rappels ne peuvent plus être activés.",
       "section_mismatch": "Cette salle n'appartient pas à ce restaurant.",
       "special_requests_invalid": "Les demandes spéciales ne peuvent pas contenir de caractères de contrôle. Veuillez les saisir à nouveau.",
       "status_cancelled": "Une réservation annulée ne peut pas changer de statut.",
@@ -387,7 +405,9 @@
       "table_not_in_section": "Table introuvable dans la salle indiquée.",
       "walk_in_only": "Cet établissement accepte uniquement les visites sans réservation et ne prend pas de réservations en ligne.",
       "walk_in_only_today": "Cet établissement accepte uniquement les visites sans réservation le jour sélectionné. Choisissez un autre jour ou présentez-vous sur place.",
-      "pacing_full": "Seulement {{remaining}} convives de plus peuvent arriver à {{time}}. Veuillez choisir un autre horaire."
+      "pacing_full": "Seulement {{remaining}} convives de plus peuvent arriver à {{time}}. Veuillez choisir un autre horaire.",
+      "wallet_cancelled": "Cette réservation est annulée : elle ne peut pas être ajoutée à votre Wallet.",
+      "wallet_not_configured": "Ce site ne propose pas encore de cartes Apple Wallet ni Google Wallet."
     },
     "brand": {
       "accent_color_invalid": "Code hexadécimal de couleur d'accentuation invalide.",
@@ -397,8 +417,11 @@
       "header_image_fit_invalid": "HeaderImageFit doit être l'une des valeurs suivantes : {{allowed}}.",
       "highlights_heading_too_long": "Le titre des points forts ne peut pas dépasser 60 caractères.",
       "highlights_subheading_too_long": "Le sous-titre des points forts ne peut pas dépasser 60 caractères.",
+      "minimum_app_version_invalid": "La version minimale de l'application doit comporter trois nombres séparés par des points, par exemple 1.9.0.",
       "primary_color_invalid": "Code hexadécimal de couleur principale invalide.",
-      "subtitle_too_long": "Le sous-titre ne peut pas dépasser 160 caractères."
+      "privacy_policy_url_invalid": "L'adresse de la politique de confidentialité doit commencer par http:// ou https://. Vérifiez-la puis réessayez.",
+      "subtitle_too_long": "Le sous-titre ne peut pas dépasser 160 caractères.",
+      "website_url_invalid": "L'adresse du site web doit commencer par http:// ou https://. Vérifiez-la puis réessayez."
     },
     "contact": {
       "email_invalid": "L'adresse e-mail doit être une adresse valide.",
@@ -437,6 +460,9 @@
       "menu_too_large": "Le fichier du menu doit faire moins de 10 Mo.",
       "unsupported_image_type": "Seules les images JPEG, PNG et WebP sont acceptées.",
       "unsupported_menu_type": "Seuls les menus au format PDF sont acceptés."
+    },
+    "notification": {
+      "push_endpoint_invalid": "Cet appareil ne peut pas recevoir de notifications de ce site."
     },
     "restaurant": {
       "archive_before_delete": "Archivez cet établissement avant de le supprimer. L'archivage le retire du site public et peut être annulé ; la suppression non.",

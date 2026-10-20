@@ -347,6 +347,18 @@
     "admin": {
       "password_not_configured": "Admin:Password debe configurarse antes del primer uso. Defínelo mediante la variable de entorno ADMIN_PASSWORD."
     },
+    "api_key": {
+      "expires_at_in_past": "La fecha de vencimiento debe ser posterior a hoy. Elija otra fecha.",
+      "expires_at_with_never_expires": "Una clave que no vence no puede tener fecha de vencimiento. Quite una de las dos opciones.",
+      "name_required": "Escriba un nombre para la clave de API.",
+      "name_too_long": "El nombre de la clave de API no puede superar los {{max}} caracteres.",
+      "not_a_session": "Esta consulta solo funciona con una clave de API, no con una cuenta que haya iniciado sesión.",
+      "not_allowed": "Esta acción no está disponible con una clave de API. Inicie sesión con su cuenta para hacerla.",
+      "not_found": "No se encontró esa clave de API. Puede que ya se haya revocado. Actualice la lista e inténtelo de nuevo.",
+      "scope_invalid": "Uno de los permisos seleccionados no es válido. Revise la selección e inténtelo de nuevo.",
+      "scope_missing": "Esta clave de API no tiene permiso para hacer esto. Use una clave con el permiso necesario.",
+      "scopes_required": "Seleccione al menos un permiso."
+    },
     "auth": {
       "email_already_in_use": "Esa dirección de correo electrónico ya está en uso.",
       "email_unchanged": "El nuevo correo electrónico debe ser distinto del actual.",
@@ -364,6 +376,7 @@
       "email_fields_required": "El asunto y el mensaje son obligatorios.",
       "email_invalid": "Esa dirección de correo no parece correcta.",
       "email_send_failed": "No se pudo enviar el correo. Revise la configuración del correo e inténtelo de nuevo.",
+      "guest_filter_forbidden": "Esta clave de API no puede buscar por correo electrónico porque no tiene permiso para ver los datos de los clientes.",
       "invalid_table_for_restaurant": "Mesa no válida para este restaurante.",
       "lookup_email_required": "Se necesita un correo electrónico para buscar una reserva.",
       "lookup_not_found": "No se ha encontrado ninguna reserva con esa referencia y ese correo electrónico.",
@@ -376,6 +389,11 @@
       "past_date": "No se puede crear una reserva en el pasado.",
       "paused": "Las reservas están pausadas hasta las {{until}}. Elige una hora posterior.",
       "paused_indefinitely": "Las reservas de este restaurante están pausadas en este momento. Vuelve a intentarlo más tarde.",
+      "reminder_cancelled": "Esta reserva está cancelada, así que no se pueden activar los recordatorios.",
+      "reminder_channel_invalid": "Este dispositivo no puede recibir recordatorios de este sitio.",
+      "reminder_endpoint_invalid": "Este dispositivo no puede recibir recordatorios de este sitio.",
+      "reminder_keys_required": "No pudimos activar los recordatorios en este dispositivo. Vuelve a activarlos e inténtalo de nuevo.",
+      "reminder_too_late": "Esta reserva ya comenzó, así que ya no se pueden activar los recordatorios.",
       "section_mismatch": "La sala no pertenece a este restaurante.",
       "special_requests_invalid": "Las peticiones especiales no pueden contener caracteres de control. Vuelve a escribirlas.",
       "status_cancelled": "Una reserva cancelada no admite cambios de estado.",
@@ -387,7 +405,9 @@
       "table_not_in_section": "No se ha encontrado la mesa en la sala indicada.",
       "walk_in_only": "Este local solo admite visitas sin reserva y no acepta reservas en línea.",
       "walk_in_only_today": "Este local solo admite visitas sin reserva el día seleccionado. Elige otro día o acércate directamente.",
-      "pacing_full": "Solo pueden llegar {{remaining}} comensales más a las {{time}}. Elige otra hora."
+      "pacing_full": "Solo pueden llegar {{remaining}} comensales más a las {{time}}. Elige otra hora.",
+      "wallet_cancelled": "Esta reserva está cancelada, así que no se puede guardar en tu Wallet.",
+      "wallet_not_configured": "Este sitio aún no ofrece pases de Apple Wallet ni de Google Wallet."
     },
     "brand": {
       "accent_color_invalid": "Código hexadecimal de color de acento no válido.",
@@ -397,8 +417,11 @@
       "header_image_fit_invalid": "HeaderImageFit debe ser uno de estos valores: {{allowed}}.",
       "highlights_heading_too_long": "El título de los destacados no puede superar los 60 caracteres.",
       "highlights_subheading_too_long": "El subtítulo de los destacados no puede superar los 60 caracteres.",
+      "minimum_app_version_invalid": "La versión mínima de la aplicación debe ser tres números separados por puntos, por ejemplo 1.9.0.",
       "primary_color_invalid": "Código hexadecimal de color principal no válido.",
-      "subtitle_too_long": "El subtítulo no puede superar los 160 caracteres."
+      "privacy_policy_url_invalid": "La dirección de la política de privacidad debe comenzar con http:// o https://. Revísela e inténtelo de nuevo.",
+      "subtitle_too_long": "El subtítulo no puede superar los 160 caracteres.",
+      "website_url_invalid": "La dirección del sitio web debe comenzar con http:// o https://. Revísela e inténtelo de nuevo."
     },
     "contact": {
       "email_invalid": "La dirección de correo electrónico debe ser válida.",
@@ -437,6 +460,9 @@
       "menu_too_large": "El archivo del menú debe ocupar menos de 10 MB.",
       "unsupported_image_type": "Solo se aceptan imágenes JPEG, PNG y WebP.",
       "unsupported_menu_type": "Solo se aceptan menús en formato PDF."
+    },
+    "notification": {
+      "push_endpoint_invalid": "Este dispositivo no puede recibir notificaciones de este sitio."
     },
     "restaurant": {
       "archive_before_delete": "Archiva este local antes de eliminarlo. Archivarlo lo retira del sitio público y se puede deshacer; eliminarlo no.",
