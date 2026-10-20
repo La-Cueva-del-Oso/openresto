@@ -62,7 +62,7 @@ public static class PublicAddress
             return IPAddress.TryParse(url.Host.Trim('[', ']'), out IPAddress? literal) && IsPublic(literal);
         }
 
-        string host = url.Host;
+        string host = url.Host.TrimEnd('.'); // "localhost." is the same name with the root label spelled out
         return !string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
             && !host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase)
             && !host.EndsWith(".local", StringComparison.OrdinalIgnoreCase)

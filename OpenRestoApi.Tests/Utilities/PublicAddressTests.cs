@@ -47,6 +47,9 @@ public class PublicAddressTests
     [InlineData("https://api.localhost/")]
     [InlineData("https://printer.local/")]
     [InlineData("https://metadata.internal/")]
+    [InlineData("https://localhost./")]
+    [InlineData("https://printer.local./")]
+    [InlineData("https://metadata.internal./")]
     [InlineData("https://127.0.0.1/")]
     [InlineData("https://[::1]/")]
     [InlineData("https://10.1.2.3:8080/")]
@@ -56,6 +59,7 @@ public class PublicAddressTests
 
     [Theory]
     [InlineData("https://bookings.example.com/")]
+    [InlineData("https://bookings.example.com./")]
     [InlineData("https://8.8.8.8/")]
     [InlineData("https://[2606:4700::1111]/")]
     public void IsPublicHost_AcceptsPublicNamesAndLiterals(string url)
