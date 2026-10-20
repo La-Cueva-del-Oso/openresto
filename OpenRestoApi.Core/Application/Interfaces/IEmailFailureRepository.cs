@@ -10,4 +10,7 @@ public interface IEmailFailureRepository
 
     /// <summary>The most recent 50 failures, newest first.</summary>
     Task<List<EmailFailure>> GetRecentAsync(int count = 50);
+
+    /// <summary>Deletes every failure attempted before <paramref name="cutoffUtc"/>. Returns the count.</summary>
+    Task<int> DeleteOlderThanAsync(DateTime cutoffUtc);
 }

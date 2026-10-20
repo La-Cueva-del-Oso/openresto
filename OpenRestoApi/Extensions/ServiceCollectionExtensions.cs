@@ -387,6 +387,11 @@ public static class ServiceCollectionExtensions
                 .BindConfiguration("Audit");
         services.AddHostedService<OpenRestoApi.Infrastructure.Auditing.AuditRetentionWorker>();
 
+        services.AddScoped<GuestDataRetentionService>();
+        services.AddOptions<OpenRestoApi.Core.Application.Settings.RetentionSettings>()
+                .BindConfiguration("Retention");
+        services.AddHostedService<OpenRestoApi.Infrastructure.Retention.GuestDataRetentionWorker>();
+
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IPasswordService, PasswordService>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();

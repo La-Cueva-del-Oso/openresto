@@ -88,11 +88,22 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories
         public async Task DeleteAsync(int id)
         {
             Booking? booking = await _db.Bookings.FindAsync(id);
-            if (booking != null)
+            if (booking == null)
             {
-                _db.Bookings.Remove(booking);
-                await _db.SaveChangesAsync();
+                return;
             }
+
+            // The guest's name, address and reference are copied onto rows with no cascade
+            // (SET NULL, or no FK at all), so deleting only the booking would leave them behind.
+            // One SaveChanges keeps the erasure atomic.
+            string bookingRef = booking.BookingRef;
+            bool hasRef = !string.IsNullOrEmpty(bookingRef); // "" would match every capacity notification
+            _db.AdminNotifications.RemoveRange(_db.AdminNotifications
+                .Where(n => n.BookingId == id || (hasRef && n.BookingRef == bookingRef)));
+            _db.EmailFailures.RemoveRange(_db.EmailFailures.Where(f => hasRef && f.BookingRef == bookingRef));
+            _db.WaitlistEntries.RemoveRange(_db.WaitlistEntries.Where(w => w.BookingId == id));
+            _db.Bookings.Remove(booking);
+            await _db.SaveChangesAsync();
         }
 
         public async Task<Dictionary<string, int>> CountNoShowsByEmailAsync(IEnumerable<string> emails)
