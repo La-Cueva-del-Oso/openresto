@@ -99,7 +99,7 @@ public class EmailSettingsService(
         }
         else
         {
-            await _settingsRepository.SaveChangesAsync();
+            await _settingsRepository.UpdateAsync(settings);
         }
 
         _audit.Describe(AuditActions.EmailSettingsUpdate, AuditTargets.EmailSettings,

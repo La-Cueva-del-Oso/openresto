@@ -7,6 +7,7 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories;
 
 [OnlyAccessibleBy("OpenRestoApi.Extensions.ServiceCollectionExtensions")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.EmailSettingsServiceTests")]
+[OnlyAccessibleBy("OpenRestoApi.Tests.Services.EmailSettingsConcurrencyTests")]
 [ExternalAccessAllowed]
 internal class EmailSettingsRepository(AppDbContext db) : IEmailSettingsRepository
 {
@@ -24,8 +25,9 @@ internal class EmailSettingsRepository(AppDbContext db) : IEmailSettingsReposito
         return settings;
     }
 
-    public async Task SaveChangesAsync()
+    public async Task UpdateAsync(EmailSettings settings)
     {
+        _db.Entry(settings).State = EntityState.Modified;
         await _db.SaveChangesAsync();
     }
 }
