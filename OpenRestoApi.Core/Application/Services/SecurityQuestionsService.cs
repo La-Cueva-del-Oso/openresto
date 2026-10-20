@@ -73,33 +73,15 @@ public sealed class SecurityQuestionsService(
             return new PvqVerifyOutcome(PvqVerifyStatus.NotConfigured);
 
         DateTime now = DateTime.UtcNow;
-        if (cred.PvqLockedUntil > now)
+        if (!await _credentialRepository.TryCountPvqAttemptAsync(cred.Id, now, MaxFailedAttempts, now + LockoutDuration))
             return new PvqVerifyOutcome(PvqVerifyStatus.LockedOut);
 
         if (!_passwordService.Verify(NormaliseAnswer(answer), cred.PvqAnswerHash, cred.PvqAnswerSalt))
-        {
-            await RecordFailedAttemptAsync(cred, now);
             return new PvqVerifyOutcome(PvqVerifyStatus.WrongAnswer);
-        }
 
-        cred.PvqFailedAttempts = 0;
-        cred.PvqLockedUntil = null;
         string token = Guid.NewGuid().ToString("N");
-        cred.ResetToken = token;
-        cred.ResetTokenExpiry = DateTime.UtcNow.AddMinutes(15);
-        await _credentialRepository.SaveChangesAsync();
+        await _credentialRepository.CompletePvqVerificationAsync(cred.Id, token, DateTime.UtcNow.AddMinutes(15));
         return new PvqVerifyOutcome(PvqVerifyStatus.Success, token);
-    }
-
-    private async Task RecordFailedAttemptAsync(AdminCredential cred, DateTime now)
-    {
-        cred.PvqFailedAttempts++;
-        if (cred.PvqFailedAttempts >= MaxFailedAttempts)
-        {
-            cred.PvqFailedAttempts = 0;
-            cred.PvqLockedUntil = now + LockoutDuration;
-        }
-        await _credentialRepository.SaveChangesAsync();
     }
 
     private static PvqStatusDto ToStatus(AdminCredential? cred) => new()

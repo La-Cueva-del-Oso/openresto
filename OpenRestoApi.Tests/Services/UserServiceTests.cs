@@ -66,7 +66,7 @@ public class UserServiceTests
     [Fact]
     public async Task GetAllAsync_Returns_Every_Account_Without_Secrets()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(GetAllAsync_Returns_Every_Account_Without_Secrets));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(GetAllAsync_Returns_Every_Account_Without_Secrets));
         Seed(db, "owner@example.com");
         Seed(db, "manager@example.com", UserRoles.Manager, isActive: false);
         UserService svc = CreateService(db);
@@ -86,7 +86,7 @@ public class UserServiceTests
     [Fact]
     public async Task CreateAsync_Persists_A_Normalised_Active_Account()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(CreateAsync_Persists_A_Normalised_Active_Account));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(CreateAsync_Persists_A_Normalised_Active_Account));
         UserService svc = CreateService(db);
 
         CreateUserRequest req = ValidRequest("  NewPerson@Example.COM ");
@@ -105,7 +105,7 @@ public class UserServiceTests
     [Fact]
     public async Task CreateAsync_Allows_A_Blank_Display_Name()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(CreateAsync_Allows_A_Blank_Display_Name));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(CreateAsync_Allows_A_Blank_Display_Name));
         UserService svc = CreateService(db);
 
         CreateUserRequest req = ValidRequest();
@@ -118,7 +118,7 @@ public class UserServiceTests
     [Fact]
     public async Task CreateAsync_Rejects_A_Duplicate_Email_Regardless_Of_Case()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(CreateAsync_Rejects_A_Duplicate_Email_Regardless_Of_Case));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(CreateAsync_Rejects_A_Duplicate_Email_Regardless_Of_Case));
         Seed(db, "taken@example.com");
         UserService svc = CreateService(db);
 
@@ -132,7 +132,7 @@ public class UserServiceTests
     [InlineData("   ")]
     public async Task CreateAsync_Rejects_A_Malformed_Email(string email)
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(CreateAsync_Rejects_A_Malformed_Email) + email.GetHashCode());
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(CreateAsync_Rejects_A_Malformed_Email) + email.GetHashCode());
         UserService svc = CreateService(db);
 
         await Assert.ThrowsAsync<ValidationException>(() => svc.CreateAsync(ValidRequest(email)));
@@ -141,7 +141,7 @@ public class UserServiceTests
     [Fact]
     public async Task CreateAsync_Rejects_A_Short_Password()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(CreateAsync_Rejects_A_Short_Password));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(CreateAsync_Rejects_A_Short_Password));
         UserService svc = CreateService(db);
 
         CreateUserRequest req = ValidRequest();
@@ -156,7 +156,7 @@ public class UserServiceTests
     [InlineData("Admin")] // the retired claim value is not an assignable role
     public async Task CreateAsync_Rejects_A_Role_Outside_The_Allow_List(string role)
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(CreateAsync_Rejects_A_Role_Outside_The_Allow_List) + role);
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(CreateAsync_Rejects_A_Role_Outside_The_Allow_List) + role);
         UserService svc = CreateService(db);
 
         CreateUserRequest req = ValidRequest();
@@ -168,7 +168,7 @@ public class UserServiceTests
     [Fact]
     public async Task CreateAsync_Accepts_A_Role_In_Any_Casing_And_Stores_It_Canonically()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(CreateAsync_Accepts_A_Role_In_Any_Casing_And_Stores_It_Canonically));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(CreateAsync_Accepts_A_Role_In_Any_Casing_And_Stores_It_Canonically));
         UserService svc = CreateService(db);
 
         CreateUserRequest req = ValidRequest();
@@ -181,7 +181,7 @@ public class UserServiceTests
     [Fact]
     public async Task CreateAsync_Rejects_An_Overlong_Display_Name()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(CreateAsync_Rejects_An_Overlong_Display_Name));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(CreateAsync_Rejects_An_Overlong_Display_Name));
         UserService svc = CreateService(db);
 
         CreateUserRequest req = ValidRequest();
@@ -194,7 +194,7 @@ public class UserServiceTests
     [Fact]
     public async Task UpdateRoleAsync_Promotes_A_Manager()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(UpdateRoleAsync_Promotes_A_Manager));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(UpdateRoleAsync_Promotes_A_Manager));
         Seed(db, "owner@example.com");
         AdminCredential manager = Seed(db, "manager@example.com", UserRoles.Manager);
         UserService svc = CreateService(db);
@@ -207,7 +207,7 @@ public class UserServiceTests
     [Fact]
     public async Task UpdateRoleAsync_Demotes_An_Owner_When_Another_Active_One_Remains()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(UpdateRoleAsync_Demotes_An_Owner_When_Another_Active_One_Remains));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(UpdateRoleAsync_Demotes_An_Owner_When_Another_Active_One_Remains));
         AdminCredential first = Seed(db, "owner1@example.com");
         Seed(db, "owner2@example.com");
         UserService svc = CreateService(db);
@@ -220,7 +220,7 @@ public class UserServiceTests
     [Fact]
     public async Task UpdateRoleAsync_Refuses_To_Change_The_Callers_Own_Role()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(UpdateRoleAsync_Refuses_To_Change_The_Callers_Own_Role));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(UpdateRoleAsync_Refuses_To_Change_The_Callers_Own_Role));
         AdminCredential caller = Seed(db, "owner1@example.com");
         Seed(db, "owner2@example.com");
         UserService svc = CreateService(db, FakeCurrentUser.For(caller));
@@ -236,7 +236,7 @@ public class UserServiceTests
     [Fact]
     public async Task UpdateRoleAsync_Refuses_To_Demote_The_Last_Active_Owner()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(UpdateRoleAsync_Refuses_To_Demote_The_Last_Active_Owner));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(UpdateRoleAsync_Refuses_To_Demote_The_Last_Active_Owner));
         AdminCredential owner = Seed(db, "owner@example.com");
         Seed(db, "manager@example.com", UserRoles.Manager);
         UserService svc = CreateService(db);
@@ -250,7 +250,7 @@ public class UserServiceTests
     [Fact]
     public async Task UpdateRoleAsync_Does_Not_Count_A_Deactivated_Owner_As_Cover()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(UpdateRoleAsync_Does_Not_Count_A_Deactivated_Owner_As_Cover));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(UpdateRoleAsync_Does_Not_Count_A_Deactivated_Owner_As_Cover));
         AdminCredential active = Seed(db, "owner@example.com");
         Seed(db, "dormant@example.com", UserRoles.Owner, isActive: false);
         UserService svc = CreateService(db);
@@ -262,7 +262,7 @@ public class UserServiceTests
     [Fact]
     public async Task UpdateRoleAsync_Is_A_No_Op_When_The_Role_Is_Unchanged()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(UpdateRoleAsync_Is_A_No_Op_When_The_Role_Is_Unchanged));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(UpdateRoleAsync_Is_A_No_Op_When_The_Role_Is_Unchanged));
         AdminCredential owner = Seed(db, "owner@example.com");
         UserService svc = CreateService(db);
 
@@ -275,7 +275,7 @@ public class UserServiceTests
     [Fact]
     public async Task UpdateRoleAsync_Throws_NotFound_For_An_Unknown_Id()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(UpdateRoleAsync_Throws_NotFound_For_An_Unknown_Id));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(UpdateRoleAsync_Throws_NotFound_For_An_Unknown_Id));
         UserService svc = CreateService(db);
 
         await Assert.ThrowsAsync<NotFoundException>(
@@ -287,7 +287,7 @@ public class UserServiceTests
     [Fact]
     public async Task SetActiveAsync_Deactivates_And_Reactivates()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(SetActiveAsync_Deactivates_And_Reactivates));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(SetActiveAsync_Deactivates_And_Reactivates));
         AdminCredential caller = Seed(db, "owner@example.com");
         AdminCredential manager = Seed(db, "manager@example.com", UserRoles.Manager);
         UserService svc = CreateService(db, FakeCurrentUser.For(caller));
@@ -299,7 +299,7 @@ public class UserServiceTests
     [Fact]
     public async Task SetActiveAsync_Deactivating_Ends_The_Accounts_Sessions()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(SetActiveAsync_Deactivating_Ends_The_Accounts_Sessions));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(SetActiveAsync_Deactivating_Ends_The_Accounts_Sessions));
         AdminCredential caller = Seed(db, "owner@example.com");
         AdminCredential manager = Seed(db, "manager@example.com", UserRoles.Manager);
         UserService svc = CreateService(db, FakeCurrentUser.For(caller));
@@ -316,7 +316,7 @@ public class UserServiceTests
     [Fact]
     public async Task SetActiveAsync_Reactivating_Leaves_The_Session_Version_Alone()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(SetActiveAsync_Reactivating_Leaves_The_Session_Version_Alone));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(SetActiveAsync_Reactivating_Leaves_The_Session_Version_Alone));
         AdminCredential caller = Seed(db, "owner@example.com");
         AdminCredential dormant = Seed(db, "dormant@example.com", UserRoles.Manager, isActive: false);
         UserService svc = CreateService(db, FakeCurrentUser.For(caller));
@@ -329,7 +329,7 @@ public class UserServiceTests
     [Fact]
     public async Task SetActiveAsync_Refuses_To_Deactivate_The_Caller()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(SetActiveAsync_Refuses_To_Deactivate_The_Caller));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(SetActiveAsync_Refuses_To_Deactivate_The_Caller));
         AdminCredential caller = Seed(db, "owner1@example.com");
         Seed(db, "owner2@example.com");
         UserService svc = CreateService(db, FakeCurrentUser.For(caller));
@@ -342,7 +342,7 @@ public class UserServiceTests
     [Fact]
     public async Task SetActiveAsync_Recognises_The_Caller_By_Email_On_A_Pre_MultiUser_Token()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(SetActiveAsync_Recognises_The_Caller_By_Email_On_A_Pre_MultiUser_Token));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(SetActiveAsync_Recognises_The_Caller_By_Email_On_A_Pre_MultiUser_Token));
         AdminCredential caller = Seed(db, "legacy@example.com");
         Seed(db, "owner2@example.com");
         UserService svc = CreateService(db, FakeCurrentUser.ForLegacyToken("legacy@example.com"));
@@ -354,7 +354,7 @@ public class UserServiceTests
     [Fact]
     public async Task SetActiveAsync_Refuses_To_Deactivate_The_Last_Active_Owner()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(SetActiveAsync_Refuses_To_Deactivate_The_Last_Active_Owner));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(SetActiveAsync_Refuses_To_Deactivate_The_Last_Active_Owner));
         AdminCredential owner = Seed(db, "owner@example.com");
         AdminCredential manager = Seed(db, "manager@example.com", UserRoles.Manager);
         UserService svc = CreateService(db, FakeCurrentUser.For(manager));
@@ -367,7 +367,7 @@ public class UserServiceTests
     [Fact]
     public async Task SetActiveAsync_Is_A_No_Op_When_Already_In_The_Requested_State()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(SetActiveAsync_Is_A_No_Op_When_Already_In_The_Requested_State));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(SetActiveAsync_Is_A_No_Op_When_Already_In_The_Requested_State));
         AdminCredential owner = Seed(db, "owner@example.com");
         UserService svc = CreateService(db, FakeCurrentUser.For(owner));
 
@@ -378,7 +378,7 @@ public class UserServiceTests
     [Fact]
     public async Task SetActiveAsync_Throws_NotFound_For_An_Unknown_Id()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(SetActiveAsync_Throws_NotFound_For_An_Unknown_Id));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(SetActiveAsync_Throws_NotFound_For_An_Unknown_Id));
         UserService svc = CreateService(db);
 
         await Assert.ThrowsAsync<NotFoundException>(
@@ -390,7 +390,7 @@ public class UserServiceTests
     [Fact]
     public async Task ResetPasswordAsync_Sets_The_New_Password_And_Clears_Any_Reset_Token()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Sets_The_New_Password_And_Clears_Any_Reset_Token));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ResetPasswordAsync_Sets_The_New_Password_And_Clears_Any_Reset_Token));
         AdminCredential user = Seed(db, "manager@example.com", UserRoles.Manager);
         user.ResetToken = "outstanding";
         user.ResetTokenExpiry = DateTime.UtcNow.AddMinutes(15);
@@ -409,7 +409,7 @@ public class UserServiceTests
     [Fact]
     public async Task ResetPasswordAsync_Clears_The_Accounts_Security_Question()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Clears_The_Accounts_Security_Question));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ResetPasswordAsync_Clears_The_Accounts_Security_Question));
         AdminCredential user = Seed(db, "manager@example.com", UserRoles.Manager);
         AdminCredential other = Seed(db, "owner@example.com");
         foreach (AdminCredential c in new[] { user, other })
@@ -439,7 +439,7 @@ public class UserServiceTests
     [Fact]
     public async Task ResetPasswordAsync_Keeps_The_Security_Question_When_The_Password_Is_Rejected()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Keeps_The_Security_Question_When_The_Password_Is_Rejected));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ResetPasswordAsync_Keeps_The_Security_Question_When_The_Password_Is_Rejected));
         AdminCredential user = Seed(db, "manager@example.com", UserRoles.Manager);
         user.PvqQuestion = "First pet?";
         user.PvqAnswerHash = "hash";
@@ -456,7 +456,7 @@ public class UserServiceTests
     [Fact]
     public async Task ResetPasswordAsync_Deletes_The_Accounts_Push_Subscriptions_Only()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Deletes_The_Accounts_Push_Subscriptions_Only));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ResetPasswordAsync_Deletes_The_Accounts_Push_Subscriptions_Only));
         AdminCredential user = Seed(db, "manager@example.com", UserRoles.Manager);
         AdminCredential other = Seed(db, "owner@example.com");
         SeedPushSubscription(db, user.Id, "https://ep/theirs");
@@ -472,7 +472,7 @@ public class UserServiceTests
     [Fact]
     public async Task ResetPasswordAsync_Rejects_A_Short_Password()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Rejects_A_Short_Password));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ResetPasswordAsync_Rejects_A_Short_Password));
         AdminCredential user = Seed(db, "manager@example.com", UserRoles.Manager);
         SeedPushSubscription(db, user.Id, "https://ep/theirs");
         UserService svc = CreateService(db);
@@ -486,7 +486,7 @@ public class UserServiceTests
     [Fact]
     public async Task ResetPasswordAsync_Throws_NotFound_For_An_Unknown_Id()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Throws_NotFound_For_An_Unknown_Id));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ResetPasswordAsync_Throws_NotFound_For_An_Unknown_Id));
         UserService svc = CreateService(db);
 
         await Assert.ThrowsAsync<NotFoundException>(

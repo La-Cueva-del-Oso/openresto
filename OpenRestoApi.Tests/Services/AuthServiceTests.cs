@@ -77,7 +77,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_Returns_Jwt_On_Correct_Email_And_Password()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(LoginAsync_Returns_Jwt_On_Correct_Email_And_Password));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(LoginAsync_Returns_Jwt_On_Correct_Email_And_Password));
         SeedCredential(db, "admin@example.com", "secret123");
         AuthService svc = CreateService(db);
 
@@ -89,7 +89,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_Is_Case_Insensitive_On_Email()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(LoginAsync_Is_Case_Insensitive_On_Email));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(LoginAsync_Is_Case_Insensitive_On_Email));
         SeedCredential(db, "admin@example.com", "secret123");
         AuthService svc = CreateService(db);
 
@@ -101,7 +101,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_Authenticates_The_Account_Matching_The_Email()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(LoginAsync_Authenticates_The_Account_Matching_The_Email));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(LoginAsync_Authenticates_The_Account_Matching_The_Email));
         SeedCredential(db, "owner@example.com", "owner-pw");
         SeedCredential(db, "manager@example.com", "manager-pw", role: UserRoles.Manager);
         AuthService svc = CreateService(db);
@@ -115,7 +115,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_Puts_The_Users_Id_And_Role_On_The_Token()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(LoginAsync_Puts_The_Users_Id_And_Role_On_The_Token));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(LoginAsync_Puts_The_Users_Id_And_Role_On_The_Token));
         AdminCredential cred = SeedCredential(db, "manager@example.com", "secret123", role: UserRoles.Manager);
         AuthService svc = CreateService(db);
 
@@ -133,7 +133,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_Returns_Null_On_Wrong_Email()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(LoginAsync_Returns_Null_On_Wrong_Email));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(LoginAsync_Returns_Null_On_Wrong_Email));
         SeedCredential(db, "admin@example.com", "secret123");
         AuthService svc = CreateService(db);
 
@@ -145,7 +145,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_Returns_Null_On_Wrong_Password()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(LoginAsync_Returns_Null_On_Wrong_Password));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(LoginAsync_Returns_Null_On_Wrong_Password));
         SeedCredential(db, "admin@example.com", "secret123");
         AuthService svc = CreateService(db);
 
@@ -157,7 +157,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_Returns_Null_For_A_Deactivated_Account()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(LoginAsync_Returns_Null_For_A_Deactivated_Account));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(LoginAsync_Returns_Null_For_A_Deactivated_Account));
         SeedCredential(db, "disabled@example.com", "secret123", isActive: false);
         AuthService svc = CreateService(db);
 
@@ -167,7 +167,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_Does_Not_Invent_An_Account_When_None_Exists()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(LoginAsync_Does_Not_Invent_An_Account_When_None_Exists));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(LoginAsync_Does_Not_Invent_An_Account_When_None_Exists));
         AuthService svc = CreateService(db);
 
         // The bootstrap-on-login behaviour is gone: creating the first account is the
@@ -181,7 +181,7 @@ public class AuthServiceTests
     [Fact]
     public async Task GetCurrentUserAsync_Returns_The_Callers_Identity()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(GetCurrentUserAsync_Returns_The_Callers_Identity));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(GetCurrentUserAsync_Returns_The_Callers_Identity));
         SeedCredential(db, "owner@example.com", "pw");
         AdminCredential manager = SeedCredential(
             db, "manager@example.com", "pw", role: UserRoles.Manager, displayName: "Sam");
@@ -199,7 +199,7 @@ public class AuthServiceTests
     [Fact]
     public async Task GetCurrentUserAsync_Returns_Null_When_The_Token_Names_No_Live_Account()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(GetCurrentUserAsync_Returns_Null_When_The_Token_Names_No_Live_Account));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(GetCurrentUserAsync_Returns_Null_When_The_Token_Names_No_Live_Account));
         AdminCredential cred = SeedCredential(db, "disabled@example.com", "pw", isActive: false);
         AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
 
@@ -211,7 +211,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ChangePasswordAsync_Rejects_Wrong_Current_Password()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Rejects_Wrong_Current_Password));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangePasswordAsync_Rejects_Wrong_Current_Password));
         AdminCredential cred = SeedCredential(db, "admin@example.com", "old");
         AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
 
@@ -226,7 +226,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ChangePasswordAsync_Succeeds_And_New_Password_Works()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Succeeds_And_New_Password_Works));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangePasswordAsync_Succeeds_And_New_Password_Works));
         AdminCredential cred = SeedCredential(db, "admin@example.com", "old");
         AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
 
@@ -240,7 +240,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ChangePasswordAsync_Changes_Only_The_Callers_Password()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Changes_Only_The_Callers_Password));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangePasswordAsync_Changes_Only_The_Callers_Password));
         SeedCredential(db, "owner@example.com", "owner-pw");
         AdminCredential manager = SeedCredential(db, "manager@example.com", "manager-pw", role: UserRoles.Manager);
         AuthService svc = CreateService(db, FakeCurrentUser.For(manager));
@@ -254,7 +254,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ChangePasswordAsync_Resolves_Caller_By_Email_For_Tokens_Without_A_User_Id()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Resolves_Caller_By_Email_For_Tokens_Without_A_User_Id));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangePasswordAsync_Resolves_Caller_By_Email_For_Tokens_Without_A_User_Id));
         SeedCredential(db, "legacy@example.com", "old");
         AuthService svc = CreateService(db, FakeCurrentUser.ForLegacyToken("legacy@example.com"));
 
@@ -264,7 +264,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ChangePasswordAsync_Returns_Null_When_The_Token_Names_No_Live_Account()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Returns_Null_When_The_Token_Names_No_Live_Account));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangePasswordAsync_Returns_Null_When_The_Token_Names_No_Live_Account));
         SeedCredential(db, "admin@example.com", "old");
         AuthService svc = CreateService(db, FakeCurrentUser.ForLegacyToken("ghost@example.com"));
 
@@ -277,7 +277,7 @@ public class AuthServiceTests
     [InlineData("12345")]
     public async Task ChangePasswordAsync_Throws_ValidationException_When_New_Password_Too_Short(string weak)
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Throws_ValidationException_When_New_Password_Too_Short) + weak);
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangePasswordAsync_Throws_ValidationException_When_New_Password_Too_Short) + weak);
         AdminCredential cred = SeedCredential(db, "admin@example.com", "pw");
         AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
 
@@ -288,7 +288,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ChangePasswordAsync_Revokes_Sessions_And_Mints_A_Token_At_The_New_Version()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Revokes_Sessions_And_Mints_A_Token_At_The_New_Version));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangePasswordAsync_Revokes_Sessions_And_Mints_A_Token_At_The_New_Version));
         AdminCredential cred = SeedCredential(db, "admin@example.com", "old");
         AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
 
@@ -303,7 +303,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ChangePasswordAsync_Deletes_The_Callers_Push_Subscriptions_Only()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Deletes_The_Callers_Push_Subscriptions_Only));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangePasswordAsync_Deletes_The_Callers_Push_Subscriptions_Only));
         AdminCredential cred = SeedCredential(db, "admin@example.com", "old");
         AdminCredential other = SeedCredential(db, "other@example.com", "pw");
         SeedPushSubscription(db, cred.Id, "https://ep/mine");
@@ -319,7 +319,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ChangePasswordAsync_Keeps_Push_Subscriptions_When_The_Current_Password_Is_Wrong()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Keeps_Push_Subscriptions_When_The_Current_Password_Is_Wrong));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangePasswordAsync_Keeps_Push_Subscriptions_When_The_Current_Password_Is_Wrong));
         AdminCredential cred = SeedCredential(db, "admin@example.com", "old");
         SeedPushSubscription(db, cred.Id, "https://ep/mine");
         AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
@@ -332,7 +332,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ChangePasswordAsync_Invalidates_A_Pending_Reset_Token()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Invalidates_A_Pending_Reset_Token));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangePasswordAsync_Invalidates_A_Pending_Reset_Token));
         AdminCredential cred = SeedCredential(db, "admin@example.com", "old");
         cred.ResetToken = "pending-token";
         cred.ResetTokenExpiry = DateTime.UtcNow.AddMinutes(15);
@@ -348,7 +348,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ChangePasswordAsync_Keeps_A_Pending_Reset_Token_When_The_Current_Password_Is_Wrong()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Keeps_A_Pending_Reset_Token_When_The_Current_Password_Is_Wrong));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangePasswordAsync_Keeps_A_Pending_Reset_Token_When_The_Current_Password_Is_Wrong));
         AdminCredential cred = SeedCredential(db, "admin@example.com", "old");
         cred.ResetToken = "pending-token";
         cred.ResetTokenExpiry = DateTime.UtcNow.AddMinutes(15);
@@ -363,7 +363,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ChangePasswordAsync_Keeps_The_Security_Question()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Keeps_The_Security_Question));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangePasswordAsync_Keeps_The_Security_Question));
         AdminCredential cred = SeedCredential(db, "admin@example.com", "old");
         cred.PvqQuestion = "First pet?";
         cred.PvqAnswerHash = "hash";
@@ -384,7 +384,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ChangeEmailAsync_Returns_New_Jwt_On_Success()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangeEmailAsync_Returns_New_Jwt_On_Success));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangeEmailAsync_Returns_New_Jwt_On_Success));
         AdminCredential cred = SeedCredential(db, "admin@example.com", "pw");
         AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
 
@@ -398,7 +398,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ChangeEmailAsync_Throws_When_New_Email_Equals_Current()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangeEmailAsync_Throws_When_New_Email_Equals_Current));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangeEmailAsync_Throws_When_New_Email_Equals_Current));
         AdminCredential cred = SeedCredential(db, "admin@example.com", "pw");
         AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
 
@@ -410,7 +410,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ChangeEmailAsync_Throws_When_Another_Account_Already_Uses_The_Email()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangeEmailAsync_Throws_When_Another_Account_Already_Uses_The_Email));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangeEmailAsync_Throws_When_Another_Account_Already_Uses_The_Email));
         SeedCredential(db, "taken@example.com", "pw");
         AdminCredential mover = SeedCredential(db, "mover@example.com", "pw", role: UserRoles.Manager);
         AuthService svc = CreateService(db, FakeCurrentUser.For(mover));
@@ -423,7 +423,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ChangeEmailAsync_Returns_Null_On_Wrong_Password()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangeEmailAsync_Returns_Null_On_Wrong_Password));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangeEmailAsync_Returns_Null_On_Wrong_Password));
         AdminCredential cred = SeedCredential(db, "admin@example.com", "pw");
         AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
 
@@ -439,7 +439,7 @@ public class AuthServiceTests
     [InlineData("   ")]
     public async Task ChangeEmailAsync_Throws_ValidationException_When_Email_Invalid(string malformed)
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ChangeEmailAsync_Throws_ValidationException_When_Email_Invalid) + malformed.GetHashCode());
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangeEmailAsync_Throws_ValidationException_When_Email_Invalid) + malformed.GetHashCode());
         AdminCredential cred = SeedCredential(db, "admin@example.com", "pw");
         AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
 
@@ -452,7 +452,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LogoutAsync_Revokes_The_Callers_Sessions_Only()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(LogoutAsync_Revokes_The_Callers_Sessions_Only));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(LogoutAsync_Revokes_The_Callers_Sessions_Only));
         AdminCredential owner = SeedCredential(db, "owner@example.com", "pw");
         AdminCredential manager = SeedCredential(db, "manager@example.com", "pw", role: UserRoles.Manager);
         AuthService svc = CreateService(db, FakeCurrentUser.For(manager));
@@ -468,7 +468,7 @@ public class AuthServiceTests
     {
         // Signing out ends the session, not the notifications: the browser keeps delivering
         // bookings, and the next sign-in on it takes the subscription over if it is someone else.
-        using AppDbContext db = TestDbFactory.Create(nameof(LogoutAsync_Keeps_The_Callers_Push_Subscriptions));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(LogoutAsync_Keeps_The_Callers_Push_Subscriptions));
         AdminCredential cred = SeedCredential(db, "admin@example.com", "pw");
         SeedPushSubscription(db, cred.Id, "https://ep/mine");
         AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
@@ -482,7 +482,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LogoutAsync_Leaves_Sessions_Alone_For_An_Api_Key()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(LogoutAsync_Leaves_Sessions_Alone_For_An_Api_Key));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(LogoutAsync_Leaves_Sessions_Alone_For_An_Api_Key));
         AdminCredential cred = SeedCredential(db, "admin@example.com", "pw");
         AuthService svc = CreateService(db, new FakeCurrentUser { IsApiKeyAuthenticated = true, UserId = cred.Id });
 
@@ -496,7 +496,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ResetPasswordAsync_Returns_False_For_Unknown_Token()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Returns_False_For_Unknown_Token));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ResetPasswordAsync_Returns_False_For_Unknown_Token));
         SeedCredential(db, "admin@example.com", "pw");
         AuthService svc = CreateService(db);
 
@@ -508,7 +508,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ResetPasswordAsync_Returns_False_For_Expired_Token()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Returns_False_For_Expired_Token));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ResetPasswordAsync_Returns_False_For_Expired_Token));
         SeedCredential(db, "admin@example.com", "pw");
         // Manually attach an expired reset token to the credential row.
         AdminCredential cred = await db.AdminCredentials.SingleAsync();
@@ -525,7 +525,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ResetPasswordAsync_Succeeds_Clears_Token_And_Allows_New_Password()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Succeeds_Clears_Token_And_Allows_New_Password));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ResetPasswordAsync_Succeeds_Clears_Token_And_Allows_New_Password));
         SeedCredential(db, "admin@example.com", "pw");
         AdminCredential cred = await db.AdminCredentials.SingleAsync();
         cred.ResetToken = "valid-token";
@@ -547,7 +547,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ResetPasswordAsync_Deletes_The_Resetting_Accounts_Push_Subscriptions_Only()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Deletes_The_Resetting_Accounts_Push_Subscriptions_Only));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ResetPasswordAsync_Deletes_The_Resetting_Accounts_Push_Subscriptions_Only));
         AdminCredential cred = SeedCredential(db, "admin@example.com", "pw");
         AdminCredential other = SeedCredential(db, "other@example.com", "pw");
         cred.ResetToken = "valid-token";
@@ -566,7 +566,7 @@ public class AuthServiceTests
     [Fact]
     public async Task ResetPasswordAsync_Keeps_Push_Subscriptions_For_An_Unknown_Token()
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Keeps_Push_Subscriptions_For_An_Unknown_Token));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ResetPasswordAsync_Keeps_Push_Subscriptions_For_An_Unknown_Token));
         AdminCredential cred = SeedCredential(db, "admin@example.com", "pw");
         SeedPushSubscription(db, cred.Id, "https://ep/mine");
         AuthService svc = CreateService(db);
@@ -581,7 +581,7 @@ public class AuthServiceTests
     [InlineData("")]
     public async Task ResetPasswordAsync_Rejects_A_Missing_Token_Without_Touching_Any_Account(string? token)
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Rejects_A_Missing_Token_Without_Touching_Any_Account) + (token ?? "null"));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ResetPasswordAsync_Rejects_A_Missing_Token_Without_Touching_Any_Account) + (token ?? "null"));
         AdminCredential cred = SeedCredential(db, "admin@example.com", "pw");
         AuthService svc = CreateService(db);
 
@@ -601,7 +601,7 @@ public class AuthServiceTests
     [InlineData("12345")]
     public async Task ResetPasswordAsync_Throws_ValidationException_When_New_Password_Too_Short(string weak)
     {
-        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Throws_ValidationException_When_New_Password_Too_Short) + weak);
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ResetPasswordAsync_Throws_ValidationException_When_New_Password_Too_Short) + weak);
         SeedCredential(db, "admin@example.com", "pw");
         AdminCredential cred = await db.AdminCredentials.SingleAsync();
         cred.ResetToken = "valid-token";

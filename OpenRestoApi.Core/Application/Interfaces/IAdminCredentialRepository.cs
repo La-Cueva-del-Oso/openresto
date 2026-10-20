@@ -22,10 +22,52 @@ public interface IAdminCredentialRepository
     Task<List<AdminCredential>> GetAllAsync();
 
     /// <summary>
-    /// Count of active users holding <paramref name="role"/>. Backs the last-Owner guard, which
-    /// must not be satisfiable by a deactivated row.
+    /// Gives <paramref name="user"/> the role unless that would leave the instance without an
+    /// active Owner; false means refused and nothing changed. The check and the write are one
+    /// statement: counting first and writing after lets two Owners demoting each other both pass.
     /// </summary>
-    Task<int> CountActiveByRoleAsync(string role);
+    /// <seealso>AdminCredentialConcurrencyTests.Two_Owners_Demoting_Each_Other_Concurrently_Leave_One_Active_Owner</seealso>
+    /// <seealso>AdminCredentialConcurrencyTests.Demotions_Succeed_Concurrently_While_Another_Active_Owner_Remains</seealso>
+    Task<bool> TrySetRoleAsync(AdminCredential user, string role);
+
+    /// <summary>
+    /// Deactivates <paramref name="user"/> and ends its sessions, under the same one-statement
+    /// last-Owner rule as <see cref="TrySetRoleAsync"/>.
+    /// </summary>
+    /// <seealso>AdminCredentialConcurrencyTests.Two_Owners_Deactivating_Each_Other_Concurrently_Leave_One_Active_Owner</seealso>
+    /// <seealso>AdminCredentialConcurrencyTests.Deactivations_Succeed_Concurrently_While_Another_Active_Owner_Remains</seealso>
+    /// <seealso>AdminCredentialConcurrencyTests.Three_Owners_Deactivated_Concurrently_Keep_Exactly_One</seealso>
+    Task<bool> TryDeactivateAsync(AdminCredential user);
+
+    /// <summary>
+    /// Counts one security-answer attempt against the account, locking it until
+    /// <paramref name="lockedUntilUtc"/> (and zeroing the count) on the <paramref name="maxAttempts"/>th.
+    /// False when the account is locked at <paramref name="nowUtc"/> and so takes no attempt. The
+    /// lock test and the count are one statement, and it runs before the answer is checked:
+    /// reading the count, checking and writing it back lets a burst of guesses all start from
+    /// the same number.
+    /// </summary>
+    /// <seealso>AdminCredentialConcurrencyTests.Concurrent_Wrong_Answers_Lock_The_Account_After_The_Limit</seealso>
+    /// <seealso>AdminCredentialConcurrencyTests.Concurrent_Wrong_Answers_Below_The_Limit_Are_All_Counted</seealso>
+    Task<bool> TryCountPvqAttemptAsync(int id, DateTime nowUtc, int maxAttempts, DateTime lockedUntilUtc);
+
+    /// <summary>
+    /// A right answer: clears the attempt count and any lock, and stores the reset token it earns.
+    /// </summary>
+    Task CompletePvqVerificationAsync(int id, string resetToken, DateTime resetTokenExpiryUtc);
+
+    /// <summary>
+    /// Signs the account out everywhere and withdraws any pending self-service reset token: a
+    /// token issued before the credential changed (or the account was shut) must not outlive it.
+    /// Saves whatever else is pending on <paramref name="credential"/> in the same transaction and
+    /// leaves its <see cref="AdminCredential.SessionVersion"/> at the stored value. The version is
+    /// raised in SQL: two revocations that each read it, add one and write it back leave it one
+    /// short, and the second one would not count.
+    /// </summary>
+    /// <seealso>AdminCredentialConcurrencyTests.Concurrent_Revocations_Are_All_Counted</seealso>
+    /// <seealso>AdminCredentialRepositoryTests.RevokeSessionsAsync_Raises_The_Version_By_One_And_Drops_A_Pending_Reset_Token</seealso>
+    /// <seealso>AdminCredentialRepositoryTests.RevokeSessionsAsync_Saves_The_Pending_Changes_With_The_Revocation</seealso>
+    Task RevokeSessionsAsync(AdminCredential credential);
 
     /// <summary>Adds and saves a new credential, returning the persisted entity.</summary>
     Task<AdminCredential> AddAsync(AdminCredential credential);
