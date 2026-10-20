@@ -19,6 +19,68 @@ function fakeFetch(
   }) as typeof fetch;
 }
 
+describe("Client server address", () => {
+  const make = (baseUrl: string, env: NodeJS.ProcessEnv = {}) =>
+    new Client({ baseUrl, apiKey: "orst_1_secret", env });
+
+  test("refuses plain http to a remote host, with an actionable message", () => {
+    assert.throws(
+      () => make("http://example.com"),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /https:\/\//);
+        assert.match(err.message, /OPENRESTO_ALLOW_HTTP=1/);
+        return true;
+      },
+    );
+  });
+
+  test("accepts https to a remote host", () => {
+    assert.doesNotThrow(() => make("https://example.com"));
+  });
+
+  for (const url of [
+    "http://localhost:8080",
+    "http://127.0.0.1",
+    "http://127.5.6.7:8080",
+    "http://[::1]",
+    "http://[::1]:8080",
+  ]) {
+    test(`accepts plain http to loopback ${url}`, () => {
+      assert.doesNotThrow(() => make(url));
+    });
+  }
+
+  for (const url of [
+    "http://localhost.evil.com",
+    "http://127.0.0.1.evil.com",
+    "http://evil.com/localhost",
+    "http://user@evil.com#@localhost",
+    "http://128.0.0.1",
+    "ftp://example.com",
+  ]) {
+    test(`refuses ${url}, which only looks like loopback or https`, () => {
+      assert.throws(() => make(url));
+    });
+  }
+
+  test("OPENRESTO_ALLOW_HTTP=1 lets plain http through to a remote host", () => {
+    assert.doesNotThrow(() =>
+      make("http://example.com", { OPENRESTO_ALLOW_HTTP: "1" }),
+    );
+  });
+
+  test("OPENRESTO_ALLOW_HTTP set to anything but 1 does not open the gate", () => {
+    assert.throws(() =>
+      make("http://example.com", { OPENRESTO_ALLOW_HTTP: "true" }),
+    );
+  });
+
+  test("reports an unparseable address instead of a raw URL error", () => {
+    assert.throws(() => make("not a url"), /not a valid server address/);
+  });
+});
+
 describe("Client", () => {
   test("throws immediately when no baseUrl is configured", () => {
     assert.throws(
@@ -245,6 +307,7 @@ describe("redirects", () => {
     const client = new Client({
       baseUrl: "http://openresto.example",
       apiKey: "orst_1_secret",
+      env: { OPENRESTO_ALLOW_HTTP: "1" },
       fetchImpl: redirectingFetch(
         [],
         "https://openresto.example/api/brand",

@@ -53,6 +53,8 @@ public static class ErrorCodes
     public const string BookingNoShowBeforeStart = "booking.no_show_before_start";
     public const string BookingPacingFull = "booking.pacing_full";
     public const string BookingEmailInvalid = "booking.email_invalid";
+    public const string BookingNameInvalid = "booking.name_invalid";
+    public const string BookingSpecialRequestsInvalid = "booking.special_requests_invalid";
     public const string BookingGuestFilterForbidden = "booking.guest_filter_forbidden";
 
     public const string TableSeatsExceeded = "table.seats_exceeded";

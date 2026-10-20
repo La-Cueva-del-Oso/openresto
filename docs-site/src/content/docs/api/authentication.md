@@ -180,7 +180,8 @@ If you get a `429`, wait a little before trying again.
   trail can't tell you which caller did what.
 - Set an expiry, unless the integration will outlast your plan for rotating the key.
 - Serve the API over HTTPS. The key is a bearer credential: anything that can read the header can
-  reuse it until it is revoked.
+  reuse it until it is revoked. `openresto-cli` enforces this: it refuses a plain `http://` server
+  address unless it is `localhost`, or you set `OPENRESTO_ALLOW_HTTP=1`.
 
 ## See also
 

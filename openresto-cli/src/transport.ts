@@ -22,6 +22,55 @@ export interface ClientOptions {
   baseUrl: string;
   apiKey?: string;
   fetchImpl?: typeof fetch;
+  /** Where `OPENRESTO_ALLOW_HTTP` is read from; defaults to `process.env`. */
+  env?: NodeJS.ProcessEnv;
+}
+
+export const ALLOW_HTTP_ENV = "OPENRESTO_ALLOW_HTTP";
+
+const IPV4_LOOPBACK = /^127(\.\d{1,3}){3}$/;
+
+function isLoopbackHost(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname === "[::1]" ||
+    IPV4_LOOPBACK.test(hostname)
+  );
+}
+
+/**
+ * Every request carries `X-API-Key` (or, at `auth login`, the key being verified), so a server
+ * address that is not https would put that long-lived secret on the wire in the clear. Plain http
+ * is therefore refused unless it points at this machine, or the operator opts in with
+ * `OPENRESTO_ALLOW_HTTP=1`. `new Client` is the one place every address passes through (saved
+ * profile, `OPENRESTO_URL`, `auth login`), so the rule lives here.
+ *
+ * @see [transport.test.ts](./transport.test.ts) — pins that http is refused for a remote host and
+ * accepted for loopback or with the opt-in, and that look-alike hostnames such as
+ * `localhost.evil.com` do not count as loopback.
+ */
+function assertSecureServerUrl(baseUrl: string, env: NodeJS.ProcessEnv): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new Error(
+      `"${baseUrl}" is not a valid server address. Use a full address such as https://booking.example.com.`,
+    );
+  }
+  if (parsed.protocol === "https:") {
+    return;
+  }
+  if (
+    parsed.protocol === "http:" &&
+    (isLoopbackHost(parsed.hostname) || env[ALLOW_HTTP_ENV] === "1")
+  ) {
+    return;
+  }
+  throw new Error(
+    `${parsed.origin} is not encrypted, so your API key would travel in the clear. ` +
+      `Use an https:// address, or set ${ALLOW_HTTP_ENV}=1 if you really want to send your credentials unencrypted.`,
+  );
 }
 
 export interface RequestOptions {
@@ -43,6 +92,7 @@ export class Client {
         "No server URL configured. Run `openresto auth login` or set OPENRESTO_URL.",
       );
     }
+    assertSecureServerUrl(options.baseUrl, options.env ?? process.env);
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.apiKey = options.apiKey;
     this.fetchImpl = options.fetchImpl ?? fetch;
