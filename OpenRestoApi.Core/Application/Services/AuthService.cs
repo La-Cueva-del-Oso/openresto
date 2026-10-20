@@ -67,6 +67,8 @@ public class AuthService(
     /// A changed password drops the account's push subscriptions along with its sessions: both
     /// are credentials a person who knew the old password may still hold.
     /// </summary>
+    /// <seealso>AuthServiceTests.ChangePasswordAsync_Invalidates_A_Pending_Reset_Token</seealso>
+    /// <seealso>AuthServiceTests.ChangePasswordAsync_Keeps_The_Security_Question</seealso>
     /// <seealso>AuthServiceTests.ChangePasswordAsync_Deletes_The_Callers_Push_Subscriptions_Only</seealso>
     /// <seealso>AuthServiceTests.ChangePasswordAsync_Keeps_Push_Subscriptions_When_The_Current_Password_Is_Wrong</seealso>
     public virtual async Task<string?> ChangePasswordAsync(string currentPassword, string newPassword)
@@ -111,18 +113,21 @@ public class AuthService(
         return Mint(cred);
     }
 
+    /// <seealso>AuthServiceTests.ResetPasswordAsync_Rejects_A_Missing_Token_Without_Touching_Any_Account</seealso>
     /// <seealso>AuthServiceTests.ResetPasswordAsync_Deletes_The_Resetting_Accounts_Push_Subscriptions_Only</seealso>
     /// <seealso>AuthServiceTests.ResetPasswordAsync_Keeps_Push_Subscriptions_For_An_Unknown_Token</seealso>
     public virtual async Task<bool> ResetPasswordAsync(string resetToken, string newPassword)
     {
         UserFields.ValidatePassword(newPassword);
+        // An absent token must never reach the lookup: a null would match every account with no
+        // reset pending.
+        if (string.IsNullOrEmpty(resetToken))
+            return false;
         AdminCredential? cred = await _credentialRepository.GetByResetTokenAsync(resetToken);
         if (cred == null || cred.ResetTokenExpiry < DateTime.UtcNow)
             return false;
         string previousHash = cred.PasswordHash;
         (cred.PasswordHash, cred.PasswordSalt) = _passwordService.Hash(newPassword);
-        cred.ResetToken = null;
-        cred.ResetTokenExpiry = null;
         cred.RevokeSessions();
         await _credentialRepository.SaveChangesAsync();
         await _pushSubscriptionRepository.DeleteForUserAsync(cred.Id);

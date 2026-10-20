@@ -34,7 +34,17 @@ public class AdminCredential
     /// </summary>
     public int SessionVersion { get; set; }
 
-    public void RevokeSessions() => SessionVersion++;
+    /// <summary>
+    /// Signs the account out everywhere and withdraws any pending self-service reset token: a
+    /// token issued before the credential changed (or the account was shut) must not outlive it.
+    /// </summary>
+    /// <seealso>DomainModelTests.AdminCredential_RevokeSessions_Raises_The_Version_And_Drops_A_Pending_Reset_Token</seealso>
+    public void RevokeSessions()
+    {
+        SessionVersion++;
+        ResetToken = null;
+        ResetTokenExpiry = null;
+    }
 
     // ── Personal Verification Question ──────────────────────────────────────
     public string? PvqQuestion { get; set; }

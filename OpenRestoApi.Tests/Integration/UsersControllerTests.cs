@@ -17,6 +17,8 @@ public class UsersControllerTests(TestWebAppFactory factory) : IClassFixture<Tes
 {
     private readonly TestWebAppFactory _factory = factory;
 
+    private const string SeededLogin = "seeded-password";
+
     private HttpClient OwnerClient() => _factory.CreateAuthenticatedClient();
 
     private async Task<HttpClient> ManagerClientAsync(string email = "gate-manager@test.com")
@@ -37,7 +39,7 @@ public class UsersControllerTests(TestWebAppFactory factory) : IClassFixture<Tes
         }
 
         var passwords = scope.ServiceProvider.GetRequiredService<IPasswordService>();
-        (string hash, string salt) = passwords.Hash("seeded-password");
+        (string hash, string salt) = passwords.Hash(SeededLogin);
         var cred = new AdminCredential
         {
             Email = email,
@@ -206,6 +208,35 @@ public class UsersControllerTests(TestWebAppFactory factory) : IClassFixture<Tes
         await OwnerClient().PatchAsJsonAsync($"/api/admin/users/{target.Id}/active", new { isActive = false });
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await session.GetAsync("/api/admin/overview")).StatusCode);
+    }
+
+    /// <seealso>UserServiceTests.SetActiveAsync_Deactivating_Ends_The_Accounts_Sessions</seealso>
+    [Fact]
+    public async Task Session_StaysDead_WhenTheAccountIsReactivated_AndANewSignInWorks()
+    {
+        AdminCredential target = await SeedUserAsync("reactivated-session@test.com", UserRoles.Manager);
+        HttpClient oldSession = _factory.CreateClientWithToken(
+            TestWebAppFactory.GenerateJwt(target.Id, target.Email, target.Role));
+        Assert.Equal(HttpStatusCode.OK, (await oldSession.GetAsync("/api/admin/overview")).StatusCode);
+
+        HttpClient owner = OwnerClient();
+        await owner.PatchAsJsonAsync($"/api/admin/users/{target.Id}/active", new { isActive = false });
+        await owner.PatchAsJsonAsync($"/api/admin/users/{target.Id}/active", new { isActive = true });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await oldSession.GetAsync("/api/admin/overview")).StatusCode);
+
+        HttpResponseMessage login = await _factory.CreateClient().PostAsJsonAsync("/api/admin/auth/login", new
+        {
+            email = target.Email,
+            password = SeededLogin,
+        });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        using IServiceScope scope = _factory.Services.CreateScope();
+        AdminCredential current = await scope.ServiceProvider.GetRequiredService<AppDbContext>()
+            .AdminCredentials.SingleAsync(c => c.Id == target.Id);
+        HttpClient newSession = _factory.CreateClientWithToken(
+            TestWebAppFactory.GenerateJwt(current.Id, current.Email, current.Role, current.SessionVersion));
+        Assert.Equal(HttpStatusCode.OK, (await newSession.GetAsync("/api/admin/overview")).StatusCode);
     }
 
     [Fact]

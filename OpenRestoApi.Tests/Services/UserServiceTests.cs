@@ -297,6 +297,36 @@ public class UserServiceTests
     }
 
     [Fact]
+    public async Task SetActiveAsync_Deactivating_Ends_The_Accounts_Sessions()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(SetActiveAsync_Deactivating_Ends_The_Accounts_Sessions));
+        AdminCredential caller = Seed(db, "owner@example.com");
+        AdminCredential manager = Seed(db, "manager@example.com", UserRoles.Manager);
+        UserService svc = CreateService(db, FakeCurrentUser.For(caller));
+
+        await svc.SetActiveAsync(manager.Id, new SetUserActiveRequest { IsActive = false });
+        Assert.Equal(1, (await db.AdminCredentials.SingleAsync(c => c.Id == manager.Id)).SessionVersion);
+
+        // Reactivating again must not walk the version back to a value an old token carries.
+        await svc.SetActiveAsync(manager.Id, new SetUserActiveRequest { IsActive = true });
+        Assert.Equal(1, (await db.AdminCredentials.SingleAsync(c => c.Id == manager.Id)).SessionVersion);
+        Assert.Equal(0, (await db.AdminCredentials.SingleAsync(c => c.Id == caller.Id)).SessionVersion);
+    }
+
+    [Fact]
+    public async Task SetActiveAsync_Reactivating_Leaves_The_Session_Version_Alone()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(SetActiveAsync_Reactivating_Leaves_The_Session_Version_Alone));
+        AdminCredential caller = Seed(db, "owner@example.com");
+        AdminCredential dormant = Seed(db, "dormant@example.com", UserRoles.Manager, isActive: false);
+        UserService svc = CreateService(db, FakeCurrentUser.For(caller));
+
+        await svc.SetActiveAsync(dormant.Id, new SetUserActiveRequest { IsActive = true });
+
+        Assert.Equal(0, (await db.AdminCredentials.SingleAsync(c => c.Id == dormant.Id)).SessionVersion);
+    }
+
+    [Fact]
     public async Task SetActiveAsync_Refuses_To_Deactivate_The_Caller()
     {
         using AppDbContext db = TestDbFactory.Create(nameof(SetActiveAsync_Refuses_To_Deactivate_The_Caller));
@@ -374,6 +404,53 @@ public class UserServiceTests
         Assert.Null(after.ResetToken);
         Assert.Null(after.ResetTokenExpiry);
         Assert.Equal(1, after.SessionVersion);
+    }
+
+    [Fact]
+    public async Task ResetPasswordAsync_Clears_The_Accounts_Security_Question()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Clears_The_Accounts_Security_Question));
+        AdminCredential user = Seed(db, "manager@example.com", UserRoles.Manager);
+        AdminCredential other = Seed(db, "owner@example.com");
+        foreach (AdminCredential c in new[] { user, other })
+        {
+            c.PvqQuestion = "First pet?";
+            c.PvqAnswerHash = "hash";
+            c.PvqAnswerSalt = "salt";
+            c.PvqFailedAttempts = 2;
+            c.PvqLockedUntil = DateTime.UtcNow.AddMinutes(10);
+        }
+        await db.SaveChangesAsync();
+        UserService svc = CreateService(db);
+
+        await svc.ResetPasswordAsync(user.Id, new ResetUserPasswordRequest { NewPassword = "issued-by-owner" });
+
+        AdminCredential after = await db.AdminCredentials.SingleAsync(c => c.Id == user.Id);
+        Assert.Null(after.PvqQuestion);
+        Assert.Null(after.PvqAnswerHash);
+        Assert.Null(after.PvqAnswerSalt);
+        Assert.Equal(0, after.PvqFailedAttempts);
+        Assert.Null(after.PvqLockedUntil);
+        AdminCredential untouched = await db.AdminCredentials.SingleAsync(c => c.Id == other.Id);
+        Assert.Equal("First pet?", untouched.PvqQuestion);
+        Assert.Equal("hash", untouched.PvqAnswerHash);
+    }
+
+    [Fact]
+    public async Task ResetPasswordAsync_Keeps_The_Security_Question_When_The_Password_Is_Rejected()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Keeps_The_Security_Question_When_The_Password_Is_Rejected));
+        AdminCredential user = Seed(db, "manager@example.com", UserRoles.Manager);
+        user.PvqQuestion = "First pet?";
+        user.PvqAnswerHash = "hash";
+        user.PvqAnswerSalt = "salt";
+        await db.SaveChangesAsync();
+        UserService svc = CreateService(db);
+
+        await Assert.ThrowsAsync<ValidationException>(
+            () => svc.ResetPasswordAsync(user.Id, new ResetUserPasswordRequest { NewPassword = "123" }));
+
+        Assert.Equal("First pet?", (await db.AdminCredentials.SingleAsync()).PvqQuestion);
     }
 
     [Fact]

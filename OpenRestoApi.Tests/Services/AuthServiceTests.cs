@@ -329,6 +329,56 @@ public class AuthServiceTests
         Assert.Equal(1, await db.AdminPushSubscriptions.CountAsync());
     }
 
+    [Fact]
+    public async Task ChangePasswordAsync_Invalidates_A_Pending_Reset_Token()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Invalidates_A_Pending_Reset_Token));
+        AdminCredential cred = SeedCredential(db, "admin@example.com", "old");
+        cred.ResetToken = "pending-token";
+        cred.ResetTokenExpiry = DateTime.UtcNow.AddMinutes(15);
+        await db.SaveChangesAsync();
+        AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
+
+        Assert.NotNull(await svc.ChangePasswordAsync("old", "newpass"));
+
+        Assert.False(await svc.ResetPasswordAsync("pending-token", "attacker-pw"));
+        Assert.NotNull(await svc.LoginAsync("admin@example.com", "newpass"));
+    }
+
+    [Fact]
+    public async Task ChangePasswordAsync_Keeps_A_Pending_Reset_Token_When_The_Current_Password_Is_Wrong()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Keeps_A_Pending_Reset_Token_When_The_Current_Password_Is_Wrong));
+        AdminCredential cred = SeedCredential(db, "admin@example.com", "old");
+        cred.ResetToken = "pending-token";
+        cred.ResetTokenExpiry = DateTime.UtcNow.AddMinutes(15);
+        await db.SaveChangesAsync();
+        AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
+
+        Assert.Null(await svc.ChangePasswordAsync("wrong", "newpass"));
+
+        Assert.Equal("pending-token", (await db.AdminCredentials.SingleAsync()).ResetToken);
+    }
+
+    [Fact]
+    public async Task ChangePasswordAsync_Keeps_The_Security_Question()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(ChangePasswordAsync_Keeps_The_Security_Question));
+        AdminCredential cred = SeedCredential(db, "admin@example.com", "old");
+        cred.PvqQuestion = "First pet?";
+        cred.PvqAnswerHash = "hash";
+        cred.PvqAnswerSalt = "salt";
+        await db.SaveChangesAsync();
+        AuthService svc = CreateService(db, FakeCurrentUser.For(cred));
+
+        Assert.NotNull(await svc.ChangePasswordAsync("old", "newpass"));
+
+        AdminCredential after = await db.AdminCredentials.SingleAsync();
+        Assert.Equal("First pet?", after.PvqQuestion);
+        Assert.Equal("hash", after.PvqAnswerHash);
+        Assert.Equal("salt", after.PvqAnswerSalt);
+    }
+
     // ── ChangeEmailAsync ────────────────────────────────────────────────────────
 
     [Fact]
@@ -524,6 +574,26 @@ public class AuthServiceTests
         Assert.False(await svc.ResetPasswordAsync("nonexistent", "freshpw"));
 
         Assert.Equal(1, await db.AdminPushSubscriptions.CountAsync());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task ResetPasswordAsync_Rejects_A_Missing_Token_Without_Touching_Any_Account(string? token)
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(ResetPasswordAsync_Rejects_A_Missing_Token_Without_Touching_Any_Account) + (token ?? "null"));
+        AdminCredential cred = SeedCredential(db, "admin@example.com", "pw");
+        AuthService svc = CreateService(db);
+
+        bool missing = await svc.ResetPasswordAsync(token!, "freshpw");
+        bool invalid = await svc.ResetPasswordAsync("nonexistent", "freshpw");
+
+        Assert.False(missing);
+        Assert.Equal(invalid, missing);
+        AdminCredential after = await db.AdminCredentials.SingleAsync();
+        Assert.Equal(cred.PasswordHash, after.PasswordHash);
+        Assert.Equal(0, after.SessionVersion);
+        Assert.NotNull(await svc.LoginAsync("admin@example.com", "pw"));
     }
 
     [Theory]

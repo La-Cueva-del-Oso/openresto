@@ -106,7 +106,7 @@ fi
 # was deactivated or demoted is exactly the situation this script exists to undo.
 log "Resetting admin credentials for $NEW_EMAIL (account #$TARGET_ID)..."
 docker exec "$CONTAINER" sqlite3 "$DB" \
-  "UPDATE AdminCredentials SET Email='$ESCAPED_EMAIL', PasswordHash='$NEW_HASH', PasswordSalt='$NEW_SALT', Role='Owner', IsActive=1, PvqQuestion=NULL, PvqAnswerHash=NULL, PvqAnswerSalt=NULL, ResetToken=NULL, ResetTokenExpiry=NULL WHERE Id=$TARGET_ID;"
+  "UPDATE AdminCredentials SET Email='$ESCAPED_EMAIL', PasswordHash='$NEW_HASH', PasswordSalt='$NEW_SALT', Role='Owner', IsActive=1, SessionVersion=SessionVersion+1, PvqQuestion=NULL, PvqAnswerHash=NULL, PvqAnswerSalt=NULL, ResetToken=NULL, ResetTokenExpiry=NULL WHERE Id=$TARGET_ID;"
 
 ACTUAL_EMAIL="$(docker exec "$CONTAINER" sqlite3 "$DB" "SELECT Email FROM AdminCredentials WHERE Id=$TARGET_ID;")"
 if [[ "$ACTUAL_EMAIL" != "$NEW_EMAIL" ]]; then

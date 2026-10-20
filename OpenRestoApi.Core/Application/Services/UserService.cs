@@ -89,6 +89,8 @@ public class UserService(
         return UserMapper.ToDto(user);
     }
 
+    /// <seealso>UserServiceTests.SetActiveAsync_Deactivating_Ends_The_Accounts_Sessions</seealso>
+    /// <seealso>UserServiceTests.SetActiveAsync_Reactivating_Leaves_The_Session_Version_Alone</seealso>
     public async Task<UserDto> SetActiveAsync(int id, SetUserActiveRequest req)
     {
         AdminCredential user = await RequireUserAsync(id);
@@ -106,6 +108,12 @@ public class UserService(
             }
 
             user.IsActive = req.IsActive;
+            // Reactivating must not revive the tokens issued before the account was shut.
+            if (!req.IsActive)
+            {
+                user.RevokeSessions();
+            }
+
             await _credentialRepository.SaveChangesAsync();
 
             _audit.RecordChange("isActive", !req.IsActive, req.IsActive);
@@ -122,10 +130,12 @@ public class UserService(
 
     /// <summary>
     /// Sets a new password on another account — the out-of-band recovery path for a user who
-    /// never configured a security question. Any outstanding self-service reset token is
-    /// dropped so the old one can't be replayed afterwards, and so are the account's push
-    /// subscriptions.
+    /// never configured a security question, and the recovery for a compromised one. Besides
+    /// ending its sessions and dropping any outstanding reset token and push subscriptions, it
+    /// clears the account's security question: whoever had the account may have set their own,
+    /// and it would otherwise let them take it back.
     /// </summary>
+    /// <seealso>UserServiceTests.ResetPasswordAsync_Clears_The_Accounts_Security_Question</seealso>
     /// <seealso>UserServiceTests.ResetPasswordAsync_Deletes_The_Accounts_Push_Subscriptions_Only</seealso>
     public async Task<UserDto> ResetPasswordAsync(int id, ResetUserPasswordRequest req)
     {
@@ -134,8 +144,11 @@ public class UserService(
 
         string previousHash = user.PasswordHash;
         (user.PasswordHash, user.PasswordSalt) = _passwordService.Hash(req.NewPassword);
-        user.ResetToken = null;
-        user.ResetTokenExpiry = null;
+        user.PvqQuestion = null;
+        user.PvqAnswerHash = null;
+        user.PvqAnswerSalt = null;
+        user.PvqFailedAttempts = 0;
+        user.PvqLockedUntil = null;
         user.RevokeSessions();
         await _credentialRepository.SaveChangesAsync();
         await _pushSubscriptionRepository.DeleteForUserAsync(user.Id);

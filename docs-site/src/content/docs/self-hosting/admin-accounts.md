@@ -64,6 +64,8 @@ What it does:
   created) if none matches, and sets that account's email to the one you gave.
 - It clears that account's security question and any pending reset token. Other accounts are
   not changed.
+- It signs that account out everywhere: every browser session it had open stops working, so
+  a stolen session cannot outlive the recovery.
 - If `.env` has no `ADMIN_PASSWORD`, it makes up a random password and prints it once, so
   note it down.
 
