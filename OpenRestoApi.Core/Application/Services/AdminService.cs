@@ -326,6 +326,8 @@ public class AdminService(
 
     public virtual async Task<BookingDetailDto> CreateBookingAsync(AdminCreateBookingRequest req)
     {
+        GuestText.RejectControlCharacters(req.CustomerName, specialRequests: null);
+
         Table table = await _tableRepository.GetWithSectionRestaurantAsync(req.TableId, req.SectionId)
             ?? throw new ValidationException("Table not found in the specified section.") { Code = ErrorCodes.BookingTableNotInSection };
 
@@ -474,6 +476,8 @@ public class AdminService(
 
     public virtual async Task<BookingDetailDto?> AdminUpdateBookingAsync(int id, AdminUpdateBookingRequest req)
     {
+        GuestText.RejectControlCharacters(req.CustomerName, req.SpecialRequests);
+
         Booking? booking = await _bookingRepository.GetByIdAsync(id);
 
         if (booking == null)
