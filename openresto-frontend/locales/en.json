@@ -405,7 +405,8 @@
     },
     "email": {
       "connection_failed": "Connection failed: {{detail}}",
-      "not_configured": "Email is not configured."
+      "not_configured": "Email is not configured.",
+      "password_required": "To change the server, port, username or encryption, re-enter the email password."
     },
     "generic": "Something went wrong",
     "genericMessage": "An unexpected error occurred. Try again.",
@@ -1747,6 +1748,7 @@
         "fromEmailLabel": "From email",
         "footerHintVerified": "Connection verified · confirmations ready",
         "footerHintUnverified": "Test the connection before enabling confirmations",
+        "passwordRequiredNotice": "To change the server, port, username or encryption, re-enter the email password.",
         "saveButton": "Save SMTP settings"
       },
       "users": {

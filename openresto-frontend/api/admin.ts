@@ -575,12 +575,21 @@ export async function getEmailSettings(): Promise<EmailSettingsDto> {
   }
 }
 
+/**
+ * Result-typed for the same reason as `saveBrandSettings`: a rejection (the server refusing to
+ * reuse the stored password against a new server) comes back as a message too, and must not read
+ * as a saved form. Null means the request never landed.
+ */
 export async function saveEmailSettings(
   data: Omit<EmailSettingsDto, "isConfigured">
-): Promise<{ message: string } | null> {
+): Promise<AdminMutationResult<{ message: string }> | null> {
   try {
     const res = await patch("/admin/email-settings", data);
-    return await res.json();
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      return { ok: false, message: apiErrorMessage(err, "Failed to save.") };
+    }
+    return { ok: true, data: await res.json() };
   } catch {
     return null;
   }

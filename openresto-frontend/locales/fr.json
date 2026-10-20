@@ -405,7 +405,8 @@
     },
     "email": {
       "connection_failed": "Échec de la connexion : {{detail}}",
-      "not_configured": "L'e-mail n'est pas configuré."
+      "not_configured": "L'e-mail n'est pas configuré.",
+      "password_required": "Pour modifier le serveur, le port, le nom d'utilisateur ou le chiffrement, saisissez à nouveau le mot de passe de messagerie."
     },
     "generic": "Une erreur s'est produite",
     "genericMessage": "Une erreur inattendue s'est produite. Réessayez.",
@@ -1747,6 +1748,7 @@
         "fromEmailLabel": "E-mail de l'expéditeur",
         "footerHintVerified": "Connexion vérifiée · confirmations prêtes",
         "footerHintUnverified": "Testez la connexion avant d'activer les confirmations",
+        "passwordRequiredNotice": "Pour modifier le serveur, le port, le nom d'utilisateur ou le chiffrement, saisissez à nouveau le mot de passe de messagerie.",
         "saveButton": "Enregistrer les paramètres SMTP"
       },
       "users": {
