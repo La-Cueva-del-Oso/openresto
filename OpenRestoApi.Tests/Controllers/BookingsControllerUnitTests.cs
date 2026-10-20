@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -33,7 +34,22 @@ public class BookingsControllerUnitTests
         _mockRecentCookie = new Mock<RecentBookingsCookie>(mockProvider.Object, mockEnv.Object);
         var reminders = new Mock<GuestReminderService>(null!, null!, null!, null!, Options.Create(new GuestPushSettings()), null!, null!);
         var wallet = new Mock<WalletPassService>(null!, null!, null!, null!);
-        _controller = new BookingsController(_mockBookingService.Object, _mockRecentCookie.Object, reminders.Object, wallet.Object);
+        _controller = new BookingsController(_mockBookingService.Object, _mockRecentCookie.Object, reminders.Object, wallet.Object)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+        _controller.HttpContext.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("203.0.113.7");
+    }
+
+    [Fact]
+    public async Task CreateBooking_PassesTheCallersAddress_SoAnAutoHoldCountsTowardTheirHoldLimit()
+    {
+        _mockBookingService.Setup(s => s.CreateBookingAsync(It.IsAny<BookingDto>(), It.IsAny<string?>()))
+            .ThrowsAsync(new ConflictException("Conflict"));
+
+        await Assert.ThrowsAsync<ConflictException>(() => _controller.CreateBooking(new BookingDto()));
+
+        _mockBookingService.Verify(s => s.CreateBookingAsync(It.IsAny<BookingDto>(), "203.0.113.7"), Times.Once);
     }
 
     [Fact]
@@ -41,7 +57,7 @@ public class BookingsControllerUnitTests
     {
         // Post-Bundle-6 the controller no longer catches; ConflictException propagates
         // to GlobalExceptionHandler which maps it → 409 with a {message} body.
-        _mockBookingService.Setup(s => s.CreateBookingAsync(It.IsAny<BookingDto>()))
+        _mockBookingService.Setup(s => s.CreateBookingAsync(It.IsAny<BookingDto>(), It.IsAny<string?>()))
             .ThrowsAsync(new ConflictException("Conflict"));
 
         ConflictException ex = await Assert.ThrowsAsync<ConflictException>(

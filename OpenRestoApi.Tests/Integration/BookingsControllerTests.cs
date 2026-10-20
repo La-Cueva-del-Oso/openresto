@@ -141,6 +141,58 @@ public class BookingsControllerTests(TestWebAppFactory factory) : IClassFixture<
     }
 
     [Fact]
+    public async Task CreateBooking_OutsideOpeningHours_Returns409WithTheClosedCode()
+    {
+        (int restaurantId, int sectionId, int tableId) = GetSeededIds();
+
+        HttpResponseMessage response = await _factory.CreateClient().PostAsJsonAsync("/api/bookings", new
+        {
+            restaurantId,
+            sectionId,
+            tableId,
+            date = DateTime.UtcNow.AddDays(25).ToString("yyyy-MM-ddT03:00:00"),
+            customerEmail = "night@test.com",
+            seats = 2
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        JsonElement body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(ErrorCodes.RestaurantClosedAtTime, body.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task CreateBooking_WithTheIdOfAnotherBooking_CreatesANewOneAndLeavesTheOtherAlone()
+    {
+        HttpClient client = _factory.CreateClient();
+        (int restaurantId, int sectionId, int tableId) = GetSeededIds();
+        string date = DateTime.UtcNow.AddDays(26).ToString("yyyy-MM-ddT12:00:00");
+
+        HttpResponseMessage first = await client.PostAsJsonAsync("/api/bookings", new
+        {
+            restaurantId, sectionId, tableId, date, customerEmail = "victim@test.com", seats = 2
+        });
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        int victimId = (await first.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32();
+
+        HttpResponseMessage second = await client.PostAsJsonAsync("/api/bookings", new
+        {
+            id = victimId,
+            restaurantId,
+            sectionId,
+            tableId,
+            date = DateTime.UtcNow.AddDays(27).ToString("yyyy-MM-ddT12:00:00"),
+            customerEmail = "attacker@test.com",
+            seats = 2
+        });
+
+        Assert.Equal(HttpStatusCode.Created, second.StatusCode);
+        Assert.NotEqual(victimId, (await second.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32());
+        using IServiceScope scope = _factory.Services.CreateScope();
+        AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.Equal("victim@test.com", db.Bookings.Single(b => b.Id == victimId).CustomerEmail);
+    }
+
+    [Fact]
     public async Task GetBookingByRef_WithCorrectEmail_ReturnsBooking()
     {
         HttpClient client = _factory.CreateClient();

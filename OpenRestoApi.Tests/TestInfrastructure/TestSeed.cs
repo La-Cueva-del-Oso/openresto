@@ -21,6 +21,23 @@ internal static class TestSeed
     }
 
     /// <summary>
+    /// Opens every location still on the default hours around the clock (equal open and close is
+    /// "always open"), so a booking dated relative to <c>UtcNow</c> does not hit the opening-hours
+    /// rule whenever the suite happens to run outside 09:00-22:00. A location with hours of its
+    /// own — the ones that test the rule — is left alone.
+    /// </summary>
+    public static void OpenAllDay(AppDbContext db)
+    {
+        foreach (Restaurant r in db.Restaurants.Where(r => r.OpenTime == OpeningHourDefaults.Open && r.CloseTime == OpeningHourDefaults.Close).ToList())
+        {
+            r.OpenTime = "00:00";
+            r.CloseTime = "00:00";
+        }
+
+        db.SaveChanges();
+    }
+
+    /// <summary>
     /// Restaurant with OpenTime/CloseTime/Timezone set, plus two tables (Availability shape).
     /// Defaults to the 11:00-13:00 UTC window used by availability slot tests.
     /// </summary>

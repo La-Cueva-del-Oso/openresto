@@ -98,9 +98,9 @@ public sealed class HoldPolicyService(
         }
 
         // 6. Operating hours / open days.
-        if (!restaurant.IsOpenAt(bookingDate))
+        if (OpeningHoursHelper.IsClosedAt(restaurant, bookingDate))
         {
-            return HoldPolicyResult.Rejected("The restaurant is closed at the requested time.", ErrorCodes.RestaurantClosedAtTime);
+            return HoldPolicyResult.Rejected(OpeningHoursHelper.ClosedMessage, ErrorCodes.RestaurantClosedAtTime);
         }
 
         return HoldPolicyResult.Eligible(restaurant, bookingDate);
