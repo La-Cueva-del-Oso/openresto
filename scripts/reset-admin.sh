@@ -9,9 +9,14 @@
 # forced back to an active Owner, so this also recovers an instance whose last Owner was
 # deactivated or demoted. Other accounts are left alone.
 #
+# The password never travels as a command-line argument (anyone on the host can read those with
+# `ps`), so there is no --password flag. It comes from --password-stdin, else ADMIN_PASSWORD in
+# .env, else a generated one.
+#
 # Usage:
 #   scripts/reset-admin.sh                                # reads ADMIN_EMAIL/ADMIN_PASSWORD from .env
-#   scripts/reset-admin.sh --email a@b.com --password 'NewPass123'
+#   scripts/reset-admin.sh --email a@b.com --password-stdin   # prompts (hidden) on a terminal
+#   printf '%s' "$NEW_PASSWORD" | scripts/reset-admin.sh --email a@b.com --password-stdin
 #   scripts/reset-admin.sh --email a@b.com                # generates a random password, prints it once
 #   scripts/reset-admin.sh --compose-file docker-compose.yml
 set -euo pipefail
@@ -24,12 +29,16 @@ LOG_TAG="reset-admin"
 COMPOSE_FILE="$SCRIPT_DIR/../docker-compose.vps.yml"
 NEW_EMAIL=""
 NEW_PASSWORD=""
+PASSWORD_STDIN=0
 GENERATED=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --email)        NEW_EMAIL="${2:-}"; shift 2 ;;
-    --password)     NEW_PASSWORD="${2:-}"; shift 2 ;;
+    --password-stdin) PASSWORD_STDIN=1; shift ;;
+    --password|--password=*)
+      echo "ERROR: --password is not accepted: command-line arguments are visible to every user on the host. Use --password-stdin, or ADMIN_PASSWORD in .env." >&2
+      exit 1 ;;
     --compose-file) COMPOSE_FILE="${2:-}"; shift 2 ;;
     -h|--help)
       grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -50,6 +59,18 @@ fi
 # --- Resolve email/password ---
 if [[ -z "$NEW_EMAIL" && -f "$ENV_FILE" ]]; then
   NEW_EMAIL="$(grep -E '^ADMIN_EMAIL=' "$ENV_FILE" | cut -d= -f2- | tr -d '[:space:]')"
+fi
+if [[ $PASSWORD_STDIN -eq 1 ]]; then
+  if [[ -t 0 ]]; then
+    read -rsp "New admin password: " NEW_PASSWORD; echo >&2
+  else
+    IFS= read -r NEW_PASSWORD || true
+  fi
+  NEW_PASSWORD="${NEW_PASSWORD%$'\r'}"
+  if [[ -z "$NEW_PASSWORD" ]]; then
+    log "ERROR: --password-stdin was given but no password was read from stdin."
+    exit 1
+  fi
 fi
 if [[ -z "$NEW_PASSWORD" && -f "$ENV_FILE" ]]; then
   NEW_PASSWORD="$(grep -E '^ADMIN_PASSWORD=' "$ENV_FILE" | cut -d= -f2-)"
@@ -78,14 +99,13 @@ if ! docker exec "$CONTAINER" sh -c 'command -v sqlite3 >/dev/null 2>&1'; then
 fi
 
 # PBKDF2-SHA256, 100k iterations, 16-byte salt, 32-byte key — matches AuthService.HashPassword
-read -r NEW_HASH NEW_SALT < <(python3 - "$NEW_PASSWORD" <<'PYEOF'
+read -r NEW_HASH NEW_SALT < <(printf '%s' "$NEW_PASSWORD" | python3 -c '
 import sys, os, hashlib, base64
-password = sys.argv[1].encode()
+password = sys.stdin.buffer.read()
 salt = os.urandom(16)
-key = hashlib.pbkdf2_hmac('sha256', password, salt, 100_000, dklen=32)
+key = hashlib.pbkdf2_hmac("sha256", password, salt, 100_000, dklen=32)
 print(base64.b64encode(key).decode(), base64.b64encode(salt).decode())
-PYEOF
-)
+')
 
 ESCAPED_EMAIL="${NEW_EMAIL//\'/\'\'}"
 
@@ -106,7 +126,7 @@ fi
 # was deactivated or demoted is exactly the situation this script exists to undo.
 log "Resetting admin credentials for $NEW_EMAIL (account #$TARGET_ID)..."
 docker exec "$CONTAINER" sqlite3 "$DB" \
-  "UPDATE AdminCredentials SET Email='$ESCAPED_EMAIL', PasswordHash='$NEW_HASH', PasswordSalt='$NEW_SALT', Role='Owner', IsActive=1, SessionVersion=SessionVersion+1, PvqQuestion=NULL, PvqAnswerHash=NULL, PvqAnswerSalt=NULL, ResetToken=NULL, ResetTokenExpiry=NULL WHERE Id=$TARGET_ID;"
+  "UPDATE AdminCredentials SET Email='$ESCAPED_EMAIL', PasswordHash='$NEW_HASH', PasswordSalt='$NEW_SALT', Role='Owner', IsActive=1, SessionVersion=SessionVersion+1, PvqQuestion=NULL, PvqAnswerHash=NULL, PvqAnswerSalt=NULL, PvqFailedAttempts=0, PvqLockedUntil=NULL, ResetToken=NULL, ResetTokenExpiry=NULL WHERE Id=$TARGET_ID;"
 
 ACTUAL_EMAIL="$(docker exec "$CONTAINER" sqlite3 "$DB" "SELECT Email FROM AdminCredentials WHERE Id=$TARGET_ID;")"
 if [[ "$ACTUAL_EMAIL" != "$NEW_EMAIL" ]]; then

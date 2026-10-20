@@ -62,12 +62,17 @@ What it does:
 
 - It resets the account whose email matches, or the lowest-numbered account (the first one
   created) if none matches, and sets that account's email to the one you gave.
-- It clears that account's security question and any pending reset token. Other accounts are
-  not changed.
+- It clears that account's security question, its failed-attempt count and lockout, and any
+  pending reset token. Other accounts are not changed.
 - It signs that account out everywhere: every browser session it had open stops working, so
   a stolen session cannot outlive the recovery.
 - If `.env` has no `ADMIN_PASSWORD`, it makes up a random password and prints it once, so
   note it down.
 
-You can also pass `--email` and `--password` on the command line, but other users on the server
-can see command-line arguments, so `.env` or the generated password is safer.
+You can also pass `--email` on the command line, and `--password-stdin` to give the password
+on standard input (a hidden prompt on a terminal, or piped in). There is deliberately no
+`--password` flag: other users on the server can see command-line arguments.
+
+```bash
+printf '%s' "$NEW_PASSWORD" | ./scripts/reset-admin.sh --email you@example.com --password-stdin
+```
