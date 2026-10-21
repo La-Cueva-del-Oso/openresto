@@ -58,14 +58,13 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
         return db;
     }
 
-    private UserService UserServiceAs(AdminCredential? caller = null)
+    private UserService UserServiceAs(AdminCredential? caller = null, IInterceptor? interceptor = null)
     {
-        AppDbContext db = NewContext();
+        AppDbContext db = interceptor is null ? NewContext() : NewContext(interceptor);
         return new UserService(
             new AdminCredentialRepository(db),
             new PasswordService(),
-            caller is null ? FakeCurrentUser.Anonymous() : FakeCurrentUser.For(caller),
-            new AdminPushSubscriptionRepository(db));
+            caller is null ? FakeCurrentUser.Anonymous() : FakeCurrentUser.For(caller));
     }
 
     private async Task<List<AdminCredential>> SeedOwnersAsync(int count)
@@ -146,9 +145,10 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
     }
 
     private AuthService AuthServiceAs(
-        AdminCredential? caller = null, IPasswordService? passwords = null, IAuditScope? audit = null, IAdminCredentialRepository? repository = null)
+        AdminCredential? caller = null, IPasswordService? passwords = null, IAuditScope? audit = null, IAdminCredentialRepository? repository = null,
+        IInterceptor? interceptor = null)
     {
-        AppDbContext db = NewContext();
+        AppDbContext db = interceptor is null ? NewContext() : NewContext(interceptor);
         var jwt = new Mock<IJwtTokenService>();
         jwt.Setup(j => j.Generate(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>())).Returns("token");
         return new AuthService(
@@ -156,7 +156,6 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
             passwords ?? new PasswordService(),
             jwt.Object,
             caller is null ? FakeCurrentUser.Anonymous() : FakeCurrentUser.For(caller),
-            new AdminPushSubscriptionRepository(db),
             audit);
     }
 
@@ -182,6 +181,45 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
         AdminCredential stored = await ReloadAsync(account.Id);
         Assert.Equal("Renamed", stored.DisplayName);
         Assert.Equal(1, stored.SessionVersion);
+    }
+
+    [Theory]
+    [InlineData("change")]
+    [InlineData("token")]
+    [InlineData("owner")]
+    public async Task A_Recovery_Whose_Push_Subscription_Delete_Fails_Changes_Nothing(string flow)
+    {
+        AdminCredential account = await SeedAccountWithResetTokenAsync("T");
+        var owner = new AdminCredential { Email = "boss@example.com", PasswordHash = "h", PasswordSalt = "s", Role = UserRoles.Owner };
+        using (AppDbContext db = NewContext())
+        {
+            db.AdminCredentials.Add(owner);
+            await db.SaveChangesAsync();
+        }
+
+        await SeedPushSubscriptionAsync(account.Id);
+        var failing = new FailOnPushSubscriptionDelete();
+
+        Task recovery = flow switch
+        {
+            "change" => AuthServiceAs(account, interceptor: failing).ChangePasswordAsync("Current123!", "Changed123!"),
+            "token" => AuthServiceAs(interceptor: failing).ResetPasswordAsync("T", "Changed123!"),
+            _ => UserServiceAs(owner, failing).ResetPasswordAsync(account.Id, new ResetUserPasswordRequest { NewPassword = "OwnerReset123!" }),
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => recovery);
+        Assert.True(await PasswordIsAsync(account.Id, "Current123!"));
+        Assert.Equal(0, (await ReloadAsync(account.Id)).SessionVersion);
+        Assert.Equal(1, await PushSubscriptionCountAsync(account.Id));
+    }
+
+    private sealed class FailOnPushSubscriptionDelete : DbCommandInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+            => command.CommandText.Contains("DELETE FROM \"AdminPushSubscriptions\"", StringComparison.Ordinal)
+                ? throw new InvalidOperationException("push subscription delete refused")
+                : base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
     }
 
     /// <summary>Refuses the first session-version bump the way a locked database does.</summary>

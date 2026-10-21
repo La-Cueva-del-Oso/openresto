@@ -8,10 +8,6 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories;
 [OnlyAccessibleBy("OpenRestoApi.Extensions.ServiceCollectionExtensions")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.NotificationServiceTests")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.BookingNotificationServiceTests")]
-[OnlyAccessibleBy("OpenRestoApi.Tests.Services.AdminCredentialConcurrencyTests")]
-[OnlyAccessibleBy("OpenRestoApi.Tests.Services.AdminApiKeyRevocationTests")]
-[OnlyAccessibleBy("OpenRestoApi.Tests.Services.AuthServiceTests")]
-[OnlyAccessibleBy("OpenRestoApi.Tests.Services.UserServiceTests")]
 [ExternalAccessAllowed]
 internal class AdminPushSubscriptionRepository(AppDbContext db) : IAdminPushSubscriptionRepository
 {
@@ -28,13 +24,6 @@ internal class AdminPushSubscriptionRepository(AppDbContext db) : IAdminPushSubs
         return await _db.AdminPushSubscriptions
             .Where(s => s.User!.IsActive)
             .ToListAsync();
-    }
-
-    public async Task DeleteForUserAsync(int userId)
-    {
-        List<AdminPushSubscription> owned = await _db.AdminPushSubscriptions.Where(s => s.UserId == userId).ToListAsync();
-        _db.AdminPushSubscriptions.RemoveRange(owned);
-        await _db.SaveChangesAsync();
     }
 
     public async Task<AdminPushSubscription> AddAsync(AdminPushSubscription subscription)

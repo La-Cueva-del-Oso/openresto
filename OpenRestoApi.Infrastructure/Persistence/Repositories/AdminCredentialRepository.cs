@@ -77,14 +77,16 @@ internal class AdminCredentialRepository(AppDbContext db, ISystemClock? clock = 
         int rows = await UpdateAndRevokeApiKeysAsync(
             StillAsRead(credential).Where(c => c.ResetToken == resetToken && c.ResetTokenExpiry >= nowUtc),
             credential.Id,
-            s => SetPassword(s, passwordHash, passwordSalt));
+            s => SetPassword(s, passwordHash, passwordSalt),
+            dropPushSubscriptions: true);
         return await RefreshAsync(credential, rows);
     }
 
     public async Task<bool> TryChangePasswordAsync(AdminCredential credential, string passwordHash, string passwordSalt)
     {
         int rows = await UpdateAndRevokeApiKeysAsync(
-            StillAsRead(credential), credential.Id, s => SetPassword(s, passwordHash, passwordSalt));
+            StillAsRead(credential), credential.Id, s => SetPassword(s, passwordHash, passwordSalt),
+            dropPushSubscriptions: true);
         return await RefreshAsync(credential, rows);
     }
 
@@ -112,11 +114,11 @@ internal class AdminCredentialRepository(AppDbContext db, ISystemClock? clock = 
         return await RefreshAsync(credential, rows);
     }
 
-    public Task RevokeSessionsAsync(AdminCredential credential) => RevokeSessionsCoreAsync(credential, revokeApiKeys: false);
+    public Task RevokeSessionsAsync(AdminCredential credential) => RevokeSessionsCoreAsync(credential, recovering: false);
 
-    public Task RevokeSessionsAndApiKeysAsync(AdminCredential credential) => RevokeSessionsCoreAsync(credential, revokeApiKeys: true);
+    public Task RevokeSessionsAndApiKeysAsync(AdminCredential credential) => RevokeSessionsCoreAsync(credential, recovering: true);
 
-    private async Task RevokeSessionsCoreAsync(AdminCredential credential, bool revokeApiKeys)
+    private async Task RevokeSessionsCoreAsync(AdminCredential credential, bool recovering)
     {
         // The execution strategy has to own the transaction: it retries the whole unit on a busy database.
         await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
@@ -125,9 +127,10 @@ internal class AdminCredentialRepository(AppDbContext db, ISystemClock? clock = 
             // Changes stay pending until the commit: a retry after a rollback must find them still there.
             await _db.SaveChangesAsync(acceptAllChangesOnSuccess: false);
             await _db.AdminCredentials.Where(c => c.Id == credential.Id).ExecuteUpdateAsync(RevokeSessions);
-            if (revokeApiKeys)
+            if (recovering)
             {
                 await RevokeApiKeysAsync(credential.Id);
+                await DeletePushSubscriptionsAsync(credential.Id);
             }
 
             await _db.Entry(credential).ReloadAsync();
@@ -138,9 +141,12 @@ internal class AdminCredentialRepository(AppDbContext db, ISystemClock? clock = 
 
     // The credential write and the key revocation land together or not at all, so no instant exists
     // where the sessions are dead and a key the previous holder minted still works. Nothing is
-    // revoked when the write is refused.
+    // revoked when the write is refused. Push subscriptions go in the same unit when asked: a
+    // browser the previous holder registered must not keep receiving bookings, and a crash between
+    // two transactions would leave it doing so. A deactivation keeps them (they return with the account).
     private async Task<int> UpdateAndRevokeApiKeysAsync(
-        IQueryable<AdminCredential> target, int userId, Action<UpdateSettersBuilder<AdminCredential>> set)
+        IQueryable<AdminCredential> target, int userId, Action<UpdateSettersBuilder<AdminCredential>> set,
+        bool dropPushSubscriptions = false)
     {
         int rows = 0;
         await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
@@ -150,12 +156,19 @@ internal class AdminCredentialRepository(AppDbContext db, ISystemClock? clock = 
             if (rows > 0)
             {
                 await RevokeApiKeysAsync(userId);
+                if (dropPushSubscriptions)
+                {
+                    await DeletePushSubscriptionsAsync(userId);
+                }
             }
 
             await tx.CommitAsync();
         });
         return rows;
     }
+
+    private Task<int> DeletePushSubscriptionsAsync(int userId)
+        => _db.AdminPushSubscriptions.Where(s => s.UserId == userId).ExecuteDeleteAsync();
 
     // Already-revoked keys keep their original RevokedAt.
     private Task<int> RevokeApiKeysAsync(int userId)

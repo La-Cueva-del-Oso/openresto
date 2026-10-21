@@ -19,10 +19,8 @@ public class AuthService(
     IPasswordService passwordService,
     IJwtTokenService jwtTokenService,
     ICurrentUserService currentUser,
-    IAdminPushSubscriptionRepository pushSubscriptionRepository,
     IAuditScope? audit = null) : IAuthService
 {
-    private readonly IAdminPushSubscriptionRepository _pushSubscriptionRepository = pushSubscriptionRepository;
     private readonly IAdminCredentialRepository _credentialRepository = credentialRepository;
     private readonly IPasswordService _passwordService = passwordService;
     private readonly IJwtTokenService _jwtTokenService = jwtTokenService;
@@ -83,7 +81,6 @@ public class AuthService(
         // Refused when a reset, a deactivation or another change landed since the account was read.
         if (!await _credentialRepository.TryChangePasswordAsync(cred, hash, salt))
             return null;
-        await _pushSubscriptionRepository.DeleteForUserAsync(cred.Id);
 
         _audit.RecordChange("passwordHash", previousHash, cred.PasswordHash);
         Describe(AuditActions.AuthPasswordChange, cred, $"Changed the password for {cred.Email}");
@@ -138,7 +135,6 @@ public class AuthService(
         (string hash, string salt) = _passwordService.Hash(newPassword);
         if (!await _credentialRepository.TryResetPasswordAsync(cred, resetToken, DateTime.UtcNow, hash, salt))
             return false;
-        await _pushSubscriptionRepository.DeleteForUserAsync(cred.Id);
 
         // The reset arrives with a token rather than a session, so the actor is whoever the token
         // resolved to — the request's claims would name nobody.

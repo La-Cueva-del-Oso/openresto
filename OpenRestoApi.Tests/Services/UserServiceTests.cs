@@ -16,8 +16,7 @@ public class UserServiceTests
         => new(
             new AdminCredentialRepository(db),
             new PasswordService(),
-            currentUser ?? FakeCurrentUser.Anonymous(),
-            new AdminPushSubscriptionRepository(db));
+            currentUser ?? FakeCurrentUser.Anonymous());
 
     private static void SeedPushSubscription(AppDbContext db, int userId, string endpoint)
     {

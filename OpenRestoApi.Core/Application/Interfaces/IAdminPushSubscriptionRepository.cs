@@ -17,9 +17,6 @@ public interface IAdminPushSubscriptionRepository
     /// </summary>
     Task<List<AdminPushSubscription>> GetForActiveUsersAsync();
 
-    /// <summary>Deletes every subscription the account owns, committing immediately.</summary>
-    Task DeleteForUserAsync(int userId);
-
     /// <summary>Adds and saves a subscription.</summary>
     Task<AdminPushSubscription> AddAsync(AdminPushSubscription subscription);
 

@@ -31,8 +31,7 @@ public class AuthServiceTests
             new AdminCredentialRepository(db),
             new PasswordService(),
             new JwtTokenService(BuildConfig()),
-            currentUser ?? FakeCurrentUser.Anonymous(),
-            new AdminPushSubscriptionRepository(db));
+            currentUser ?? FakeCurrentUser.Anonymous());
     }
 
     private static void SeedPushSubscription(AppDbContext db, int userId, string endpoint)

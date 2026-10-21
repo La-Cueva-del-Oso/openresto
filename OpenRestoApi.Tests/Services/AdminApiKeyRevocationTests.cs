@@ -93,11 +93,11 @@ public sealed class AdminApiKeyRevocationTests : IDisposable
     {
         var jwt = new Mock<IJwtTokenService>();
         jwt.Setup(j => j.Generate(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>())).Returns("token");
-        return new AuthService(_repository, _passwords, jwt.Object, FakeCurrentUser.For(caller), new AdminPushSubscriptionRepository(_db));
+        return new AuthService(_repository, _passwords, jwt.Object, FakeCurrentUser.For(caller));
     }
 
     private UserService UsersAs(AdminCredential caller)
-        => new(_repository, _passwords, FakeCurrentUser.For(caller), new AdminPushSubscriptionRepository(_db));
+        => new(_repository, _passwords, FakeCurrentUser.For(caller));
 
     private async Task SetResetTokenAsync(int id, string token)
         => await _db.AdminCredentials.Where(c => c.Id == id).ExecuteUpdateAsync(s => s

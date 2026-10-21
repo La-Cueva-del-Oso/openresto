@@ -66,7 +66,7 @@ public interface IAdminCredentialRepository
 
     /// <summary>
     /// Consumes <paramref name="resetToken"/>: sets the new password and revokes the account's
-    /// sessions (which withdraws the token) and API keys in one transaction, held to the token
+    /// sessions (which withdraws the token), API keys and push subscriptions in one transaction, held to the token
     /// still being the stored, unexpired one at <paramref name="nowUtc"/>, to the account being
     /// active and to the <see cref="AdminCredential.SessionVersion"/> <paramref name="credential"/>
     /// was read with. False means refused and nothing changed: a password change, an Owner's
@@ -83,10 +83,11 @@ public interface IAdminCredentialRepository
 
     /// <summary>
     /// Sets the new password on <paramref name="credential"/> and revokes its sessions, pending
-    /// reset token and API keys in one transaction, held to the account being active and to the
-    /// <see cref="AdminCredential.SessionVersion"/> it was read with. False means refused and
-    /// nothing changed: a reset, a deactivation, a sign-out or another change got there first.
+    /// reset token, API keys and push subscriptions in one transaction, held to the account being
+    /// active and to the <see cref="AdminCredential.SessionVersion"/> it was read with. False means
+    /// refused and nothing changed: a reset, a deactivation, a sign-out or another change got there first.
     /// </summary>
+    /// <seealso>AdminCredentialConcurrencyTests.A_Recovery_Whose_Push_Subscription_Delete_Fails_Changes_Nothing</seealso>
     /// <seealso>AdminCredentialConcurrencyTests.A_Password_Change_Read_Before_An_Owner_Reset_Is_Refused</seealso>
     /// <seealso>AdminApiKeyRevocationTests.Changing_The_Password_Revokes_The_Accounts_Live_Api_Keys_And_Only_Those</seealso>
     /// <seealso>AdminApiKeyRevocationTests.A_Refused_Password_Change_Leaves_The_Accounts_Api_Keys_Alone</seealso>
@@ -128,10 +129,11 @@ public interface IAdminCredentialRepository
 
     /// <summary>
     /// <see cref="RevokeSessionsAsync"/> for an account being recovered (an Owner's password
-    /// reset): the same transaction also revokes the account's live API keys, since a key minted
-    /// by whoever had the account outlives its sessions otherwise. A plain sign-out is not
-    /// recovery and uses <see cref="RevokeSessionsAsync"/>.
+    /// reset): the same transaction also revokes the account's live API keys and deletes its push
+    /// subscriptions, since a key or a browser registered by whoever had the account outlives its
+    /// sessions otherwise. A plain sign-out is not recovery and uses <see cref="RevokeSessionsAsync"/>.
     /// </summary>
+    /// <seealso>AdminCredentialConcurrencyTests.A_Recovery_Whose_Push_Subscription_Delete_Fails_Changes_Nothing</seealso>
     /// <seealso>AdminApiKeyRevocationTests.An_Owner_Reset_Revokes_The_Accounts_Live_Api_Keys_And_Only_Those</seealso>
     /// <seealso>AdminApiKeyRevocationTests.Signing_Out_Leaves_The_Accounts_Api_Keys_Alone</seealso>
     Task RevokeSessionsAndApiKeysAsync(AdminCredential credential);

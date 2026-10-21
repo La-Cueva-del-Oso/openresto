@@ -18,10 +18,8 @@ public class UserService(
     IAdminCredentialRepository credentialRepository,
     IPasswordService passwordService,
     ICurrentUserService currentUser,
-    IAdminPushSubscriptionRepository pushSubscriptionRepository,
     IAuditScope? audit = null)
 {
-    private readonly IAdminPushSubscriptionRepository _pushSubscriptionRepository = pushSubscriptionRepository;
     private readonly IAdminCredentialRepository _credentialRepository = credentialRepository;
     private readonly IPasswordService _passwordService = passwordService;
     private readonly ICurrentUserService _currentUser = currentUser;
@@ -150,7 +148,6 @@ public class UserService(
         user.PvqFailedAttempts = 0;
         user.PvqLockedUntil = null;
         await _credentialRepository.RevokeSessionsAndApiKeysAsync(user);
-        await _pushSubscriptionRepository.DeleteForUserAsync(user.Id);
 
         _audit.RecordChange("passwordHash", previousHash, user.PasswordHash);
         Describe(AuditActions.UserPasswordReset, user,
