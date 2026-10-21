@@ -28,6 +28,7 @@ How each feature behaves, its API fields and its error codes are in
 - Text that comes from the API can no longer drive the terminal of someone using the command-line client: control and escape characters in tables, records, errors and `--json` output are shown as visible `\xNN` escapes. The server also refuses control characters in a booking's name and special requests (`booking.name_invalid`, `booking.special_requests_invalid`).
 - Web Push requests now give up after 15 seconds and read at most 64 KiB of the push service's answer. Before, a push address chosen by a guest could answer with an endless body and tie up the server while a reminder or notification was being sent; such a send is now just that subscription's failure.
 - Purging a booking no longer erases another guest's notifications and email-failure records when two bookings happen to share a reference. Rows linked to the booking are found by that link; rows that only carry the reference are removed only if they also match the guest's own name or address.
+- An API key with the `users:write` scope can now deactivate an account but no longer reactivate one: the request is refused with `api_key.not_allowed` (403) and an Owner reactivates from a signed-in session. Before, a key could switch an account back on, which gave its login back to anyone who still knew the old password. `openresto users activate` therefore stops working with an API key.
 
 ### Changed
 

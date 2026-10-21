@@ -22,7 +22,9 @@ namespace OpenRestoApi.Controllers;
 /// key may create is not a fix — <c>EmailSettingsController</c> is gated on
 /// <see cref="AuthPolicies.RequireAdmin"/>, so a Manager login defeats the boundary just as well
 /// as an Owner one. Reads and deactivation stay scoped: listing accounts, and shutting a
-/// compromised one off, grant no session and are genuine automation.
+/// compromised one off, grant no session and are genuine automation. Reactivation is the other
+/// direction of the same action and does hand a login back — to whoever still knows an old
+/// password — so <c>SetActive</c> refuses it for a key and leaves it to an interactive session.
 /// </para>
 /// </summary>
 [ApiController]
@@ -56,10 +58,23 @@ public class UsersController(UserService users) : ControllerBase
         => Ok(await _users.UpdateRoleAsync(id, req));
 
     // <seealso>ApiKeyAuthTests.UsersWriteKey_CanStillDeactivateAnAccount</seealso>
+    // <seealso>ApiKeyAuthTests.UsersWriteKey_CannotReactivateAnAccount</seealso>
+    // <seealso>ApiKeyAuthTests.OwnerSession_CanReactivateAnAccount</seealso>
     [HttpPatch("{id:int}/active")]
     [RequiresScope(ApiKeyScopes.Users, ApiKeyScopes.Write)]
     public async Task<IActionResult> SetActive(int id, [FromBody] SetUserActiveRequest req)
-        => Ok(await _users.SetActiveAsync(id, req));
+    {
+        if (req.IsActive && User.IsApiKeyAuthenticated())
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new MessageResponse
+            {
+                Message = "Reactivating an account isn't available with an API key. Sign in to do it.",
+                Code = ErrorCodes.ApiKeyNotAllowed,
+            });
+        }
+
+        return Ok(await _users.SetActiveAsync(id, req));
+    }
 
     // <seealso>ApiKeyAuthTests.UsersWriteKey_CannotResetAPassword</seealso>
     [HttpPost("{id:int}/reset-password")]

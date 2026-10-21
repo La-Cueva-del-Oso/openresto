@@ -96,7 +96,7 @@ needs.
 | `locations` | `read`/`write` | Restaurants, opening hours and their settings             |
 | `tables`    | `read`/`write` | Sections, tables and combinable groups                    |
 | `brand`     | `read`/`write` | Site name, colours, contact details, highlights and media |
-| `users`     | `read`/`write` | List accounts; `write` activates and deactivates them     |
+| `users`     | `read`/`write` | List accounts; `write` deactivates them, never activates  |
 | `audit`     | `read`         | The admin activity trail                                  |
 | `guests`    | `read`         | Customer names and emails on bookings and the waitlist    |
 | `email`     | `read`         | Whether outgoing mail is configured and delivering        |
@@ -139,8 +139,10 @@ would be sitting in a CI secret.
 The three excluded `users` actions follow the same logic. A key that could create an account,
 or reset someone's password, could give its holder a real admin login. From there they could
 sign in to the admin UI and mint themselves a key with every permission, so the key's own
-limits would mean nothing. That is why `users:write` covers activating and deactivating
-accounts only, which can't start anyone's session.
+limits would mean nothing. That is why `users:write` covers deactivating accounts only, which
+can't start anyone's session. Reactivating one gives a login back to anyone who still knows its
+old password, so a key that tries gets a 403 (`api_key.not_allowed`) and an Owner has to do it
+from a signed-in session.
 
 ## What a key cannot do
 
