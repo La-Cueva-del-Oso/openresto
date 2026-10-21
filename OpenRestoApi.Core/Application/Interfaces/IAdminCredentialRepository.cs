@@ -31,9 +31,10 @@ public interface IAdminCredentialRepository
     Task<bool> TrySetRoleAsync(AdminCredential user, string role);
 
     /// <summary>
-    /// Deactivates <paramref name="user"/> and ends its sessions, under the same one-statement
-    /// last-Owner rule as <see cref="TrySetRoleAsync"/>.
+    /// Deactivates <paramref name="user"/>, ends its sessions and revokes its API keys, under the
+    /// same one-statement last-Owner rule as <see cref="TrySetRoleAsync"/>.
     /// </summary>
+    /// <seealso>AdminApiKeyRevocationTests.Deactivating_An_Account_Revokes_Its_Live_Api_Keys_And_Only_Those</seealso>
     /// <seealso>AdminCredentialConcurrencyTests.Two_Owners_Deactivating_Each_Other_Concurrently_Leave_One_Active_Owner</seealso>
     /// <seealso>AdminCredentialConcurrencyTests.Deactivations_Succeed_Concurrently_While_Another_Active_Owner_Remains</seealso>
     /// <seealso>AdminCredentialConcurrencyTests.Three_Owners_Deactivated_Concurrently_Keep_Exactly_One</seealso>
@@ -65,17 +66,42 @@ public interface IAdminCredentialRepository
 
     /// <summary>
     /// Consumes <paramref name="resetToken"/>: sets the new password and revokes the account's
-    /// sessions (which withdraws the token) in one statement, held to the token still being the
-    /// stored, unexpired one at <paramref name="nowUtc"/> and to the
-    /// <see cref="AdminCredential.SessionVersion"/> <paramref name="credential"/> was read with.
-    /// False means refused and nothing changed: a password change, an Owner's reset or another
-    /// request spending the same token got there first.
+    /// sessions (which withdraws the token) and API keys in one transaction, held to the token
+    /// still being the stored, unexpired one at <paramref name="nowUtc"/>, to the account being
+    /// active and to the <see cref="AdminCredential.SessionVersion"/> <paramref name="credential"/>
+    /// was read with. False means refused and nothing changed: a password change, an Owner's
+    /// reset or another request spending the same token got there first.
     /// </summary>
+    /// <seealso>AdminApiKeyRevocationTests.Resetting_The_Password_With_A_Token_Revokes_The_Accounts_Live_Api_Keys_And_Only_Those</seealso>
+    /// <seealso>AdminApiKeyRevocationTests.A_Refused_Token_Reset_Leaves_The_Accounts_Api_Keys_Alone</seealso>
+    /// <seealso>AdminApiKeyRevocationTests.Resetting_With_A_Token_Is_Refused_For_A_Deactivated_Account</seealso>
     /// <seealso>AdminCredentialConcurrencyTests.A_Reset_Link_Read_Before_The_Password_Changed_Cannot_Set_A_Password_Afterwards</seealso>
     /// <seealso>AdminCredentialConcurrencyTests.A_Reset_Link_Is_Spent_Once_When_Two_Requests_Read_It</seealso>
     /// <seealso>AuthServiceTests.ResetPasswordAsync_Succeeds_Clears_Token_And_Allows_New_Password</seealso>
     /// <seealso>AuthServiceTests.ResetPasswordAsync_Returns_False_For_Expired_Token</seealso>
     Task<bool> TryResetPasswordAsync(AdminCredential credential, string resetToken, DateTime nowUtc, string passwordHash, string passwordSalt);
+
+    /// <summary>
+    /// Sets the new password on <paramref name="credential"/> and revokes its sessions, pending
+    /// reset token and API keys in one transaction, held to the account being active and to the
+    /// <see cref="AdminCredential.SessionVersion"/> it was read with. False means refused and
+    /// nothing changed: a reset, a deactivation, a sign-out or another change got there first.
+    /// </summary>
+    /// <seealso>AdminCredentialConcurrencyTests.A_Password_Change_Read_Before_An_Owner_Reset_Is_Refused</seealso>
+    /// <seealso>AdminApiKeyRevocationTests.Changing_The_Password_Revokes_The_Accounts_Live_Api_Keys_And_Only_Those</seealso>
+    /// <seealso>AdminApiKeyRevocationTests.A_Refused_Password_Change_Leaves_The_Accounts_Api_Keys_Alone</seealso>
+    Task<bool> TryChangePasswordAsync(AdminCredential credential, string passwordHash, string passwordSalt);
+
+    /// <summary>
+    /// Sets the sign-in email of <paramref name="credential"/>, held to the account being active
+    /// and to the <see cref="AdminCredential.SessionVersion"/> it was read with; the version is
+    /// left alone, as the caller re-issues its own token. False means refused and nothing changed:
+    /// the account's sessions were revoked since it was read, or another account took the address
+    /// (the unique index decides that race, not the caller's earlier lookup).
+    /// </summary>
+    /// <seealso>AdminCredentialConcurrencyTests.An_Email_Change_Read_Before_An_Owner_Reset_Is_Refused</seealso>
+    /// <seealso>AdminCredentialConcurrencyTests.Two_Accounts_Changing_To_The_Same_Email_Concurrently_Leave_One_Owner_Of_It</seealso>
+    Task<bool> TryChangeEmailAsync(AdminCredential credential, string email);
 
     /// <summary>
     /// Stores the security question on <paramref name="credential"/> unless its sessions were
@@ -98,6 +124,16 @@ public interface IAdminCredentialRepository
     /// <seealso>AdminCredentialRepositoryTests.RevokeSessionsAsync_Raises_The_Version_By_One_And_Drops_A_Pending_Reset_Token</seealso>
     /// <seealso>AdminCredentialRepositoryTests.RevokeSessionsAsync_Saves_The_Pending_Changes_With_The_Revocation</seealso>
     Task RevokeSessionsAsync(AdminCredential credential);
+
+    /// <summary>
+    /// <see cref="RevokeSessionsAsync"/> for an account being recovered (an Owner's password
+    /// reset): the same transaction also revokes the account's live API keys, since a key minted
+    /// by whoever had the account outlives its sessions otherwise. A plain sign-out is not
+    /// recovery and uses <see cref="RevokeSessionsAsync"/>.
+    /// </summary>
+    /// <seealso>AdminApiKeyRevocationTests.An_Owner_Reset_Revokes_The_Accounts_Live_Api_Keys_And_Only_Those</seealso>
+    /// <seealso>AdminApiKeyRevocationTests.Signing_Out_Leaves_The_Accounts_Api_Keys_Alone</seealso>
+    Task RevokeSessionsAndApiKeysAsync(AdminCredential credential);
 
     /// <summary>Adds and saves a new credential, returning the persisted entity.</summary>
     Task<AdminCredential> AddAsync(AdminCredential credential);

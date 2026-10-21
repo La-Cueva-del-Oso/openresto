@@ -64,8 +64,9 @@ public class AuthService(
     }
 
     /// <summary>
-    /// A changed password drops the account's push subscriptions along with its sessions: both
-    /// are credentials a person who knew the old password may still hold.
+    /// A changed password drops the account's push subscriptions along with its sessions and API
+    /// keys: all are credentials a person who knew the old password may still hold. Null when the
+    /// current password is wrong or the account changed under the request (a reset, a deactivation).
     /// </summary>
     /// <seealso>AuthServiceTests.ChangePasswordAsync_Invalidates_A_Pending_Reset_Token</seealso>
     /// <seealso>AuthServiceTests.ChangePasswordAsync_Keeps_The_Security_Question</seealso>
@@ -78,8 +79,10 @@ public class AuthService(
         if (cred == null || !CredentialHelper.VerifyPassword(cred, currentPassword, _passwordService))
             return null;
         string previousHash = cred.PasswordHash;
-        (cred.PasswordHash, cred.PasswordSalt) = _passwordService.Hash(newPassword);
-        await _credentialRepository.RevokeSessionsAsync(cred);
+        (string hash, string salt) = _passwordService.Hash(newPassword);
+        // Refused when a reset, a deactivation or another change landed since the account was read.
+        if (!await _credentialRepository.TryChangePasswordAsync(cred, hash, salt))
+            return null;
         await _pushSubscriptionRepository.DeleteForUserAsync(cred.Id);
 
         _audit.RecordChange("passwordHash", previousHash, cred.PasswordHash);
@@ -102,8 +105,14 @@ public class AuthService(
             throw new BusinessRuleException("That email address is already in use.") { Code = ErrorCodes.AuthEmailAlreadyInUse };
 
         string previousEmail = cred.Email;
-        cred.Email = normalizedEmail;
-        await _credentialRepository.SaveChangesAsync();
+        if (!await _credentialRepository.TryChangeEmailAsync(cred, normalizedEmail))
+        {
+            // The lookup above is not a lock: another account may have taken the address since.
+            existing = await _credentialRepository.GetByEmailAsync(normalizedEmail);
+            if (existing != null && existing.Id != cred.Id)
+                throw new BusinessRuleException("That email address is already in use.") { Code = ErrorCodes.AuthEmailAlreadyInUse };
+            return null;
+        }
 
         _audit.RecordChange("email", previousEmail, normalizedEmail);
         Describe(AuditActions.AuthEmailChange, cred,
@@ -112,9 +121,6 @@ public class AuthService(
         return Mint(cred);
     }
 
-    /// <summary>
-    /// 
-    /// </summary>
     /// <seealso>AuthServiceTests.ResetPasswordAsync_Rejects_A_Missing_Token_Without_Touching_Any_Account</seealso>
     /// <seealso>AuthServiceTests.ResetPasswordAsync_Deletes_The_Resetting_Accounts_Push_Subscriptions_Only</seealso>
     /// <seealso>AuthServiceTests.ResetPasswordAsync_Keeps_Push_Subscriptions_For_An_Unknown_Token</seealso>
@@ -143,8 +149,9 @@ public class AuthService(
     }
 
     /// <summary>
-    /// 
+    /// Signs the caller out everywhere. Not account recovery, so the account's API keys stay valid.
     /// </summary>
+    /// <seealso>AdminApiKeyRevocationTests.Signing_Out_Leaves_The_Accounts_Api_Keys_Alone</seealso>
     /// <seealso>AuthServiceTests.LogoutAsync_Keeps_The_Callers_Push_Subscriptions</seealso>
     public virtual async Task LogoutAsync()
     {

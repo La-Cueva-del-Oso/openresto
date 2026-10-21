@@ -131,7 +131,7 @@ public class UserService(
     /// <summary>
     /// Sets a new password on another account — the out-of-band recovery path for a user who
     /// never configured a security question, and the recovery for a compromised one. Besides
-    /// ending its sessions and dropping any outstanding reset token and push subscriptions, it
+    /// ending its sessions and API keys and dropping any outstanding reset token and push subscriptions, it
     /// clears the account's security question: whoever had the account may have set their own,
     /// and it would otherwise let them take it back.
     /// </summary>
@@ -149,7 +149,7 @@ public class UserService(
         user.PvqAnswerSalt = null;
         user.PvqFailedAttempts = 0;
         user.PvqLockedUntil = null;
-        await _credentialRepository.RevokeSessionsAsync(user);
+        await _credentialRepository.RevokeSessionsAndApiKeysAsync(user);
         await _pushSubscriptionRepository.DeleteForUserAsync(user.Id);
 
         _audit.RecordChange("passwordHash", previousHash, user.PasswordHash);

@@ -36,6 +36,9 @@ How each feature behaves, its API fields and its error codes are in
 - Two places still printed API text raw and are now neutralized the same way: the command-line client's confirmation prompt (a location's name in `locations delete`) and `npm run native:init` (the brand name it prints and any error that echoes a response). A Manager could otherwise have put escape sequences in a location or brand name to drive the terminal of whoever ran them.
 - `scripts/demo_data.py media` no longer copies the `--media-dir` path into the SQL it generates. A line break in that path ended the SQL comment it was written into, so the rest of the path ran as statements when the output was applied.
 - A backend image built from a clone no longer includes `OpenRestoApi/appsettings.Local.json`. The file is git-ignored but the build context sent it, and the backend loads it in every environment, so credentials kept there could end up inside the image.
+- Recovering an account now also revokes its API keys: changing the password, resetting it (with a reset link or by an Owner) and deactivating the account each revoke the account's live keys in the same step that ends its sessions. Before, a key minted while an account was compromised kept working after the recovery. Signing out does not revoke keys, and reactivating an account does not bring revoked ones back.
+- Changing a password or a sign-in email is now refused when the account's sessions were ended in the meantime (a reset by an Owner, a deactivation, a sign-out elsewhere) instead of overwriting that change; the request answers as if the current password were wrong. Two accounts changing to the same email at once now get the usual "already in use" answer for the loser.
+- Resetting a password with a security-question reset link now requires the account to be active, as sign-in does. Before, a deactivated account holding a link issued earlier could still set a password.
 
 ### Changed
 

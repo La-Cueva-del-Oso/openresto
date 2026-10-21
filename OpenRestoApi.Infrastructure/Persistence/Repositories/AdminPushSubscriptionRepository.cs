@@ -9,6 +9,7 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories;
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.NotificationServiceTests")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.BookingNotificationServiceTests")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.AdminCredentialConcurrencyTests")]
+[OnlyAccessibleBy("OpenRestoApi.Tests.Services.AdminApiKeyRevocationTests")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.AuthServiceTests")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.UserServiceTests")]
 [ExternalAccessAllowed]
