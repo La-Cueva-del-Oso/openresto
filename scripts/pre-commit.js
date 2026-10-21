@@ -1,24 +1,39 @@
-const { execSync } = require("child_process");
+const { execFileSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+
+// Every command below gets its file names as argv, never spliced into a shell
+// string: a staged file called `x$(cmd).md` must stay a file name. The node
+// tools run through process.execPath because `npx` is a .cmd shim on Windows
+// that only a shell can launch.
+function toolBin(pkg, bin, from) {
+  return require.resolve(`${pkg}/${bin}`, { paths: [from] });
+}
+
+// A leading "-" would be read as an option.
+const asArg = (f) => (f.startsWith("-") ? `./${f}` : f);
 
 // git check-ignore returns 0 (and prints the file) if the path is ignored,
 // non-zero otherwise. Used to avoid `git add` aborting on ignored files.
 function isIgnored(file) {
   try {
-    execSync(`git check-ignore "${file}"`, { encoding: "utf8", stdio: "pipe" });
+    execFileSync("git", ["check-ignore", "--", file], {
+      encoding: "utf8",
+      stdio: "pipe",
+    });
     return true;
   } catch {
     return false;
   }
 }
 
-// Get staged files
+// Get staged files (-z: names come back raw, not quoted/escaped)
 let stagedFiles = [];
 try {
-  stagedFiles = execSync("git diff --cached --name-only", { encoding: "utf8" })
-    .split("\n")
-    .map((f) => f.trim())
+  stagedFiles = execFileSync("git", ["diff", "--cached", "--name-only", "-z"], {
+    encoding: "utf8",
+  })
+    .split("\0")
     .filter((f) => f && fs.existsSync(f));
 } catch (e) {
   console.error("Failed to get staged files:", e.message);
@@ -59,8 +74,13 @@ const prettierFiles = stagedFiles.filter((f) =>
 if (prettierFiles.length > 0) {
   console.log("Running Prettier...");
   try {
-    execSync(
-      `npx prettier --write ${prettierFiles.map((f) => `"${f}"`).join(" ")}`,
+    execFileSync(
+      process.execPath,
+      [
+        toolBin("prettier", "bin/prettier.cjs", __dirname),
+        "--write",
+        ...prettierFiles.map(asArg),
+      ],
       { stdio: "inherit" },
     );
     modified = true;
@@ -80,14 +100,19 @@ if (frontendFiles.length > 0) {
   // developer never staged — the changes leaked into the working tree because
   // the re-add step below only re-stages originally-staged files. oxlint runs
   // with cwd=openresto-frontend, so strip that prefix from each path.
-  const relFiles = frontendFiles.map(
-    (f) => `"${f.slice("openresto-frontend/".length)}"`,
+  const relFiles = frontendFiles.map((f) =>
+    asArg(f.slice("openresto-frontend/".length)),
   );
   try {
-    execSync(`npx oxlint --fix ${relFiles.join(" ")}`, {
-      cwd: "openresto-frontend",
-      stdio: "inherit",
-    });
+    execFileSync(
+      process.execPath,
+      [
+        toolBin("oxlint", "bin/oxlint", path.resolve("openresto-frontend")),
+        "--fix",
+        ...relFiles,
+      ],
+      { cwd: "openresto-frontend", stdio: "inherit" },
+    );
     modified = true;
   } catch (e) {
     console.error("Frontend linter found errors.");
@@ -97,13 +122,15 @@ if (frontendFiles.length > 0) {
 
 // 4. Backend Linter (dotnet format)
 const backendFiles = stagedFiles.filter(
-  (f) => /^OpenRestoApi(\.Core|\.Infrastructure)?\//.test(f) && f.endsWith(".cs"),
+  (f) =>
+    /^OpenRestoApi(\.Core|\.Infrastructure)?\//.test(f) && f.endsWith(".cs"),
 );
 if (backendFiles.length > 0) {
   console.log("Running Backend Linter...");
   try {
-    execSync(
-      `dotnet format openresto.sln --include ${backendFiles.map((f) => `"${f}"`).join(" ")}`,
+    execFileSync(
+      "dotnet",
+      ["format", "openresto.sln", "--include", ...backendFiles.map(asArg)],
       { stdio: "inherit" },
     );
     modified = true;
@@ -124,7 +151,7 @@ if (modified) {
   );
   if (reAddable.length > 0) {
     console.log("Re-staging modified files...");
-    execSync(`git add ${reAddable.map((f) => `"${f}"`).join(" ")}`);
+    execFileSync("git", ["add", "--", ...reAddable]);
   }
 }
 
