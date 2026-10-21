@@ -1022,6 +1022,9 @@
         "extendSubtitle": "Select a restaurant to extend all active bookings by 1 hour.",
         "extendedSubtitle_one": "The following {{count}} booking has been extended by 1 hour:",
         "extendedSubtitle_other": "The following {{count}} bookings have been extended by 1 hour:",
+        "noneExtendedSubtitle": "No booking could be extended.",
+        "skippedSubtitle_one": "{{count}} booking was left as it was because another booking follows it on the same table:",
+        "skippedSubtitle_other": "{{count}} bookings were left as they were because another booking follows them on the same table:",
         "loadingRestaurants": "Loading restaurants",
         "noRestaurants": "No restaurants found.",
         "pausedBadge": "PAUSED",
@@ -1158,7 +1161,9 @@
         "extend_one": "Extend {{count}} active Booking by 60m",
         "extend_other": "Extend {{count}} active Bookings by 60m",
         "extended_one": "Extended {{count}} active booking +60m",
-        "extended_other": "Extended {{count}} active bookings +60m"
+        "extended_other": "Extended {{count}} active bookings +60m",
+        "extendedSkipped_one": "Extended {{extended}}; {{count}} left as is (another booking follows)",
+        "extendedSkipped_other": "Extended {{extended}}; {{count}} left as is (another booking follows)"
       },
       "addForm": {
         "namePlaceholder": "Location name (e.g. Downtown, Westside)",

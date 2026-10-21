@@ -141,6 +141,66 @@ public partial class AdminServiceTests
         Assert.Equal(SittingStart.AddMinutes(45), end);
     }
 
+    // ── Extend every in-progress sitting ─────────────────────────────────────
+
+    [Fact]
+    public async Task ExtendAllActiveBookingsAsync_Skips_ASittingWhoseAddedTimeIsTaken()
+    {
+        SeedTwoTablesInOneGroup();
+        await _db.SaveChangesAsync();
+        DateTime start = DateTime.UtcNow.AddMinutes(-30);
+        await AddBookingAsync(1, tableId: 1, groupId: null, start);
+        await AddBookingAsync(2, tableId: 2, groupId: null, start);
+        await AddBookingAsync(3, tableId: 1, groupId: null, start.AddMinutes(75));
+
+        ExtendRestaurantBookingsResponse? result = await CreateService().ExtendAllActiveBookingsAsync(1, 30);
+
+        Assert.Equal(["B2"], result!.ExtendedBookings.Select(b => b.BookingRef));
+        SkippedExtensionDto skipped = Assert.Single(result.SkippedBookings);
+        Assert.Equal((1, "B1", 1, "T1"), (skipped.Id, skipped.BookingRef, skipped.TableId, skipped.TableName));
+        Assert.Equal(start.AddMinutes(60), await StoredEndAsync(1));
+        Assert.Equal(start.AddMinutes(90), await StoredEndAsync(2));
+    }
+
+    [Fact]
+    public async Task ExtendAllActiveBookingsAsync_Extends_UpToTheMomentTheNextBookingStarts()
+    {
+        SeedTwoTablesInOneGroup();
+        await _db.SaveChangesAsync();
+        DateTime start = DateTime.UtcNow.AddMinutes(-30);
+        await AddBookingAsync(1, tableId: 1, groupId: null, start);
+        await AddBookingAsync(2, tableId: 1, groupId: null, start.AddMinutes(90));
+
+        ExtendRestaurantBookingsResponse? result = await CreateService().ExtendAllActiveBookingsAsync(1, 30);
+
+        Assert.Single(result!.ExtendedBookings);
+        Assert.Empty(result.SkippedBookings);
+        Assert.Equal(start.AddMinutes(90), await StoredEndAsync(1));
+    }
+
+    [Fact]
+    public async Task ExtendAllActiveBookingsAsync_Skips_AGroupSitting_WhenAMemberTableIsBookedAfterIt()
+    {
+        SeedTwoTablesInOneGroup();
+        await _db.SaveChangesAsync();
+        DateTime start = DateTime.UtcNow.AddMinutes(-30);
+        await AddBookingAsync(1, tableId: null, groupId: 1, start);
+        await AddBookingAsync(2, tableId: 2, groupId: null, start.AddMinutes(75));
+
+        ExtendRestaurantBookingsResponse? result = await CreateService().ExtendAllActiveBookingsAsync(1, 30);
+
+        Assert.Empty(result!.ExtendedBookings);
+        SkippedExtensionDto skipped = Assert.Single(result.SkippedBookings);
+        Assert.Equal((1, (int?)null, (int?)1), (skipped.Id, skipped.TableId, skipped.TableGroupId));
+        Assert.Equal(start.AddMinutes(60), await StoredEndAsync(1));
+    }
+
+    [Fact]
+    public void SkippedExtensionDto_CarriesNoGuestDetails()
+    {
+        Assert.DoesNotContain(typeof(SkippedExtensionDto).GetProperties(), p => p.Name.StartsWith("Customer"));
+    }
+
     // ── Undo of a finish or no-show ──────────────────────────────────────────
 
     private async Task<DateTime> SeedFinishedSittingAsync()

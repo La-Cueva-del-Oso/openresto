@@ -108,6 +108,51 @@ public class TimezoneLogicTests
         Assert.Equal(DateTimeKind.Utc, result.Kind);
     }
 
+    // Spring-forward: Madrid skips 02:00-03:00 on 2026-03-29, New York on 2026-03-08.
+    [Theory]
+    [InlineData("Europe/Madrid", "2026-03-29T02:30:00", "2026-03-29T01:30:00")]
+    [InlineData("Europe/Madrid", "2026-03-29T02:00:00", "2026-03-29T01:00:00")]
+    [InlineData("America/New_York", "2026-03-08T02:30:00", "2026-03-08T07:30:00")]
+    public void ConvertLocalToUtc_ATimeInsideTheSpringGap_MovesPastTheGap(string tz, string local, string expectedUtc)
+    {
+        DateTime inGap = DateTime.SpecifyKind(DateTime.Parse(local), DateTimeKind.Unspecified);
+
+        DateTime utc = TimeZoneHelper.ConvertLocalToUtc(inGap, tz);
+
+        Assert.Equal(DateTime.SpecifyKind(DateTime.Parse(expectedUtc), DateTimeKind.Utc), utc);
+        Assert.Equal(DateTimeKind.Utc, utc.Kind);
+    }
+
+    [Theory]
+    [InlineData("Europe/Madrid", "2026-03-29T01:30:00", "2026-03-29T00:30:00")]
+    [InlineData("Europe/Madrid", "2026-03-29T03:00:00", "2026-03-29T01:00:00")]
+    [InlineData("Europe/Madrid", "2026-03-29T04:00:00", "2026-03-29T02:00:00")]
+    [InlineData("America/New_York", "2026-03-08T01:30:00", "2026-03-08T06:30:00")]
+    [InlineData("America/New_York", "2026-03-08T03:30:00", "2026-03-08T07:30:00")]
+    // Fall-back: 02:30 in Madrid and 01:30 in New York happen twice; the earlier-resolved standard time wins.
+    [InlineData("Europe/Madrid", "2026-10-25T02:30:00", "2026-10-25T01:30:00")]
+    [InlineData("America/New_York", "2026-11-01T01:30:00", "2026-11-01T06:30:00")]
+    public void ConvertLocalToUtc_TimesOutsideTheGap_AreNotShifted(string tz, string local, string expectedUtc)
+    {
+        DateTime time = DateTime.SpecifyKind(DateTime.Parse(local), DateTimeKind.Unspecified);
+
+        DateTime utc = TimeZoneHelper.ConvertLocalToUtc(time, tz);
+
+        Assert.Equal(DateTime.SpecifyKind(DateTime.Parse(expectedUtc), DateTimeKind.Utc), utc);
+    }
+
+    // Cairo's clocks jump at midnight, so the local day starts at 01:00.
+    [Fact]
+    public void GetUtcRange_ADayWhoseMidnightIsSkipped_StartsAtTheFirstRealInstant()
+    {
+        DateTime day = new DateTime(2026, 4, 24, 0, 0, 0, DateTimeKind.Unspecified);
+
+        (DateTime start, DateTime end) = TimeZoneHelper.GetUtcRangeForLocalDay(day, "Africa/Cairo");
+
+        Assert.Equal(new DateTime(2026, 4, 23, 22, 0, 0, DateTimeKind.Utc), start);
+        Assert.Equal(new DateTime(2026, 4, 24, 21, 0, 0, DateTimeKind.Utc), end);
+    }
+
     [Fact]
     public void ConvertUtcToLocal_RoundTripsWithConvertLocalToUtc()
     {

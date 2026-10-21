@@ -1183,32 +1183,44 @@ describe("extendRestaurantBookings", () => {
 
     const result = await extendRestaurantBookings(4, 15);
 
-    expect(result).toEqual({ ok: true, extendedBookings: bookings });
+    expect(result).toEqual({ ok: true, extendedBookings: bookings, skippedBookings: [] });
     const [url, opts] = mockFetch.mock.calls[0];
     expect(url).toContain("/api/admin/restaurants/4/extend");
     expect(opts.method).toBe("POST");
     expect(JSON.parse(opts.body)).toEqual({ minutes: 15 });
   });
 
-  it("returns ok false with empty array on non-ok response", async () => {
+  it("returns the bookings the server left as they were", async () => {
+    const skipped = [{ id: 7, bookingRef: "R7", tableId: 3, tableGroupId: null, tableName: "T3" }];
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ extendedBookings: [{ id: 1 }], skippedBookings: skipped }),
+    });
+
+    const result = await extendRestaurantBookings(4, 15);
+
+    expect(result).toEqual({ ok: true, extendedBookings: [{ id: 1 }], skippedBookings: skipped });
+  });
+
+  it("returns ok false with empty arrays on non-ok response", async () => {
     mockFetch.mockResolvedValueOnce({ ok: false });
 
     const result = await extendRestaurantBookings(4, 15);
-    expect(result).toEqual({ ok: false, extendedBookings: [] });
+    expect(result).toEqual({ ok: false, extendedBookings: [], skippedBookings: [] });
   });
 
-  it("returns ok false with empty array on network error", async () => {
+  it("returns ok false with empty arrays on network error", async () => {
     mockFetch.mockRejectedValueOnce(new Error("offline"));
 
     const result = await extendRestaurantBookings(4, 15);
-    expect(result).toEqual({ ok: false, extendedBookings: [] });
+    expect(result).toEqual({ ok: false, extendedBookings: [], skippedBookings: [] });
   });
 
-  it("falls back to empty array when extendedBookings is absent from response", async () => {
+  it("falls back to empty arrays when the lists are absent from the response", async () => {
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
 
     const result = await extendRestaurantBookings(4, 15);
-    expect(result).toEqual({ ok: true, extendedBookings: [] });
+    expect(result).toEqual({ ok: true, extendedBookings: [], skippedBookings: [] });
   });
 });
 

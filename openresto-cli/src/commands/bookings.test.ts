@@ -324,3 +324,20 @@ describe("bookings messages in Spanish", () => {
     process.exitCode = 0;
   });
 });
+
+describe("bookings --date help", () => {
+  for (const name of ["create", "update"]) {
+    test(`${name} says a zone-less date is the location's local time`, () => {
+      const bookings = buildProgram().commands.find(
+        (c) => c.name() === "bookings",
+      )!;
+      const option = bookings.commands
+        .find((c) => c.name() === name)!
+        .options.find((o) => o.long === "--date")!;
+
+      assert.match(option.description, /location's local time/);
+      assert.match(option.description, /Z or an offset/);
+      assert.doesNotMatch(option.description, /UTC\)/);
+    });
+  }
+});

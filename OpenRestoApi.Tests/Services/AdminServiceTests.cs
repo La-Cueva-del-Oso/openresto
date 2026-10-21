@@ -1098,11 +1098,11 @@ public partial class AdminServiceTests : IDisposable
         _db.Bookings.Add(new Booking { Id = 1, RestaurantId = 1, SectionId = 1, TableId = 1, Date = nowUtc.AddMinutes(-90), EndTime = null, BookingRef = "ACTIVE1" });
         await _db.SaveChangesAsync();
 
-        List<BookingDetailDto>? result = await svc.ExtendAllActiveBookingsAsync(1, 15);
+        ExtendRestaurantBookingsResponse? result = await svc.ExtendAllActiveBookingsAsync(1, 15);
 
         Assert.NotNull(result);
-        Assert.Single(result);
-        Assert.Equal(nowUtc.AddMinutes(-90).AddMinutes(120).AddMinutes(15), result[0].EndTime);
+        Assert.Single(result.ExtendedBookings);
+        Assert.Equal(nowUtc.AddMinutes(-90).AddMinutes(120).AddMinutes(15), result.ExtendedBookings[0].EndTime);
     }
 
     [Fact]
@@ -1500,9 +1500,9 @@ public partial class AdminServiceTests : IDisposable
         await _db.SaveChangesAsync();
 
         List<LookupDto> restaurantList = await svc.GetRestaurantsAsync();
-        List<BookingDetailDto>? extended = await svc.ExtendAllActiveBookingsAsync(1, 30);
+        ExtendRestaurantBookingsResponse? extended = await svc.ExtendAllActiveBookingsAsync(1, 30);
 
-        Assert.Equal(restaurantList[0].ActiveBookingsCount, extended!.Count);
+        Assert.Equal(restaurantList[0].ActiveBookingsCount, extended!.ExtendedBookings.Count);
     }
 
     [Fact]
@@ -2046,19 +2046,20 @@ public partial class AdminServiceTests : IDisposable
         // 1. Currently active (started 30 mins ago)
         _db.Bookings.Add(new Booking { Id = 1, RestaurantId = 1, SectionId = 1, TableId = 1, Date = nowUtc.AddMinutes(-30), BookingRef = "ACTIVE" });
 
-        // 2. Future (starting in 1 hour)
-        _db.Bookings.Add(new Booking { Id = 2, RestaurantId = 1, SectionId = 1, TableId = 1, Date = nowUtc.AddHours(1), BookingRef = "FUTURE" });
+        // 2. Future (starting in 3 hours, after the extended sitting ends)
+        _db.Bookings.Add(new Booking { Id = 2, RestaurantId = 1, SectionId = 1, TableId = 1, Date = nowUtc.AddHours(3), BookingRef = "FUTURE" });
 
         // 3. Past (ended 1 hour ago)
         _db.Bookings.Add(new Booking { Id = 3, RestaurantId = 1, SectionId = 1, TableId = 1, Date = nowUtc.AddHours(-3), EndTime = nowUtc.AddHours(-1), BookingRef = "PAST" });
 
         await _db.SaveChangesAsync();
 
-        List<BookingDetailDto>? results = await svc.ExtendAllActiveBookingsAsync(1, 60);
+        ExtendRestaurantBookingsResponse? results = await svc.ExtendAllActiveBookingsAsync(1, 60);
 
         Assert.NotNull(results);
-        Assert.Single(results);
-        Assert.Equal("ACTIVE", results[0].BookingRef);
+        Assert.Single(results.ExtendedBookings);
+        Assert.Empty(results.SkippedBookings);
+        Assert.Equal("ACTIVE", results.ExtendedBookings[0].BookingRef);
 
         // Verify the active booking was extended (default 1h -> 2h)
         Booking? activeBooking = await _db.Bookings.FindAsync(1);
@@ -2119,7 +2120,7 @@ public partial class AdminServiceTests : IDisposable
     public async Task ExtendAllActiveBookingsAsync_ReturnsNull_WhenRestaurantNotFound()
     {
         AdminService svc = CreateService();
-        List<BookingDetailDto>? result = await svc.ExtendAllActiveBookingsAsync(999, 30);
+        ExtendRestaurantBookingsResponse? result = await svc.ExtendAllActiveBookingsAsync(999, 30);
         Assert.Null(result);
     }
 
