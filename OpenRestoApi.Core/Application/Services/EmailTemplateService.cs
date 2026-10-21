@@ -27,6 +27,8 @@ public sealed class EmailTemplateService : IEmailTemplateService
         string appName = brand.AppName ?? "Open Resto";
         string cleanWebsiteUrl = websiteUrl.TrimEnd('/');
         string lookupUrl = BookingLinks.Confirmation(cleanWebsiteUrl, booking);
+        string color = EmailTemplateBuilder.Encode(primaryColor);
+        string lookupHref = EmailTemplateBuilder.Encode(lookupUrl);
 
         // Choose header: full-width banner for restaurant photos, small icon for brand SVG, plain text otherwise
         string headerHtml;
@@ -59,7 +61,7 @@ public sealed class EmailTemplateService : IEmailTemplateService
                  <p style='margin:0 0 8px;font-size:14px;color:#6b7280;'>Location</p>
                  <p style='margin:0 0 12px;font-size:15px;color:#111827;'>{WebUtility.HtmlEncode(restaurant.Address)}</p>
                  <a href='https://www.google.com/maps/search/?api=1&query={Uri.EscapeDataString(restaurant.Address)}'
-                    style='color:{primaryColor};text-decoration:none;font-size:14px;font-weight:600;'>Get directions &rarr;</a>
+                    style='color:{color};text-decoration:none;font-size:14px;font-weight:600;'>Get directions &rarr;</a>
                </div>
                """;
 
@@ -101,9 +103,9 @@ public sealed class EmailTemplateService : IEmailTemplateService
         string contentHtml = $"""
             <!-- Confirmation Hero -->
             <tr><td style="padding:0 40px;">
-              <div style="background-color:{primaryColor}10;border-radius:12px;padding:24px;text-align:center;border:1px solid {primaryColor}20;">
-                <p style="margin:0;font-size:18px;font-weight:600;color:{primaryColor};">{greetingName}</p>
-                <p style="margin:4px 0 0;font-size:14px;color:{primaryColor};opacity:0.8;">We're looking forward to seeing you.</p>
+              <div style="background-color:{color}10;border-radius:12px;padding:24px;text-align:center;border:1px solid {color}20;">
+                <p style="margin:0;font-size:18px;font-weight:600;color:{color};">{greetingName}</p>
+                <p style="margin:4px 0 0;font-size:14px;color:{color};opacity:0.8;">We're looking forward to seeing you.</p>
               </div>
             </td></tr>
 
@@ -135,7 +137,7 @@ public sealed class EmailTemplateService : IEmailTemplateService
 
             <!-- CTA -->
             <tr><td style="padding:0 40px 32px;text-align:center;">
-              <a href="{lookupUrl}" style="display:inline-block;background-color:{primaryColor};color:#ffffff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;box-shadow:0 2px 4px rgba(0,0,0,0.1);">Manage your booking</a>
+              <a href="{lookupHref}" style="display:inline-block;background-color:{color};color:#ffffff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;box-shadow:0 2px 4px rgba(0,0,0,0.1);">Manage your booking</a>
             </td></tr>
 
             <!-- Cancellation note -->
