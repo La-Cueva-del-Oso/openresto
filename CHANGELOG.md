@@ -71,6 +71,7 @@ How each feature behaves, its API fields and its error codes are in
 - Moving a booking from the admin with a date that carries no time zone (for example `2026-10-10T19:00:00` through the API) now reads it as the restaurant's local time, as creating a booking already does. Before, it was stored as UTC, so the booking landed hours off and the conflict check ran against the wrong time. Dates with a `Z` or an offset behave as before.
 - Extending a booking, or undoing a finish or no-show, now refuses when another booking already holds that table (or its combinable group) during the added time. Before, both lengthened the sitting without looking, so two parties could end up on one table. The admin shows the reason in the booking window, in the four languages; shortening is never blocked.
 - A booking with no end time (taken before sittings had one) now holds its table for the location's default sitting length when the table is checked for a new booking, a move or an extension. Before, it held it for however long the party being checked wanted, so a short request could be placed inside an older sitting.
+- Booking, or moving a booking, for a time the location's clocks skip on the spring-forward night (for example `2026-03-29T02:30:00` in Madrid) no longer fails with a server error. The time is read as the first real moment after the jump (03:30).
 
 ## [2.4.1] - 2026-10-14
 
