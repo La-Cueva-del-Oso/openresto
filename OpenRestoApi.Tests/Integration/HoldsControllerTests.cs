@@ -79,6 +79,39 @@ public class HoldsControllerTests(TestWebAppFactory factory) : IClassFixture<Tes
     }
 
     [Fact]
+    public async Task PlaceHold_OnATableOfAnotherRestaurant_IsRefusedAndHoldsNothing()
+    {
+        HttpClient client = _factory.CreateClient();
+        (int restaurantId, _, _) = GetSeededIds();
+        int foreignSectionId, foreignTableId;
+        using (IServiceScope scope = _factory.Services.CreateScope())
+        {
+            AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var other = new Restaurant { Name = $"Other {Guid.NewGuid():N}" };
+            var section = new Section { Name = "Theirs" };
+            section.Tables.Add(new Table { Name = "T9", Seats = 4 });
+            other.Sections.Add(section);
+            db.Restaurants.Add(other);
+            db.SaveChanges();
+            foreignSectionId = section.Id;
+            foreignTableId = section.Tables.Single().Id;
+        }
+
+        string date = DateTime.UtcNow.AddDays(102).ToString("yyyy-MM-ddT12:00:00");
+        HttpResponseMessage response = await client.PostAsJsonAsync("/api/holds", new
+        {
+            restaurantId,
+            sectionId = foreignSectionId,
+            tableId = foreignTableId,
+            date
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        JsonElement body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("booking.invalid_table_for_restaurant", body.GetProperty("code").GetString());
+    }
+
+    [Fact]
     public async Task ReleaseHold_Succeeds()
     {
         HttpClient client = _factory.CreateClient();

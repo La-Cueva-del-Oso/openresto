@@ -18,7 +18,7 @@ public sealed class HoldPolicyService(
     private readonly IRestaurantRepository _restaurantRepository = restaurantRepository;
     private readonly IBookingRepository _bookingRepository = bookingRepository;
 
-    public async Task<HoldPolicyResult> ValidateAsync(int restaurantId, int tableId, DateTime requestedDate, int seats)
+    public async Task<HoldPolicyResult> ValidateAsync(int restaurantId, int tableId, int sectionId, DateTime requestedDate, int seats)
     {
         HoldPolicyResult restaurantPolicy = await ValidateRestaurantPolicyAsync(restaurantId, requestedDate);
         if (restaurantPolicy.Status != HoldPolicyStatus.Eligible)
@@ -28,6 +28,11 @@ public sealed class HoldPolicyService(
 
         DateTime bookingDate = restaurantPolicy.BookingDate;
         Restaurant restaurant = restaurantPolicy.Restaurant!;
+        if (!restaurant.HasTableInSection(tableId, sectionId))
+        {
+            return HoldPolicyResult.Rejected("Invalid table for this restaurant.", ErrorCodes.BookingInvalidTableForRestaurant);
+        }
+
         bool walkInOnly = restaurant.Sections?
             .SelectMany(s => s.Tables ?? [])
             .Any(t => t.Id == tableId && t.WalkInOnly) == true;

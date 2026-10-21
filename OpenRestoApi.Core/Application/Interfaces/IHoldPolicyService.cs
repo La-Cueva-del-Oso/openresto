@@ -53,11 +53,16 @@ public interface IHoldPolicyService
 {
     /// <summary>
     /// Validates the hold request. Returns <see cref="HoldPolicyStatus.Eligible"/> with the
-    /// resolved restaurant + UTC booking date only when every policy check passes AND no
-    /// confirmed booking overlaps the table for a party of <paramref name="seats"/>'s sitting.
+    /// resolved restaurant + UTC booking date only when every policy check passes, the table is
+    /// one of the restaurant's own in <paramref name="sectionId"/>, AND no confirmed booking
+    /// overlaps the table for a party of <paramref name="seats"/>'s sitting.
     /// Never throws for expected policy violations.
     /// </summary>
-    Task<HoldPolicyResult> ValidateAsync(int restaurantId, int tableId, DateTime requestedDate, int seats);
+    /// <seealso>HoldPolicyServiceTests.ValidateAsync_ReturnsRejected_ForATableOfAnotherRestaurant</seealso>
+    /// <seealso>HoldPolicyServiceTests.ValidateAsync_ReturnsRejected_ForATableInAnotherSection</seealso>
+    /// <seealso>HoldPolicyServiceTests.ValidateAsync_ReturnsRejected_ForATableThatDoesNotExist</seealso>
+    /// <seealso>HoldPolicyServiceTests.ValidateAsync_ReturnsEligible_ForATableOfTheRestaurantInItsSection</seealso>
+    Task<HoldPolicyResult> ValidateAsync(int restaurantId, int tableId, int sectionId, DateTime requestedDate, int seats);
 
     /// <summary>
     /// Validates an "Any section" / auto-assign hold request. Runs the same restaurant-level

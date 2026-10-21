@@ -45,6 +45,7 @@ How each feature behaves, its API fields and its error codes are in
 - Resetting a password with a security-question reset link now requires the account to be active, as sign-in does. Before, a deactivated account holding a link issued earlier could still set a password.
 - Creating an API key while the account's password was being changed or reset, or the account deactivated, could leave a working key behind that the recovery was meant to revoke. The key is now refused (the request answers that the session has ended) and no key is left.
 - Booking and notification emails now HTML-encode the website address, brand colour and image addresses taken from brand and location settings, as they already did for guest names and special requests. Before, a quote in one of those settings could end its attribute and inject markup into every email.
+- A table hold can no longer be placed on a table of another location, in the wrong section or that does not exist: the request is refused with `booking.invalid_table_for_restaurant` (400). Before, anyone could keep another location's tables held for five minutes at a time.
 - Changing or resetting a password now removes the account's push subscriptions in the same transaction as the password, sessions and API keys. Before, they were deleted in a second step, so a failure in between left a browser registered during a compromise still receiving booking notifications.
 
 ### Changed
