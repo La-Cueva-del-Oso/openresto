@@ -1,5 +1,7 @@
+using System.Data.Common;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
 using OpenRestoApi.Core.Application.DTOs;
 using OpenRestoApi.Core.Application.Exceptions;
@@ -44,11 +46,12 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
         }
     }
 
-    private AppDbContext NewContext()
+    private AppDbContext NewContext(params IInterceptor[] interceptors)
     {
         var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
             .UseSqlite($"Data Source={_path}", o => o.ExecutionStrategy(d => new SqliteRetryingExecutionStrategy(d)))
             .AddInterceptors(new SqlitePragmaInterceptor())
+            .AddInterceptors(interceptors)
             .Options);
         db.Database.OpenConnection();
         _contexts.Add(db);
@@ -162,6 +165,43 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
         using AppDbContext db = NewContext();
         db.AdminPushSubscriptions.Add(new AdminPushSubscription { UserId = userId, Endpoint = $"https://push.example/{userId}", P256dh = "p", Auth = "a" });
         await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task A_Revocation_Retried_After_A_Busy_Database_Still_Saves_The_Pending_Changes()
+    {
+        await SeedOwnersAsync(1);
+        var busyOnce = new BusyOnSessionBump();
+        AppDbContext db = NewContext(busyOnce);
+        AdminCredential account = await db.AdminCredentials.SingleAsync();
+        account.DisplayName = "Renamed";
+
+        await new AdminCredentialRepository(db).RevokeSessionsAsync(account);
+
+        Assert.True(busyOnce.Refused);
+        AdminCredential stored = await ReloadAsync(account.Id);
+        Assert.Equal("Renamed", stored.DisplayName);
+        Assert.Equal(1, stored.SessionVersion);
+    }
+
+    /// <summary>Refuses the first session-version bump the way a locked database does.</summary>
+    private sealed class BusyOnSessionBump : DbCommandInterceptor
+    {
+        private const int SqliteBusy = 5;
+
+        public bool Refused { get; private set; }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (!Refused && command.CommandText.Contains("\"SessionVersion\" + 1", StringComparison.Ordinal))
+            {
+                Refused = true;
+                throw new SqliteException("database is locked", SqliteBusy);
+            }
+
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
     }
 
     private async Task<int> PushSubscriptionCountAsync(int userId)

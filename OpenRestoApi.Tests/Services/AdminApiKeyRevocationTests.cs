@@ -6,6 +6,7 @@ using OpenRestoApi.Core.Application.Services;
 using OpenRestoApi.Core.Domain;
 using OpenRestoApi.Infrastructure.Persistence;
 using OpenRestoApi.Infrastructure.Persistence.Repositories;
+using OpenRestoApi.Tests.Holds;
 
 namespace OpenRestoApi.Tests.Services;
 
@@ -146,6 +147,19 @@ public sealed class AdminApiKeyRevocationTests : IDisposable
         await UsersAs(s.Caller).SetActiveAsync(s.Victim.Id, new SetUserActiveRequest { IsActive = false });
 
         await AssertOnlyTheVictimsLiveKeyWasRevokedAsync(s);
+    }
+
+    [Fact]
+    public async Task Revoking_Stamps_RevokedAt_From_The_Injected_Clock()
+    {
+        Scenario s = await ArrangeAsync();
+        var revokedAt = new DateTime(2031, 5, 6, 7, 8, 9, DateTimeKind.Utc);
+
+        await new AdminCredentialRepository(_db, new FakeClock(revokedAt)).RevokeSessionsAndApiKeysAsync(s.Victim);
+
+        Dictionary<string, DateTime?> keys = await RevokedAtByNameAsync();
+        Assert.Equal(revokedAt, keys["live"]);
+        Assert.Equal(EarlierRevocation, keys["already-revoked"]);
     }
 
     // ── Not revoked ─────────────────────────────────────────────────────────────

@@ -123,6 +123,7 @@ public interface IAdminCredentialRepository
     /// <seealso>AdminCredentialConcurrencyTests.Concurrent_Revocations_Are_All_Counted</seealso>
     /// <seealso>AdminCredentialRepositoryTests.RevokeSessionsAsync_Raises_The_Version_By_One_And_Drops_A_Pending_Reset_Token</seealso>
     /// <seealso>AdminCredentialRepositoryTests.RevokeSessionsAsync_Saves_The_Pending_Changes_With_The_Revocation</seealso>
+    /// <seealso>AdminCredentialConcurrencyTests.A_Revocation_Retried_After_A_Busy_Database_Still_Saves_The_Pending_Changes</seealso>
     Task RevokeSessionsAsync(AdminCredential credential);
 
     /// <summary>

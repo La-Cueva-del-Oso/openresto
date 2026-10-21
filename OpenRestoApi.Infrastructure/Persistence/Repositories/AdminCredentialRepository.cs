@@ -16,11 +16,12 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories;
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.SecurityQuestionsServiceTests")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.UserServiceTests")]
 [ExternalAccessAllowed]
-internal class AdminCredentialRepository(AppDbContext db) : IAdminCredentialRepository
+internal class AdminCredentialRepository(AppDbContext db, ISystemClock? clock = null) : IAdminCredentialRepository
 {
     private const int SqliteUniqueConstraint = 2067; // SQLITE_CONSTRAINT_UNIQUE
 
     private readonly AppDbContext _db = db;
+    private readonly ISystemClock _clock = clock ?? new SystemClock();
 
     public async Task<AdminCredential?> GetByIdAsync(int id)
     {
@@ -121,7 +122,8 @@ internal class AdminCredentialRepository(AppDbContext db) : IAdminCredentialRepo
         await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             await using IDbContextTransaction tx = await _db.Database.BeginTransactionAsync();
-            await _db.SaveChangesAsync();
+            // Changes stay pending until the commit: a retry after a rollback must find them still there.
+            await _db.SaveChangesAsync(acceptAllChangesOnSuccess: false);
             await _db.AdminCredentials.Where(c => c.Id == credential.Id).ExecuteUpdateAsync(RevokeSessions);
             if (revokeApiKeys)
             {
@@ -131,6 +133,7 @@ internal class AdminCredentialRepository(AppDbContext db) : IAdminCredentialRepo
             await _db.Entry(credential).ReloadAsync();
             await tx.CommitAsync();
         });
+        _db.ChangeTracker.AcceptAllChanges();
     }
 
     // The credential write and the key revocation land together or not at all, so no instant exists
@@ -157,7 +160,7 @@ internal class AdminCredentialRepository(AppDbContext db) : IAdminCredentialRepo
     // Already-revoked keys keep their original RevokedAt.
     private Task<int> RevokeApiKeysAsync(int userId)
     {
-        DateTime now = DateTime.UtcNow;
+        DateTime now = _clock.UtcNow;
         return _db.AdminApiKeys
             .Where(k => k.UserId == userId && k.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(k => k.RevokedAt, now));
