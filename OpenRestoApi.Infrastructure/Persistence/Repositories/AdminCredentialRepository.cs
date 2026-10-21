@@ -1,4 +1,5 @@
 using CustomAccessibility.Attributes;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -9,6 +10,7 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories;
 
 [OnlyAccessibleBy("OpenRestoApi.Extensions.ServiceCollectionExtensions")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Infrastructure.AdminCredentialRepositoryTests")]
+[OnlyAccessibleBy("OpenRestoApi.Tests.Services.AdminApiKeyRevocationTests")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.AdminCredentialConcurrencyTests")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.AuthServiceTests")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.SecurityQuestionsServiceTests")]
@@ -16,6 +18,8 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories;
 [ExternalAccessAllowed]
 internal class AdminCredentialRepository(AppDbContext db) : IAdminCredentialRepository
 {
+    private const int SqliteUniqueConstraint = 2067; // SQLITE_CONSTRAINT_UNIQUE
+
     private readonly AppDbContext _db = db;
 
     public async Task<AdminCredential?> GetByIdAsync(int id)
@@ -37,7 +41,7 @@ internal class AdminCredentialRepository(AppDbContext db) : IAdminCredentialRepo
 
     public async Task<bool> TryDeactivateAsync(AdminCredential user)
     {
-        int rows = await UnlessLastActiveOwner(user.Id).ExecuteUpdateAsync(s =>
+        int rows = await UpdateAndRevokeApiKeysAsync(UnlessLastActiveOwner(user.Id), user.Id, s =>
         {
             s.SetProperty(c => c.IsActive, false);
             RevokeSessions(s);
@@ -69,14 +73,32 @@ internal class AdminCredentialRepository(AppDbContext db) : IAdminCredentialRepo
 
     public async Task<bool> TryResetPasswordAsync(AdminCredential credential, string resetToken, DateTime nowUtc, string passwordHash, string passwordSalt)
     {
-        int rows = await StillAsRead(credential)
-            .Where(c => c.ResetToken == resetToken && c.ResetTokenExpiry >= nowUtc)
-            .ExecuteUpdateAsync(s =>
-            {
-                s.SetProperty(c => c.PasswordHash, passwordHash);
-                s.SetProperty(c => c.PasswordSalt, passwordSalt);
-                RevokeSessions(s);
-            });
+        int rows = await UpdateAndRevokeApiKeysAsync(
+            StillAsRead(credential).Where(c => c.ResetToken == resetToken && c.ResetTokenExpiry >= nowUtc),
+            credential.Id,
+            s => SetPassword(s, passwordHash, passwordSalt));
+        return await RefreshAsync(credential, rows);
+    }
+
+    public async Task<bool> TryChangePasswordAsync(AdminCredential credential, string passwordHash, string passwordSalt)
+    {
+        int rows = await UpdateAndRevokeApiKeysAsync(
+            StillAsRead(credential), credential.Id, s => SetPassword(s, passwordHash, passwordSalt));
+        return await RefreshAsync(credential, rows);
+    }
+
+    public async Task<bool> TryChangeEmailAsync(AdminCredential credential, string email)
+    {
+        int rows;
+        try
+        {
+            rows = await StillAsRead(credential).ExecuteUpdateAsync(s => s.SetProperty(c => c.Email, email));
+        }
+        catch (Exception ex) when (IsUniqueViolation(ex))
+        {
+            return false;
+        }
+
         return await RefreshAsync(credential, rows);
     }
 
@@ -89,7 +111,11 @@ internal class AdminCredentialRepository(AppDbContext db) : IAdminCredentialRepo
         return await RefreshAsync(credential, rows);
     }
 
-    public async Task RevokeSessionsAsync(AdminCredential credential)
+    public Task RevokeSessionsAsync(AdminCredential credential) => RevokeSessionsCoreAsync(credential, revokeApiKeys: false);
+
+    public Task RevokeSessionsAndApiKeysAsync(AdminCredential credential) => RevokeSessionsCoreAsync(credential, revokeApiKeys: true);
+
+    private async Task RevokeSessionsCoreAsync(AdminCredential credential, bool revokeApiKeys)
     {
         // The execution strategy has to own the transaction: it retries the whole unit on a busy database.
         await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
@@ -97,10 +123,56 @@ internal class AdminCredentialRepository(AppDbContext db) : IAdminCredentialRepo
             await using IDbContextTransaction tx = await _db.Database.BeginTransactionAsync();
             await _db.SaveChangesAsync();
             await _db.AdminCredentials.Where(c => c.Id == credential.Id).ExecuteUpdateAsync(RevokeSessions);
+            if (revokeApiKeys)
+            {
+                await RevokeApiKeysAsync(credential.Id);
+            }
+
             await _db.Entry(credential).ReloadAsync();
             await tx.CommitAsync();
         });
     }
+
+    // The credential write and the key revocation land together or not at all, so no instant exists
+    // where the sessions are dead and a key the previous holder minted still works. Nothing is
+    // revoked when the write is refused.
+    private async Task<int> UpdateAndRevokeApiKeysAsync(
+        IQueryable<AdminCredential> target, int userId, Action<UpdateSettersBuilder<AdminCredential>> set)
+    {
+        int rows = 0;
+        await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using IDbContextTransaction tx = await _db.Database.BeginTransactionAsync();
+            rows = await target.ExecuteUpdateAsync(set);
+            if (rows > 0)
+            {
+                await RevokeApiKeysAsync(userId);
+            }
+
+            await tx.CommitAsync();
+        });
+        return rows;
+    }
+
+    // Already-revoked keys keep their original RevokedAt.
+    private Task<int> RevokeApiKeysAsync(int userId)
+    {
+        DateTime now = DateTime.UtcNow;
+        return _db.AdminApiKeys
+            .Where(k => k.UserId == userId && k.RevokedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(k => k.RevokedAt, now));
+    }
+
+    private static void SetPassword(UpdateSettersBuilder<AdminCredential> s, string hash, string salt)
+    {
+        s.SetProperty(c => c.PasswordHash, hash);
+        s.SetProperty(c => c.PasswordSalt, salt);
+        RevokeSessions(s);
+    }
+
+    private static bool IsUniqueViolation(Exception ex)
+        => ex is DbUpdateException { InnerException: SqliteException { SqliteExtendedErrorCode: SqliteUniqueConstraint } }
+            or SqliteException { SqliteExtendedErrorCode: SqliteUniqueConstraint };
 
     // Only an active Owner counts, so deactivating one and then demoting it is not a way around
     // the rule.

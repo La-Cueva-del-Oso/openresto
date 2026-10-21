@@ -16,16 +16,12 @@ public sealed class SecurityQuestionsService(
     ICurrentUserService currentUser,
     IAuditScope? audit = null) : ISecurityQuestionsService
 {
-    /// <summary>
-    /// 
-    /// </summary>
+    /// <summary>Wrong answers an account takes before it is locked for <see cref="LockoutDuration"/>.</summary>
     /// <seealso>SecurityQuestionsServiceTests.VerifyAsync_Allows_Attempts_Up_To_The_Limit</seealso>
     /// <seealso>SecurityQuestionsServiceTests.VerifyAsync_Locks_The_Account_After_Too_Many_Wrong_Answers</seealso>
     public const int MaxFailedAttempts = 5;
 
-    /// <summary>
-    /// 
-    /// </summary>
+    /// <summary>How long an account that hit <see cref="MaxFailedAttempts"/> refuses further answers.</summary>
     /// <seealso>SecurityQuestionsServiceTests.VerifyAsync_Accepts_Answers_Again_Once_The_Lockout_Expires</seealso>
     public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
 
@@ -51,7 +47,8 @@ public sealed class SecurityQuestionsService(
     }
 
     /// <summary>
-    /// 
+    /// Stores the caller's security question. The account's current password is required, since
+    /// the question is a recovery credential a stolen session could otherwise plant.
     /// </summary>
     /// <seealso>SecurityQuestionsServiceTests.SetupAsync_Saves_The_Question_When_The_Current_Password_Is_Right</seealso>
     /// <seealso>SecurityQuestionsServiceTests.SetupAsync_Refuses_And_Keeps_The_Existing_Question_When_The_Current_Password_Is_Wrong</seealso>

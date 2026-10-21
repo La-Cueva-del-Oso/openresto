@@ -142,15 +142,38 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
             caller is null ? FakeCurrentUser.Anonymous() : FakeCurrentUser.For(caller));
     }
 
-    private AuthService AuthServiceAs(AdminCredential? caller = null, IPasswordService? passwords = null)
+    private AuthService AuthServiceAs(
+        AdminCredential? caller = null, IPasswordService? passwords = null, IAuditScope? audit = null, IAdminCredentialRepository? repository = null)
     {
         AppDbContext db = NewContext();
+        var jwt = new Mock<IJwtTokenService>();
+        jwt.Setup(j => j.Generate(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>())).Returns("token");
         return new AuthService(
-            new AdminCredentialRepository(db),
+            repository ?? new AdminCredentialRepository(db),
             passwords ?? new PasswordService(),
-            Mock.Of<IJwtTokenService>(),
+            jwt.Object,
             caller is null ? FakeCurrentUser.Anonymous() : FakeCurrentUser.For(caller),
-            new AdminPushSubscriptionRepository(db));
+            new AdminPushSubscriptionRepository(db),
+            audit);
+    }
+
+    private async Task SeedPushSubscriptionAsync(int userId)
+    {
+        using AppDbContext db = NewContext();
+        db.AdminPushSubscriptions.Add(new AdminPushSubscription { UserId = userId, Endpoint = $"https://push.example/{userId}", P256dh = "p", Auth = "a" });
+        await db.SaveChangesAsync();
+    }
+
+    private async Task<int> PushSubscriptionCountAsync(int userId)
+    {
+        using AppDbContext db = NewContext();
+        return await db.AdminPushSubscriptions.CountAsync(s => s.UserId == userId);
+    }
+
+    private static void AssertNothingAudited(Mock<IAuditScope> audit)
+    {
+        audit.Verify(a => a.RecordChange(It.IsAny<string>(), It.IsAny<object?>(), It.IsAny<object?>()), Times.Never);
+        audit.Verify(a => a.Describe(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<string?>()), Times.Never);
     }
 
     private async Task<AdminCredential> SeedAccountWithResetTokenAsync(string token)
@@ -456,5 +479,124 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
         Assert.Equal((false, true), (firstReset, secondReset));
         Assert.True(await PasswordIsAsync(account.Id, "Second123!"));
         Assert.Null((await ReloadAsync(account.Id)).ResetToken);
+    }
+
+    // ── Password and email changes held to the account as it was read ───────────
+
+    [Fact]
+    public async Task A_Password_Change_Read_Before_An_Owner_Reset_Is_Refused()
+    {
+        AdminCredential account = await SeedAccountWithAnswerAsync("answer", password: "Current123!");
+        AuthService change = AuthServiceAs(account, new PasswordServiceInterruptedOnce(() => ResetByOwnerAsync(account.Id)));
+
+        string? token = await change.ChangePasswordAsync("Current123!", "UserChose123!");
+
+        Assert.Null(token);
+        Assert.True(await PasswordIsAsync(account.Id, "OwnerReset123!"));
+    }
+
+    [Fact]
+    public async Task A_Password_Change_Applies_When_Nothing_Intervened()
+    {
+        AdminCredential account = await SeedAccountWithAnswerAsync("answer", password: "Current123!");
+
+        string? token = await AuthServiceAs(account).ChangePasswordAsync("Current123!", "UserChose123!");
+
+        Assert.Equal("token", token);
+        Assert.True(await PasswordIsAsync(account.Id, "UserChose123!"));
+    }
+
+    [Fact]
+    public async Task A_Refused_Password_Change_Keeps_Push_Subscriptions_And_Writes_No_Audit_Entry()
+    {
+        AdminCredential account = await SeedAccountWithAnswerAsync("answer", password: "Current123!");
+        await SeedPushSubscriptionAsync(account.Id);
+        var audit = new Mock<IAuditScope>();
+        AuthService change = AuthServiceAs(
+            account,
+            new PasswordServiceInterruptedOnce(() => AuthServiceAs(account).LogoutAsync()),
+            audit.Object);
+
+        string? token = await change.ChangePasswordAsync("Current123!", "UserChose123!");
+
+        Assert.Null(token);
+        Assert.True(await PasswordIsAsync(account.Id, "Current123!"));
+        Assert.Equal(1, await PushSubscriptionCountAsync(account.Id));
+        AssertNothingAudited(audit);
+    }
+
+    [Fact]
+    public async Task An_Email_Change_Applies_When_Nothing_Intervened()
+    {
+        AdminCredential account = await SeedAccountWithAnswerAsync("answer", password: "Current123!");
+
+        string? token = await AuthServiceAs(account).ChangeEmailAsync("Current123!", "New@Example.com");
+
+        Assert.Equal("token", token);
+        Assert.Equal("new@example.com", (await ReloadAsync(account.Id)).Email);
+    }
+
+    [Fact]
+    public async Task An_Email_Change_Read_Before_An_Owner_Reset_Is_Refused()
+    {
+        AdminCredential account = await SeedAccountWithAnswerAsync("answer", password: "Current123!");
+        var audit = new Mock<IAuditScope>();
+        AuthService change = AuthServiceAs(
+            account, new PasswordServiceInterruptedOnce(() => ResetByOwnerAsync(account.Id)), audit.Object);
+
+        string? token = await change.ChangeEmailAsync("Current123!", "new@example.com");
+
+        Assert.Null(token);
+        Assert.Equal("owner@example.com", (await ReloadAsync(account.Id)).Email);
+        AssertNothingAudited(audit);
+    }
+
+    [Fact]
+    public async Task An_Email_Change_Leaves_The_Session_Version_Alone()
+    {
+        AdminCredential account = await SeedAccountWithAnswerAsync("answer", password: "Current123!");
+
+        await AuthServiceAs(account).ChangeEmailAsync("Current123!", "new@example.com");
+
+        Assert.Equal(account.SessionVersion, (await ReloadAsync(account.Id)).SessionVersion);
+    }
+
+    [Fact]
+    public async Task Two_Accounts_Changing_To_The_Same_Email_Concurrently_Leave_One_Owner_Of_It()
+    {
+        AdminCredential first = await SeedAccountWithAnswerAsync("answer", password: "Current123!");
+        AdminCredential second;
+        using (AppDbContext seed = NewContext())
+        {
+            (string hash, string salt) = new PasswordService().Hash("Current123!");
+            second = new AdminCredential { Email = "second@example.com", PasswordHash = hash, PasswordSalt = salt };
+            seed.AdminCredentials.Add(second);
+            await seed.SaveChangesAsync();
+        }
+
+        // The lookup that says the address is free has answered when the other account takes it.
+        var real = new AdminCredentialRepository(NewContext());
+        int interruptions = 0;
+        var repository = new Mock<IAdminCredentialRepository>();
+        repository.Setup(r => r.GetByIdAsync(It.IsAny<int>())).Returns((int id) => real.GetByIdAsync(id));
+        repository.Setup(r => r.TryChangeEmailAsync(It.IsAny<AdminCredential>(), It.IsAny<string>()))
+            .Returns((AdminCredential c, string e) => real.TryChangeEmailAsync(c, e));
+        repository.Setup(r => r.GetByEmailAsync(It.IsAny<string>())).Returns(async (string email) =>
+        {
+            AdminCredential? found = await real.GetByEmailAsync(email);
+            if (Interlocked.Increment(ref interruptions) == 1)
+            {
+                Assert.NotNull(await AuthServiceAs(second).ChangeEmailAsync("Current123!", "taken@example.com"));
+            }
+
+            return found;
+        });
+
+        Exception? refusal = await Record.ExceptionAsync(
+            () => AuthServiceAs(first, repository: repository.Object).ChangeEmailAsync("Current123!", "taken@example.com"));
+
+        AssertRefusedAs(ErrorCodes.AuthEmailAlreadyInUse, refusal);
+        Assert.Equal("owner@example.com", (await ReloadAsync(first.Id)).Email);
+        Assert.Equal("taken@example.com", (await ReloadAsync(second.Id)).Email);
     }
 }
