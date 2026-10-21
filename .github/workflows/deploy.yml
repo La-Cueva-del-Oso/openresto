@@ -71,20 +71,32 @@ jobs:
           script: |
             set -e
             cd ${{ secrets.VPS_DEPLOY_PATH }}
+            DEPLOY_SHA=${{ github.sha }}
 
             trap 'echo "==> Error — dumping container logs:"; docker compose -f docker-compose.vps.yml logs --tail=80' ERR
 
-            # A hand edit on the VPS makes `git pull` refuse to merge and blocks
-            # every deploy until someone can SSH in. Stash it instead: the
-            # checkout tracks main, and the edit stays recoverable.
+            # A hand edit on the VPS blocks the checkout below until someone can
+            # SSH in. Stash it instead; the edit stays recoverable.
             if ! git diff --quiet HEAD; then
               echo "==> Stashing local changes on the VPS (recover with git stash list):"
               git diff --stat HEAD
               git stash push -m "deploy autostash $(date -u +%FT%TZ)"
             fi
 
-            echo "==> Pulling latest code..."
-            git pull origin main
+            # Deploy the commit CI approved, not whatever main points at by now:
+            # a push landing mid-run would otherwise ship untested code.
+            echo "==> Checking out $DEPLOY_SHA..."
+            if ! printf '%s' "$DEPLOY_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "DEPLOY_SHA is not a full commit SHA: '$DEPLOY_SHA'"
+              exit 1
+            fi
+            git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main" "$DEPLOY_SHA"
+            if ! git merge-base --is-ancestor "$DEPLOY_SHA" origin/main; then
+              echo "$DEPLOY_SHA is not on main; refusing to deploy it."
+              exit 1
+            fi
+            git checkout -q -B main "$DEPLOY_SHA"
+            git log -1 --format='Deploying %h %s'
 
             # The VPS's network drops registry downloads now and then (npm
             # ETIMEDOUT, MCR connection resets). Build separately so a flake can

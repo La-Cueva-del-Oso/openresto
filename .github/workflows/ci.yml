@@ -691,9 +691,16 @@ jobs:
         if: failure()
         run: docker compose logs --tail=100
 
+  # The PR-time path-filtered workflow, called here on a push to main so deploy can wait on it.
+  migration-check:
+    name: Migration Safety Check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/migration-check.yml
+
   deploy:
     name: Deploy to VPS
-    needs: [frontend, frontend-android, routes, backend, docker, e2e-smoke, e2e-extensive]
+    needs:
+      [frontend, frontend-android, routes, backend, docker, e2e-smoke, e2e-extensive, migration-check]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: ./.github/workflows/deploy.yml
     secrets: inherit
