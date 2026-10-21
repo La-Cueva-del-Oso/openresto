@@ -263,6 +263,29 @@ public class BookingConcurrencyTests(BookingConcurrencyTests.FileDbFactory facto
         Assert.Equal(1, ActiveBookingsOnTable(floor.TableIds[0]));
     }
 
+    /// <summary>
+    /// With a free table for every request, only the ticket itself can stop a second booking: the
+    /// check that it is still waiting has to sit inside the lock that closes it.
+    /// </summary>
+    [Fact]
+    public async Task ConcurrentSeatsOfOneTicket_CreateOneBookingAndRefuseTheRest()
+    {
+        const int tickets = 3;
+        Floor floor = SeedFloor(tables: tickets * Racers);
+        int[] entryIds = SeedWaitlist(floor.RestaurantId, count: tickets);
+
+        HttpResponseMessage[] responses = await RaceAsync(
+            entryIds.SelectMany(id => Enumerable.Range(0, Racers).Select(_ => SeatEntry(id))));
+
+        Assert.Equal(tickets, responses.Count(r => r.StatusCode == HttpStatusCode.OK));
+        foreach (HttpResponseMessage loser in responses.Where(r => r.StatusCode != HttpStatusCode.OK))
+        {
+            Assert.Equal(HttpStatusCode.Conflict, loser.StatusCode);
+            Assert.Equal(ErrorCodes.WaitlistNotActive, await CodeOf(loser));
+        }
+        Assert.Equal(tickets, floor.TableIds.Sum(ActiveBookingsOnTable));
+    }
+
     [Fact]
     public async Task ConcurrentWaitlistSeatsOnSeparateTables_SeatEveryParty()
     {

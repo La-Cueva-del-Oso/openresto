@@ -85,6 +85,8 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories
             return booking;
         }
 
+        /// <seealso>AdminServiceTests.PurgeBookingAsync_WithASharedReference_ErasesOnlyThatGuestsRows</seealso>
+        /// <seealso>AdminServiceTests.PurgeBookingAsync_OfABookingWithNoReference_KeepsRowsThatHaveNoReferenceEither</seealso>
         public async Task DeleteAsync(int id)
         {
             Booking? booking = await _db.Bookings.FindAsync(id);
@@ -95,12 +97,22 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories
 
             // The guest's name, address and reference are copied onto rows with no cascade
             // (SET NULL, or no FK at all), so deleting only the booking would leave them behind.
-            // One SaveChanges keeps the erasure atomic.
+            // One SaveChanges keeps the erasure atomic. A reference is not unique (nothing checks a
+            // draw against the table), so where it is the only link it must also agree with the
+            // guest's own name or address once another booking carries it too.
             string bookingRef = booking.BookingRef;
             bool hasRef = !string.IsNullOrEmpty(bookingRef); // "" would match every capacity notification
+            string refKey = bookingRef.ToLowerInvariant();
+#pragma warning disable CA1862, CA1311, CA1304 // ToLower in LINQ-to-EF is intentional, as in the lookup by reference
+            bool refShared = hasRef && await _db.Bookings.AnyAsync(b => b.Id != id && b.BookingRef.ToLower() == refKey);
+#pragma warning restore CA1862, CA1311, CA1304
+            string name = booking.CustomerName ?? string.Empty;
+            string email = (booking.CustomerEmail ?? string.Empty).Trim();
             _db.AdminNotifications.RemoveRange(_db.AdminNotifications
-                .Where(n => n.BookingId == id || (hasRef && n.BookingRef == bookingRef)));
-            _db.EmailFailures.RemoveRange(_db.EmailFailures.Where(f => hasRef && f.BookingRef == bookingRef));
+                .Where(n => n.BookingId == id
+                    || (hasRef && n.BookingId == null && n.BookingRef == bookingRef && (!refShared || n.CustomerName == name))));
+            _db.EmailFailures.RemoveRange(_db.EmailFailures
+                .Where(f => hasRef && f.BookingRef == bookingRef && (!refShared || f.RecipientEmail.Trim() == email)));
             _db.WaitlistEntries.RemoveRange(_db.WaitlistEntries.Where(w => w.BookingId == id));
             _db.Bookings.Remove(booking);
             await _db.SaveChangesAsync();

@@ -26,6 +26,9 @@ How each feature behaves, its API fields and its error codes are in
 - Email errors no longer expose the mail server's own error text. The connection test and the booking email endpoints return a stable code (`email.auth_failed`, `email.connection_failed`, `email.recipient_rejected`, `email.send_failed`) shown to the admin as a plain sentence, and the failures list keeps only that code.
 - The command-line client refuses plain `http://` server addresses unless they point at the same machine, or `OPENRESTO_ALLOW_HTTP=1` is set, so an API key never travels unencrypted by accident.
 - Text that comes from the API can no longer drive the terminal of someone using the command-line client: control and escape characters in tables, records, errors and `--json` output are shown as visible `\xNN` escapes. The server also refuses control characters in a booking's name and special requests (`booking.name_invalid`, `booking.special_requests_invalid`).
+- Web Push requests now give up after 15 seconds and read at most 64 KiB of the push service's answer. Before, a push address chosen by a guest could answer with an endless body and tie up the server while a reminder or notification was being sent; such a send is now just that subscription's failure.
+- Purging a booking no longer erases another guest's notifications and email-failure records when two bookings happen to share a reference. Rows linked to the booking are found by that link; rows that only carry the reference are removed only if they also match the guest's own name or address.
+- An API key with the `users:write` scope can now deactivate an account but no longer reactivate one: the request is refused with `api_key.not_allowed` (403) and an Owner reactivates from a signed-in session. Before, a key could switch an account back on, which gave its login back to anyone who still knew the old password. `openresto users activate` therefore stops working with an API key.
 
 ### Changed
 
@@ -37,6 +40,8 @@ How each feature behaves, its API fields and its error codes are in
 - Two simultaneous bookings for the same table and time could both succeed, whether they came from the website, the admin, the waitlist or a booking being moved. Creating, moving and seating now go through one lock, so the second request gets the usual "table taken" answer. The cover limit per slot is checked inside the same lock.
 - Restoring a cancelled booking now refuses when its table was booked in the meantime, instead of seating two parties at once.
 - 22 error messages (API keys, brand settings, booking reminders, wallet passes, push notifications) were shown in English whatever the language; they are now translated into English, Spanish, French and German, and a test fails when a new error code ships without its translations. Spanish addresses everyone as _tú_.
+- A booking made with stray spaces around the email (`" guest@example.com "`) could not be found afterwards: the lookup answered "not found" for the right reference. The address is now stored trimmed, and the lookup also finds bookings already saved with spaces.
+- Seating the same waitlist ticket twice at the same moment (two staff pressing Seat, or a double tap) created two bookings on two tables. The ticket is now checked and closed inside the same lock as the booking, so the second request gets the "already left the waitlist" answer.
 
 ## [2.4.1] - 2026-10-14
 

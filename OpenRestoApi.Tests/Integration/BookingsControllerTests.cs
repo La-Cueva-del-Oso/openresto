@@ -681,6 +681,76 @@ public class BookingsControllerTests(TestWebAppFactory factory) : IClassFixture<
         Assert.Equal(unknownRefBody, wrongEmailBody);
     }
 
+    private string? StoredEmailOf(int bookingId)
+    {
+        using IServiceScope scope = _factory.Services.CreateScope();
+        return scope.ServiceProvider.GetRequiredService<AppDbContext>().Bookings.Single(b => b.Id == bookingId).CustomerEmail;
+    }
+
+    /// <summary>
+    /// The address is validated trimmed, so it has to be stored trimmed too: the lookup compares it
+    /// with what the guest types, and a stored pair of spaces made the right reference answer 404.
+    /// </summary>
+    [Fact]
+    public async Task CreateBooking_StoresTheEmailTrimmed_ForAnExplicitTableAndForAutoAssign()
+    {
+        HttpClient client = _factory.CreateClient();
+        (int r, int s, int t) = GetSeededIds();
+        (int pastaId, _, _) = GetPastaPlaceIds();
+
+        HttpResponseMessage explicitTable = await client.PostAsJsonAsync("/api/bookings", new
+        {
+            restaurantId = r, sectionId = s, tableId = t, seats = 2,
+            date = DateTime.UtcNow.AddDays(200).ToString("yyyy-MM-ddT12:00:00"),
+            customerEmail = "  padded-explicit@test.com ",
+        });
+        HttpResponseMessage autoAssign = await client.PostAsJsonAsync("/api/bookings", new
+        {
+            restaurantId = pastaId, seats = 2,
+            date = DateTime.UtcNow.AddDays(201).ToString("yyyy-MM-ddT12:00:00"),
+            customerEmail = " padded-auto@test.com  ",
+        });
+
+        foreach ((HttpResponseMessage response, string expected) in new[]
+        {
+            (explicitTable, "padded-explicit@test.com"),
+            (autoAssign, "padded-auto@test.com"),
+        })
+        {
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+            JsonElement body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(expected, StoredEmailOf(body.GetProperty("id").GetInt32()));
+
+            string bookingRef = body.GetProperty("bookingRef").GetString()!;
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/bookings/ref/{bookingRef}?email={expected}")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/bookings/ref/{bookingRef}?email=%20{expected}%20")).StatusCode);
+        }
+    }
+
+    /// <summary>
+    /// Rows written before the address was trimmed on the way in still carry the spaces; the lookup
+    /// finds them by the trimmed address like cancel does, and a wrong address still gets the
+    /// answer an unknown reference gets.
+    /// </summary>
+    [Fact]
+    public async Task GetBookingByRef_FindsARowStoredWithSpaces_AndStillHidesAWrongEmail()
+    {
+        HttpClient client = _factory.CreateClient();
+        string bookingRef = $"padded-lookup-{Guid.NewGuid():N}";
+        SeedBookingWithStoredRef(bookingRef, "  owner@test.com ", DateTime.UtcNow.AddDays(202));
+
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/bookings/ref/{bookingRef}?email=owner@test.com")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/bookings/ref/{bookingRef}?email=%20owner@test.com%20")).StatusCode);
+
+        (HttpStatusCode wrongStatus, string wrongBody) =
+            await ReadAsync(await client.GetAsync($"/api/bookings/ref/{bookingRef}?email=stranger@test.com"));
+        (HttpStatusCode unknownStatus, string unknownBody) =
+            await ReadAsync(await client.GetAsync($"/api/bookings/ref/no-such-ref-{Guid.NewGuid():N}?email=owner@test.com"));
+        Assert.Equal(HttpStatusCode.NotFound, wrongStatus);
+        Assert.Equal(unknownStatus, wrongStatus);
+        Assert.Equal(unknownBody, wrongBody);
+    }
+
     [Fact]
     public async Task CancelBookingByRef_UnknownRefAndWrongEmailAreIndistinguishable()
     {

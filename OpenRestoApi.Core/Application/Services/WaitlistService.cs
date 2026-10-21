@@ -236,15 +236,18 @@ public class WaitlistService(
     /// <seealso>WaitlistServiceTests.SeatAsync_UsesAWalkInOnlyTable</seealso>
     /// <seealso>WaitlistServiceTests.SeatAsync_Rejects_WhenNoTableIsFree</seealso>
     /// <seealso>WaitlistServiceTests.SeatAsync_Rejects_ATableThatIsNotFree</seealso>
+    /// <seealso>BookingConcurrencyTests.ConcurrentSeatsOfOneTicket_CreateOneBookingAndRefuseTheRest</seealso>
     public async Task<SeatWaitlistEntryResponse> SeatAsync(int entryId, SeatWaitlistEntryRequest req)
     {
-        WaitlistEntry entry = await LoadActiveEntryAsync(entryId);
-        Restaurant restaurant = await LoadRestaurantAsync(entry.RestaurantId);
-        DateTime now = _clock.UtcNow;
-
+        WaitlistEntry entry;
+        Restaurant restaurant;
         Booking booking;
         using (await _writeGate.EnterAsync())
         {
+            entry = await LoadActiveEntryAsync(entryId);
+            restaurant = await LoadRestaurantAsync(entry.RestaurantId);
+            DateTime now = _clock.UtcNow;
+
             IReadOnlyList<TableCandidate> free = await _autoAssigner.BuildCandidatesAsync(restaurant, entry.Seats, now, includeWalkInOnly: true);
             TableCandidate unit = PickUnit(free, req)
                 ?? throw new ConflictException("No free table can seat this party right now.") { Code = ErrorCodes.WaitlistNoTableFree };
@@ -264,11 +267,11 @@ public class WaitlistService(
                 Status = BookingStatus.Seated,
             };
             await _bookings.AddAsync(booking);
-        }
 
-        Close(entry, WaitlistStatus.Seated);
-        entry.BookingId = booking.Id;
-        await _waitlist.SaveChangesAsync();
+            Close(entry, WaitlistStatus.Seated);
+            entry.BookingId = booking.Id;
+            await _waitlist.SaveChangesAsync();
+        }
 
         _notificationQueue?.EnqueueBookingCreated(booking, restaurant.Name);
         Describe(AuditActions.WaitlistSeat, entry, $"Seated ticket #{entry.Number} as booking {booking.BookingRef}");
