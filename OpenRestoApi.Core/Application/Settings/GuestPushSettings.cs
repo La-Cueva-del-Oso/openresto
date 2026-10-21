@@ -33,8 +33,23 @@ public class GuestPushSettings
     /// </summary>
     public int MaxSendsPerPass { get; set; } = 200;
 
-    /// <summary>How long one push may take before it counts as that subscription's failure.</summary>
-    public TimeSpan SendTimeout { get; set; } = TimeSpan.FromSeconds(10);
+    public static readonly TimeSpan DefaultSendTimeout = TimeSpan.FromSeconds(10);
+
+    private TimeSpan _sendTimeout = DefaultSendTimeout;
+
+    /// <summary>
+    /// How long one push may take before it counts as that subscription's failure. Zero,
+    /// negative (including "infinite") and anything <see cref="CancellationTokenSource.CancelAfter(TimeSpan)"/>
+    /// cannot take become <see cref="DefaultSendTimeout"/>: left as set, they would fail every push
+    /// at once or throw out of the reminder pass.
+    /// </summary>
+    /// <seealso>GuestPushSettingsTests.SendTimeout_ReplacesAValueTheTimerCannotTakeWithTheDefault</seealso>
+    /// <seealso>GuestPushSettingsTests.SendTimeout_KeepsAPositiveValue</seealso>
+    public TimeSpan SendTimeout
+    {
+        get => _sendTimeout;
+        set => _sendTimeout = value > TimeSpan.Zero && value.TotalMilliseconds < uint.MaxValue ? value : DefaultSendTimeout;
+    }
 
     /// <summary>
     ///

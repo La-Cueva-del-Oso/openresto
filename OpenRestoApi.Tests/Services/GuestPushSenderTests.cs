@@ -163,6 +163,23 @@ public class GuestPushSenderTests
             Times.Never);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-5)]
+    public async Task SendAsync_WithAnUnusableSendTimeout_StillSendsUnderTheDefault(int milliseconds)
+    {
+        // A real client stops on a cancelled token; a timeout of zero cancels it before the send starts.
+        _webPush
+            .Setup(c => c.SendNotificationAsync(It.IsAny<PushSubscription>(), It.IsAny<string>(), It.IsAny<VapidDetails>(), It.IsAny<CancellationToken>()))
+            .Returns<PushSubscription, string, VapidDetails, CancellationToken>((_, _, _, ct) => Task.Delay(1, ct));
+        GuestPushSender sender = CreateSender(ConfiguredVapid(), TimeSpan.FromMilliseconds(milliseconds));
+
+        GuestPushResult result = await sender.SendAsync(WebPushSubscription(), Message);
+
+        Assert.Equal(GuestPushOutcome.Delivered, result.Outcome);
+    }
+
     /// <summary>
     /// A push service that never answers is that subscription's failure, after the send timeout,
     /// so one stuck address cannot stall the reminder pass for every guest after it.
