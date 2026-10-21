@@ -65,7 +65,7 @@ describe("useBookingReminder", () => {
 
   it("registers, subscribes in the active locale, remembers, and turns on", async () => {
     register.mockResolvedValue({ status: "registered", registration: REG });
-    subscribe.mockResolvedValue(true);
+    subscribe.mockResolvedValue({ ok: true });
     const { result } = renderHook(() => useBookingReminder("ref-1", "x@y.z"));
 
     await act(() => result.current.enable());
@@ -73,6 +73,7 @@ describe("useBookingReminder", () => {
     expect(subscribe).toHaveBeenCalledWith("ref-1", "x@y.z", REG, "fr");
     expect(rememberReminder).toHaveBeenCalledWith("ref-1", "ExponentPushToken[1]");
     expect(result.current.status).toBe("on");
+    expect(result.current.errorMessage).toBeNull();
   });
 
   it("reports denied when the OS prompt is refused, and unsupported when nothing can register", async () => {
@@ -89,13 +90,28 @@ describe("useBookingReminder", () => {
 
   it("reports an error and remembers nothing when the server refuses", async () => {
     register.mockResolvedValue({ status: "registered", registration: REG });
-    subscribe.mockResolvedValue(false);
+    subscribe.mockResolvedValue({ ok: false });
     const { result } = renderHook(() => useBookingReminder("ref-1", "x@y.z"));
 
     await act(() => result.current.enable());
 
     expect(result.current.status).toBe("error");
+    expect(result.current.errorMessage).toBeNull();
     expect(rememberReminder).not.toHaveBeenCalled();
+  });
+
+  it("keeps the server's reason for a refusal, and drops it on the next attempt", async () => {
+    register.mockResolvedValue({ status: "registered", registration: REG });
+    subscribe.mockResolvedValueOnce({ ok: false, message: "Too many devices." });
+    const { result } = renderHook(() => useBookingReminder("ref-1", "x@y.z"));
+
+    await act(() => result.current.enable());
+    expect(result.current.status).toBe("error");
+    expect(result.current.errorMessage).toBe("Too many devices.");
+
+    subscribe.mockResolvedValueOnce({ ok: false });
+    await act(() => result.current.enable());
+    expect(result.current.errorMessage).toBeNull();
   });
 
   it("forgets the device first and then tells the server when turning off", async () => {

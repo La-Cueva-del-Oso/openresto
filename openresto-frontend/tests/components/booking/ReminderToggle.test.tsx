@@ -13,8 +13,8 @@ const hook = useBookingReminder as jest.Mock;
 const enable = jest.fn().mockResolvedValue(undefined);
 const disable = jest.fn().mockResolvedValue(undefined);
 
-function renderToggle(status: string) {
-  hook.mockReturnValue({ status, enable, disable });
+function renderToggle(status: string, errorMessage: string | null = null) {
+  hook.mockReturnValue({ status, errorMessage, enable, disable });
   return renderWithProviders(<ReminderToggle bookingRef="ref-1" email="x@y.z" separator={<></>} />);
 }
 
@@ -56,6 +56,12 @@ describe("ReminderToggle", () => {
     expect(screen.getByText(/Couldn't turn on reminders/)).toBeTruthy();
     fireEvent.press(screen.getByTestId("reminder-toggle-btn"));
     expect(enable).toHaveBeenCalled();
+  });
+
+  it("shows the server's reason instead of the generic copy when it gave one", () => {
+    renderToggle("error", "There are already too many devices with reminders for this booking.");
+    expect(screen.getByText(/already too many devices/)).toBeTruthy();
+    expect(screen.queryByText(/Couldn't turn on reminders/)).toBeNull();
   });
 
   it("shows a spinner while busy", () => {

@@ -33,19 +33,24 @@ export function useBookingReminder(bookingRef: string, email: string) {
     !supported ? "unsupported" : reminderEndpointFor(bookingRef) ? "on" : "off"
   );
 
+  /** The server's own reason for the last refusal, in the guest's language; null shows the generic copy. */
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   useEffect(() => {
     setStatus(!supported ? "unsupported" : reminderEndpointFor(bookingRef) ? "on" : "off");
   }, [bookingRef, supported]);
 
   const enable = useCallback(async () => {
     setStatus("busy");
+    setErrorMessage(null);
     const result = await registerForReminders({ webPushPublicKey });
     if (result.status !== "registered") {
       setStatus(result.status === "denied" ? "denied" : "unsupported");
       return;
     }
-    const ok = await subscribeReminder(bookingRef, email, result.registration, locale);
-    if (!ok) {
+    const subscribed = await subscribeReminder(bookingRef, email, result.registration, locale);
+    if (!subscribed.ok) {
+      setErrorMessage(subscribed.message ?? null);
       setStatus("error");
       return;
     }
@@ -63,5 +68,5 @@ export function useBookingReminder(bookingRef: string, email: string) {
     setStatus("off");
   }, [bookingRef, email]);
 
-  return { status, enable, disable };
+  return { status, errorMessage, enable, disable };
 }
