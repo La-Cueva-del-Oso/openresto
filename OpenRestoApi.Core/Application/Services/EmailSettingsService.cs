@@ -115,7 +115,7 @@ public class EmailSettingsService(
     /// <seealso>EmailSettingsServiceTests.SaveAsync_RejectsABlankHost</seealso>
     /// <seealso>EmailSettingsServiceTests.SaveAsync_RejectsABlankUsername</seealso>
     /// <seealso>EmailSettingsServiceTests.SaveAsync_RejectsAPortOutsideTheValidRange</seealso>
-    /// <seealso>EmailSettingsServiceTests.SaveAsync_AcceptsThePortRangeLimits</seealso>
+    /// <seealso>EmailSettingsServiceTests.SaveAsync_AcceptsThePortRangeLimits_AndStoresTheHostTrimmed</seealso>
     private static string RequireUsableServer(string? host, int port, string? username)
     {
         string trimmedHost = (host ?? string.Empty).Trim();
