@@ -23,7 +23,7 @@ const missing = !probe("bash", ["-c", "true"])
  * A `python3` stand-in records its argv, because the hash is computed there and the password
  * must not reach it (or anything else) as an argument.
  */
-function sandbox({ pushTable = true } = {}) {
+function sandbox({ pushTable = true, keyTable = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "reset-admin-"));
   const db = join(dir, "openresto.db").replaceAll("\\", "/");
   const log = join(dir, "argv.log").replaceAll("\\", "/");
@@ -58,6 +58,11 @@ function sandbox({ pushTable = true } = {}) {
     sql(`CREATE TABLE AdminPushSubscriptions (Id INTEGER PRIMARY KEY, UserId INTEGER, Endpoint TEXT);
       INSERT INTO AdminPushSubscriptions VALUES (1,1,'https://push/intruder'),(2,1,'https://push/second'),(3,2,'https://push/other');`);
 
+  if (keyTable)
+    sql(`CREATE TABLE AdminApiKeys (Id INTEGER PRIMARY KEY, UserId INTEGER, RevokedAt TEXT);
+      INSERT INTO AdminApiKeys VALUES
+        (1,1,NULL),(2,1,NULL),(3,1,'${ALREADY_REVOKED}'),(4,2,NULL);`);
+
   const run = (args, input = "") =>
     spawnSync("bash", [script, ...args], {
       input,
@@ -75,8 +80,16 @@ function sandbox({ pushTable = true } = {}) {
       'token',ResetToken) FROM AdminCredentials WHERE Id=${id};`).stdout.trim();
   const argv = () => (existsSync(log) ? readFileSync(log, "utf8") : "");
   const pushOwners = () => sql("SELECT group_concat(UserId) FROM AdminPushSubscriptions ORDER BY Id;").stdout.trim();
-  return { run, row: (id) => JSON.parse(row(id)), argv, pushOwners };
+  const keyRevocations = () =>
+    Object.fromEntries(
+      sql("SELECT Id || '=' || COALESCE(RevokedAt,'') FROM AdminApiKeys ORDER BY Id;")
+        .stdout.trim().split(/\r?\n/).map((l) => l.split("=")),
+    );
+  return { run, row: (id) => JSON.parse(row(id)), argv, pushOwners, keyRevocations };
 }
+
+// EF Core's own TEXT shape for a DateTime, so the fixture is a row the API could have written.
+const ALREADY_REVOKED = "2026-01-02 03:04:05.1234567";
 
 const pbkdf2 = (password, saltB64) =>
   pbkdf2Sync(password, Buffer.from(saltB64, "base64"), 100_000, 32, "sha256").toString("base64");
@@ -120,6 +133,34 @@ describe("scripts/reset-admin.sh", { skip: missing }, () => {
     assert.notEqual(status, 0, "a recovery that left the push rows in place reported success");
     assert.equal(box.row(1).hash, "old", "the credential change was committed without the push drop");
     assert.equal(box.row(1).session, 4);
+  });
+
+  it("soft-revokes the recovered account's live API keys and leaves every other key alone", () => {
+    const box = sandbox();
+    const before = Date.now();
+    const { status, stderr } = box.run(["--email", "a@b.com", "--password-stdin"], `${fresh}\n`);
+    assert.equal(status, 0, stderr);
+
+    const keys = box.keyRevocations();
+    for (const id of ["1", "2"]) {
+      assert.match(keys[id], /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d/, `key ${id} was not revoked in the shape EF reads`);
+      const at = Date.parse(keys[id].replace(" ", "T") + "Z");
+      assert.ok(Math.abs(at - before) < 60_000, `key ${id} RevokedAt ${keys[id]} is not now in UTC`);
+    }
+    assert.equal(keys["3"], ALREADY_REVOKED, "an earlier revocation keeps its original timestamp");
+    assert.equal(keys["4"], "", "another account's key must stay live");
+  });
+
+  it("revokes no API key when the reset rolls back", () => {
+    for (const opts of [{ pushTable: false }, { keyTable: false }]) {
+      const box = sandbox(opts);
+      const { status } = box.run(["--email", "a@b.com", "--password-stdin"], `${fresh}\n`);
+      assert.notEqual(status, 0, `${JSON.stringify(opts)} reported success`);
+      assert.equal(box.row(1).hash, "old");
+      if (opts.keyTable !== false)
+        assert.deepEqual(Object.values(box.keyRevocations()), ["", "", ALREADY_REVOKED, ""],
+          "a key was revoked although the credential change was rolled back");
+    }
   });
 
   it("never lets the password reach a command line", () => {
