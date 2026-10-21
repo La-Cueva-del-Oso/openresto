@@ -5,7 +5,12 @@ import { useTranslation } from "react-i18next";
 import { ThemedText } from "@/components/themed-text";
 import { theme } from "@/theme/theme";
 import { useAppTheme } from "@/hooks/use-app-theme";
-import { getVapidPublicKey, subscribePush, unsubscribePush } from "@/api/notifications";
+import {
+  getVapidPublicKey,
+  PushSubscribeRejected,
+  subscribePush,
+  unsubscribePush,
+} from "@/api/notifications";
 import Button from "@/components/common/Button";
 import { ButtonRow } from "@/components/common/ButtonRow";
 import { AnimatedAccordion } from "@/components/common/AnimatedAccordion";
@@ -77,6 +82,7 @@ export function PushNotificationsCard() {
     if (!vapidKey) return;
     setWorking(true);
     setErrorMsg(null);
+    let sub: PushSubscription | null = null;
     try {
       const permission = await Notification.requestPermission();
       if (permission === "denied") {
@@ -91,7 +97,7 @@ export function PushNotificationsCard() {
       }
 
       const sw = await navigator.serviceWorker.ready;
-      const sub = await sw.pushManager.subscribe({
+      sub = await sw.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidKey),
       });
@@ -109,8 +115,14 @@ export function PushNotificationsCard() {
 
       setPushState("active");
     } catch (err) {
-      console.error("Push subscribe error:", err);
-      setErrorMsg(t("admin.settings.pushNotifications.enableFailed"));
+      // Without a row on the server the browser's own subscription would read as "active" on
+      // the next visit, so take it back with the registration.
+      await sub?.unsubscribe().catch(() => false);
+      setErrorMsg(
+        err instanceof PushSubscribeRejected && err.message
+          ? err.message
+          : t("admin.settings.pushNotifications.enableFailed")
+      );
     }
     setWorking(false);
   };

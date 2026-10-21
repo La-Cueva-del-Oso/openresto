@@ -1,4 +1,5 @@
 import { get, post, patch, del } from "./client";
+import { apiErrorMessage } from "@/api/errors";
 
 export type NotificationType = "BookingCreated" | "BookingCancelled" | "RestaurantNearlyFull";
 
@@ -94,15 +95,25 @@ export async function getVapidPublicKey(): Promise<string | null> {
   }
 }
 
+/** The server refused the registration. `message` is its reason in the viewer's language, or "" when it gave none. */
+export class PushSubscribeRejected extends Error {}
+
 /**
  * Registers this browser for admin push. One call covers every location — an admin account
  * is not scoped to a restaurant, so neither is the subscription.
+ *
+ * Throws `PushSubscribeRejected` when the server answers with an error (an ended session
+ * included), so a caller never reports "active" for a row the server did not write. A network
+ * failure propagates as it came.
+ *
+ * @see [notifications.test.ts](../tests/api/notifications.test.ts) — pins that a 2xx resolves
+ * and that a 401 or any other error status rejects, with the server's translated reason.
  */
 export async function subscribePush(sub: PushSubscribeRequest): Promise<void> {
-  try {
-    await post("/admin/push/subscribe", sub);
-  } catch (err) {
-    console.error("subscribePush error:", err);
+  const res = await post("/admin/push/subscribe", sub);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new PushSubscribeRejected(apiErrorMessage(body, ""));
   }
 }
 

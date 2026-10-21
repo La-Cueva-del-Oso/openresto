@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from "@testing-library/react-
 import { Platform } from "react-native";
 import { PushBanner } from "@/components/admin/notifications/PushBanner";
 import * as notificationsApi from "@/api/notifications";
+import { PushSubscribeRejected } from "@/api/notifications";
 
 jest.mock("@expo/vector-icons", () => ({
   Ionicons: () => null,
@@ -11,6 +12,7 @@ jest.mock("@expo/vector-icons", () => ({
 jest.mock("@/api/notifications", () => ({
   getVapidPublicKey: jest.fn(),
   subscribePush: jest.fn(),
+  PushSubscribeRejected: jest.requireActual("@/api/notifications").PushSubscribeRejected,
 }));
 
 const mockGetVapidPublicKey = notificationsApi.getVapidPublicKey as jest.Mock;
@@ -328,12 +330,32 @@ describe("PushBanner", () => {
       await waitFor(() => {
         expect(screen.getByText("Failed to enable - try again.")).toBeTruthy();
       });
-      expect(console.error).toHaveBeenCalledWith("Push subscribe error:", expect.any(Error));
+      expect(console.error).not.toHaveBeenCalled();
+    });
+
+    it("shows the server's reason and takes the browser subscription back when the server refuses", async () => {
+      const sw = await renderInactive();
+      const sub = makeSub();
+      (sw.pushManager.subscribe as jest.Mock).mockResolvedValue(sub);
+      mockSubscribePush.mockRejectedValue(new PushSubscribeRejected("Session ended"));
+
+      await act(async () => {
+        fireEvent.press(screen.getByText("Enable"));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("Session ended")).toBeTruthy();
+      });
+      expect(sub.unsubscribe).toHaveBeenCalledTimes(1);
     });
 
     it("shows an error message when the subscription is missing p256dh/auth keys", async () => {
       const sw = await renderInactive();
-      const badSub = { endpoint: "https://push.example.com/bad", getKey: jest.fn(() => null) };
+      const badSub = {
+        endpoint: "https://push.example.com/bad",
+        getKey: jest.fn(() => null),
+        unsubscribe: jest.fn().mockResolvedValue(true),
+      };
       (sw.pushManager.subscribe as jest.Mock).mockResolvedValue(badSub);
 
       await act(async () => {
