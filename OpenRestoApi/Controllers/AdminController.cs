@@ -151,10 +151,16 @@ public class AdminController(AdminService adminService, ILogger<AdminController>
     [RequiresScope(ApiKeyScopes.Locations, ApiKeyScopes.Write)]
     public async Task<IActionResult> ExtendBookings(int id, [FromBody] ExtendRestaurantRequest req)
     {
-        List<BookingDetailDto>? extendedBookings = await _adminService.ExtendAllActiveBookingsAsync(id, req.Minutes);
-        return extendedBookings != null
-            ? Ok(new { Message = "Bookings extended successfully.", ExtendedBookings = extendedBookings })
-            : NotFound();
+        ExtendRestaurantBookingsResponse? result = await _adminService.ExtendAllActiveBookingsAsync(id, req.Minutes);
+        if (result == null)
+        {
+            return NotFound();
+        }
+
+        result.Message = result.SkippedBookings.Count == 0
+            ? "Bookings extended successfully."
+            : "Bookings extended, except those with another booking right after them.";
+        return Ok(result);
     }
 
     [HttpGet("restaurants")]

@@ -66,6 +66,10 @@ const en = {
 
   "location.paused": "Location {id} paused for {minutes} minute(s).",
   "location.unpaused": "Location {id} unpaused.",
+  "location.extended":
+    "Extended {count} booking(s) at location {id} by {minutes} minute(s).",
+  "location.extendSkipped":
+    "{count} booking(s) left as they were because another booking follows on the same table:",
   "location.archived": "Location {id} archived.",
   "location.restored": "Location {id} restored.",
   "location.deleted": "Location {id} deleted.",
@@ -147,6 +151,10 @@ const es = {
 
   "location.paused": "Ubicación {id} en pausa por {minutes} minuto(s).",
   "location.unpaused": "Ubicación {id} reanudada.",
+  "location.extended":
+    "Se alargaron {count} reserva(s) de la ubicación {id} en {minutes} minuto(s).",
+  "location.extendSkipped":
+    "{count} reserva(s) quedaron como estaban porque otra reserva sigue en la misma mesa:",
   "location.archived": "Ubicación {id} archivada.",
   "location.restored": "Ubicación {id} restaurada.",
   "location.deleted": "Ubicación {id} eliminada.",

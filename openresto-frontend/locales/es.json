@@ -1021,6 +1021,9 @@
         "extendSubtitle": "Selecciona un restaurante para ampliar todas las reservas activas una hora.",
         "extendedSubtitle_one": "Se ha ampliado la siguiente reserva una hora:",
         "extendedSubtitle_other": "Se han ampliado las siguientes {{count}} reservas una hora:",
+        "noneExtendedSubtitle": "No se pudo ampliar ninguna reserva.",
+        "skippedSubtitle_one": "{{count}} reserva se dejó como estaba porque otra reserva la sigue en la misma mesa:",
+        "skippedSubtitle_other": "{{count}} reservas se dejaron como estaban porque otra reserva las sigue en la misma mesa:",
         "loadingRestaurants": "Cargando restaurantes",
         "noRestaurants": "No se encontraron restaurantes.",
         "pausedBadge": "PAUSADO",
@@ -1157,7 +1160,9 @@
         "extend_one": "Ampliar {{count}} reserva activa 60 min",
         "extend_other": "Ampliar {{count}} reservas activas 60 min",
         "extended_one": "{{count}} reserva activa ampliada +60 min",
-        "extended_other": "{{count}} reservas activas ampliadas +60 min"
+        "extended_other": "{{count}} reservas activas ampliadas +60 min",
+        "extendedSkipped_one": "{{extended}} ampliadas; {{count}} sin cambios (otra reserva sigue)",
+        "extendedSkipped_other": "{{extended}} ampliadas; {{count}} sin cambios (otra reserva sigue)"
       },
       "addForm": {
         "namePlaceholder": "Nombre del local (p. ej. Centro, Zona oeste)",

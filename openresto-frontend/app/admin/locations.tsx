@@ -60,6 +60,7 @@ export default function AdminLocationsScreen() {
   const [pausing, setPausing] = useState(false);
   const [extending, setExtending] = useState(false);
   const [extendedBookings, setExtendedBookings] = useState<BookingDetailDto[] | null>(null);
+  const [extendSkippedCount, setExtendSkippedCount] = useState(0);
   const [extendNoActive, setExtendNoActive] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [archiveFailed, setArchiveFailed] = useState(false);
@@ -138,6 +139,7 @@ export default function AdminLocationsScreen() {
   function handleSelectLocation(id: number) {
     selectAndRemember(id);
     setExtendedBookings(null);
+    setExtendSkippedCount(0);
     setExtendNoActive(false);
     setArchiveFailed(false);
     setDeletedName(null);
@@ -315,8 +317,9 @@ export default function AdminLocationsScreen() {
                 const result = await extendRestaurantBookings(selectedRestaurant.id, 60);
                 setExtending(false);
                 if (result.ok) {
-                  if (result.extendedBookings.length > 0) {
+                  if (result.extendedBookings.length > 0 || result.skippedBookings.length > 0) {
                     setExtendedBookings(result.extendedBookings);
+                    setExtendSkippedCount(result.skippedBookings.length);
                   } else {
                     setExtendNoActive(true);
                   }
@@ -326,7 +329,12 @@ export default function AdminLocationsScreen() {
               {extending
                 ? t("admin.locations.extendButton.extending")
                 : extendedBookings !== null
-                  ? t("admin.locations.extendButton.extended", { count: extendedBookings.length })
+                  ? extendSkippedCount > 0
+                    ? t("admin.locations.extendButton.extendedSkipped", {
+                        extended: extendedBookings.length,
+                        count: extendSkippedCount,
+                      })
+                    : t("admin.locations.extendButton.extended", { count: extendedBookings.length })
                   : extendNoActive
                     ? t("admin.locations.extendButton.noActiveToExtend")
                     : activeCount > 0

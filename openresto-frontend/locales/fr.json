@@ -1021,6 +1021,9 @@
         "extendSubtitle": "Sélectionnez un établissement pour prolonger toutes les réservations actives d'une heure.",
         "extendedSubtitle_one": "La réservation suivante a été prolongée d'une heure :",
         "extendedSubtitle_other": "Les {{count}} réservations suivantes ont été prolongées d'une heure :",
+        "noneExtendedSubtitle": "Aucune réservation n'a pu être prolongée.",
+        "skippedSubtitle_one": "{{count}} réservation est restée telle quelle car une autre réservation la suit sur la même table :",
+        "skippedSubtitle_other": "{{count}} réservations sont restées telles quelles car une autre réservation les suit sur la même table :",
         "loadingRestaurants": "Chargement des établissements",
         "noRestaurants": "Aucun établissement trouvé.",
         "pausedBadge": "SUSPENDU",
@@ -1157,7 +1160,9 @@
         "extend_one": "Prolonger {{count}} réservation active de 60 min",
         "extend_other": "Prolonger {{count}} réservations actives de 60 min",
         "extended_one": "{{count}} réservation active prolongée de 60 min",
-        "extended_other": "{{count}} réservations actives prolongées de 60 min"
+        "extended_other": "{{count}} réservations actives prolongées de 60 min",
+        "extendedSkipped_one": "{{extended}} prolongées ; {{count}} inchangée (une autre réservation suit)",
+        "extendedSkipped_other": "{{extended}} prolongées ; {{count}} inchangées (une autre réservation suit)"
       },
       "addForm": {
         "namePlaceholder": "Nom de l'établissement (p. ex. Centre-ville, Rive ouest)",

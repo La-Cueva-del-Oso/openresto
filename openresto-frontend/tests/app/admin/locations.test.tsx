@@ -85,7 +85,11 @@ describe("AdminLocationsScreen", () => {
     (adminGetRestaurants as jest.Mock).mockResolvedValue(mockRestaurants);
     (pauseRestaurantBookings as jest.Mock).mockResolvedValue(true);
     (unpauseRestaurantBookings as jest.Mock).mockResolvedValue(true);
-    (extendRestaurantBookings as jest.Mock).mockResolvedValue({ ok: true, extendedBookings: [] });
+    (extendRestaurantBookings as jest.Mock).mockResolvedValue({
+      ok: true,
+      extendedBookings: [],
+      skippedBookings: [],
+    });
   });
 
   it("renders locations after loading", async () => {
@@ -260,7 +264,11 @@ describe("AdminLocationsScreen", () => {
   });
 
   it("shows No active bookings to extend when extend returns empty", async () => {
-    (extendRestaurantBookings as jest.Mock).mockResolvedValue({ ok: true, extendedBookings: [] });
+    (extendRestaurantBookings as jest.Mock).mockResolvedValue({
+      ok: true,
+      extendedBookings: [],
+      skippedBookings: [],
+    });
     renderScreen();
     await waitFor(() => expect(screen.getByText("Extend 2 active Bookings by 60m")).toBeTruthy());
     await act(async () => {
@@ -272,6 +280,7 @@ describe("AdminLocationsScreen", () => {
   it("shows extended count on button after extend succeeds and locks it", async () => {
     (extendRestaurantBookings as jest.Mock).mockResolvedValue({
       ok: true,
+      skippedBookings: [],
       extendedBookings: [
         {
           id: 10,
@@ -301,6 +310,45 @@ describe("AdminLocationsScreen", () => {
     expect(extendRestaurantBookings).toHaveBeenCalledTimes(1);
   });
 
+  it("says on the button how many were left as they were, and still locks it", async () => {
+    (extendRestaurantBookings as jest.Mock).mockResolvedValue({
+      ok: true,
+      extendedBookings: [{ id: 10 }],
+      skippedBookings: [
+        { id: 11, bookingRef: "R11", tableId: 1, tableGroupId: null, tableName: "T1" },
+        { id: 12, bookingRef: "R12", tableId: 2, tableGroupId: null, tableName: "T2" },
+      ],
+    });
+    renderScreen();
+    await waitFor(() => expect(screen.getByText("Extend 2 active Bookings by 60m")).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(screen.getByText("Extend 2 active Bookings by 60m"));
+    });
+    const label = "Extended 1; 2 left as is (another booking follows)";
+    await waitFor(() => expect(screen.getByText(label)).toBeTruthy());
+    fireEvent.press(screen.getByText(label));
+    expect(extendRestaurantBookings).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report 'no active bookings' when every booking was left as it was", async () => {
+    (extendRestaurantBookings as jest.Mock).mockResolvedValue({
+      ok: true,
+      extendedBookings: [],
+      skippedBookings: [
+        { id: 11, bookingRef: "R11", tableId: 1, tableGroupId: null, tableName: "T1" },
+      ],
+    });
+    renderScreen();
+    await waitFor(() => expect(screen.getByText("Extend 2 active Bookings by 60m")).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(screen.getByText("Extend 2 active Bookings by 60m"));
+    });
+    await waitFor(() =>
+      expect(screen.getByText("Extended 0; 1 left as is (another booking follows)")).toBeTruthy()
+    );
+    expect(screen.queryByText("No active bookings to extend")).toBeNull();
+  });
+
   it("resets extend state when switching locations", async () => {
     const twoRestaurants = [
       { id: 1, name: "Resto 1", sections: [], activeBookingsCount: 2 },
@@ -310,6 +358,7 @@ describe("AdminLocationsScreen", () => {
     (adminGetRestaurants as jest.Mock).mockResolvedValue(twoRestaurants);
     (extendRestaurantBookings as jest.Mock).mockResolvedValue({
       ok: true,
+      skippedBookings: [],
       extendedBookings: [
         {
           id: 10,
@@ -348,7 +397,11 @@ describe("AdminLocationsScreen archive and delete", () => {
     ]);
     (adminGetRestaurants as jest.Mock).mockResolvedValue([{ id: 1, name: "Resto 1" }]);
     (adminSetRestaurantArchived as jest.Mock).mockResolvedValue(true);
-    (extendRestaurantBookings as jest.Mock).mockResolvedValue({ ok: true, extendedBookings: [] });
+    (extendRestaurantBookings as jest.Mock).mockResolvedValue({
+      ok: true,
+      extendedBookings: [],
+      skippedBookings: [],
+    });
   });
 
   const archivedOnly = () => {
@@ -562,7 +615,11 @@ describe("AdminLocationsScreen selected-location persistence", () => {
     (adminGetRestaurants as jest.Mock).mockResolvedValue(twoRestaurants);
     (pauseRestaurantBookings as jest.Mock).mockResolvedValue(true);
     (unpauseRestaurantBookings as jest.Mock).mockResolvedValue(true);
-    (extendRestaurantBookings as jest.Mock).mockResolvedValue({ ok: true, extendedBookings: [] });
+    (extendRestaurantBookings as jest.Mock).mockResolvedValue({
+      ok: true,
+      extendedBookings: [],
+      skippedBookings: [],
+    });
   });
 
   afterEach(() => {

@@ -1021,6 +1021,9 @@
         "extendSubtitle": "Wählen Sie ein Restaurant, um alle aktiven Buchungen um 1 Stunde zu verlängern.",
         "extendedSubtitle_one": "Die folgende Buchung wurde um 1 Stunde verlängert:",
         "extendedSubtitle_other": "Die folgenden {{count}} Buchungen wurden um 1 Stunde verlängert:",
+        "noneExtendedSubtitle": "Keine Buchung konnte verlängert werden.",
+        "skippedSubtitle_one": "{{count}} Buchung blieb unverändert, weil am selben Tisch eine weitere Buchung folgt:",
+        "skippedSubtitle_other": "{{count}} Buchungen blieben unverändert, weil am selben Tisch eine weitere Buchung folgt:",
         "loadingRestaurants": "Restaurants werden geladen",
         "noRestaurants": "Keine Restaurants gefunden.",
         "pausedBadge": "PAUSIERT",
@@ -1157,7 +1160,9 @@
         "extend_one": "{{count}} aktive Buchung um 60 Min. verlängern",
         "extend_other": "{{count}} aktive Buchungen um 60 Min. verlängern",
         "extended_one": "{{count}} aktive Buchung um 60 Min. verlängert",
-        "extended_other": "{{count}} aktive Buchungen um 60 Min. verlängert"
+        "extended_other": "{{count}} aktive Buchungen um 60 Min. verlängert",
+        "extendedSkipped_one": "{{extended}} verlängert; {{count}} unverändert (weitere Buchung folgt)",
+        "extendedSkipped_other": "{{extended}} verlängert; {{count}} unverändert (weitere Buchung folgt)"
       },
       "addForm": {
         "namePlaceholder": "Name des Standorts (z. B. Innenstadt, Westseite)",

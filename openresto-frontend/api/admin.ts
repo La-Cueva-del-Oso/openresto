@@ -101,6 +101,15 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats | nu
   }
 }
 
+/** A sitting the location-wide extension left as it was; carries no guest details. */
+export interface SkippedExtensionDto {
+  id: number;
+  bookingRef: string | null;
+  tableId: number | null;
+  tableGroupId: number | null;
+  tableName: string | null;
+}
+
 export interface BookingDetailDto {
   id: number;
   restaurantId: number;
@@ -386,15 +395,23 @@ export async function unpauseRestaurantBookings(id: number): Promise<boolean> {
 export async function extendRestaurantBookings(
   id: number,
   minutes: number
-): Promise<{ ok: boolean; extendedBookings: BookingDetailDto[] }> {
+): Promise<{
+  ok: boolean;
+  extendedBookings: BookingDetailDto[];
+  skippedBookings: SkippedExtensionDto[];
+}> {
   try {
     const res = await post(`/admin/restaurants/${id}/extend`, { minutes });
-    if (!res.ok) return { ok: false, extendedBookings: [] };
+    if (!res.ok) return { ok: false, extendedBookings: [], skippedBookings: [] };
     const data = await res.json();
-    return { ok: true, extendedBookings: data.extendedBookings || [] };
+    return {
+      ok: true,
+      extendedBookings: data.extendedBookings || [],
+      skippedBookings: data.skippedBookings || [],
+    };
   } catch (err) {
     console.error("extendRestaurantBookings error:", err);
-    return { ok: false, extendedBookings: [] };
+    return { ok: false, extendedBookings: [], skippedBookings: [] };
   }
 }
 

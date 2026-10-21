@@ -768,18 +768,21 @@ public class AdminService(
     /// <seealso>AdminServiceTests.SetBookingStatusAsync_Undo_Rejects_WhenAnotherBookingTookTheFreedTime</seealso>
     private async Task RejectIfTimeTakenAsync(Booking booking, DateTime from, DateTime to, string message, string code)
     {
+        if (await IsTimeTakenAsync(booking, from, to))
+        {
+            throw new ConflictException(message) { Code = code };
+        }
+    }
+
+    private async Task<bool> IsTimeTakenAsync(Booking booking, DateTime from, DateTime to)
+    {
         int minutes = (int)Math.Ceiling((to - from).TotalMinutes);
-        bool taken = await _bookingRepository.IsUnitBookedOnDateAsync(
+        return await _bookingRepository.IsUnitBookedOnDateAsync(
             booking.TableId,
             booking.TableGroupId,
             AsUtc(to).AddMinutes(-minutes),
             minutes,
             excludeBookingId: booking.Id);
-
-        if (taken)
-        {
-            throw new ConflictException(message) { Code = code };
-        }
     }
 
     /// <summary>How long the booking holds its unit: its own span when it has one, else the default.</summary>
@@ -876,7 +879,15 @@ public class AdminService(
         return true;
     }
 
-    public virtual async Task<List<BookingDetailDto>?> ExtendAllActiveBookingsAsync(int restaurantId, int extensionMinutes)
+    /// <summary>
+    /// Lengthens every in-progress sitting that has nothing following it on its table or group, and
+    /// reports the rest as skipped rather than double-booking them. Sittings are taken in start
+    /// order and each extension is written before the next is checked, so a sitting that grew into
+    /// a neighbour's time is seen by that neighbour and the outcome does not depend on row order.
+    /// </summary>
+    /// <seealso>AdminServiceTests.ExtendAllActiveBookingsAsync_Skips_ASittingWhoseAddedTimeIsTaken</seealso>
+    /// <seealso>AdminServiceTests.ExtendAllActiveBookingsAsync_Extends_UpToTheMomentTheNextBookingStarts</seealso>
+    public virtual async Task<ExtendRestaurantBookingsResponse?> ExtendAllActiveBookingsAsync(int restaurantId, int extensionMinutes)
     {
         Restaurant? restaurant = await _restaurantRepository.FindByIdAsync(restaurantId);
         if (restaurant == null)
@@ -884,24 +895,51 @@ public class AdminService(
             return null;
         }
 
-        DateTime nowUtc = DateTime.UtcNow;
+        var extended = new List<Booking>();
+        var skipped = new List<Booking>();
 
-        List<Booking> activeBookings = await _bookingRepository.GetInProgressForRestaurantAsync(restaurantId, nowUtc, restaurant.DefaultBookingDurationMinutes);
-
-        foreach (Booking? booking in activeBookings)
+        using (await _writeGate.EnterAsync())
         {
-            DateTime currentEndTime = booking.EndTime ?? booking.Date.AddMinutes(restaurant.DefaultBookingDurationMinutes);
-            booking.EndTime = currentEndTime.AddMinutes(extensionMinutes);
+            List<Booking> inProgress = await _bookingRepository.GetInProgressForRestaurantAsync(
+                restaurantId, DateTime.UtcNow, restaurant.DefaultBookingDurationMinutes);
+
+            foreach (Booking booking in inProgress.OrderBy(b => b.Date).ThenBy(b => b.Id))
+            {
+                DateTime from = BookingDuration.ResolveEnd(
+                    booking.Date, booking.EndTime, restaurant.DefaultBookingDurationMinutes);
+                DateTime newEnd = from.AddMinutes(extensionMinutes);
+
+                if (await IsTimeTakenAsync(booking, from, newEnd))
+                {
+                    skipped.Add(booking);
+                    continue;
+                }
+
+                booking.EndTime = newEnd;
+                await _bookingRepository.UpdateAsync(booking);
+                extended.Add(booking);
+            }
         }
 
-        // Single SaveChanges flushes every mutated EndTime — same DB round-trip count as the
-        // original implementation. The entities are already tracked on the shared DI-scoped DbContext.
-        await _bookingRepository.SaveChangesAsync();
-
         DescribeRestaurant(AuditActions.RestaurantExtendBookings, restaurant,
-            $"Extended {activeBookings.Count} in-progress bookings at {restaurant.Name} by {extensionMinutes} minutes");
-        return activeBookings.Select(ToDetailDto).ToList();
+            $"Extended {extended.Count} in-progress bookings at {restaurant.Name} by {extensionMinutes} minutes" +
+            (skipped.Count > 0 ? $", {skipped.Count} left as they were because another booking follows" : string.Empty));
+
+        return new ExtendRestaurantBookingsResponse
+        {
+            ExtendedBookings = extended.Select(ToDetailDto).ToList(),
+            SkippedBookings = skipped.Select(ToSkippedExtension).ToList(),
+        };
     }
+
+    private static SkippedExtensionDto ToSkippedExtension(Booking b) => new()
+    {
+        Id = b.Id,
+        BookingRef = b.BookingRef,
+        TableId = b.TableId,
+        TableGroupId = b.TableGroupId,
+        TableName = b.Table?.Name ?? (b.TableGroup is null ? null : BookingMapper.GroupLabel(b.TableGroup)),
+    };
 
     public virtual async Task<RestaurantDto> CreateRestaurantAsync(string name, string? address)
     {

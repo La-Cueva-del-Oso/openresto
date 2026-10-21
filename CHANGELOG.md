@@ -74,6 +74,7 @@ How each feature behaves, its API fields and its error codes are in
 - Booking, or moving a booking, for a time the location's clocks skip on the spring-forward night (for example `2026-03-29T02:30:00` in Madrid) no longer fails with a server error. The time is read as the first real moment after the jump (03:30).
 - Extending a booking, or every in-progress booking at a location, now requires between 1 and 480 minutes. Before, a negative number shortened a sitting (even to before it started) and zero did nothing, both without an error; the API now answers 400 with "Choose between 1 and 480 minutes to extend by." The admin screens only offer 30, 60 and 90.
 - `openresto bookings create --help` and `update --help` described `--date` as UTC. A date with no time zone is the location's local time, and only one ending in `Z` or carrying an offset is an exact instant; the help and the CLI README now say so.
+- "Extend all active bookings" (the late-night button on the dashboard and the location page, and `openresto locations extend`) no longer lengthens a sitting into the next booking on its table or combinable group. Each sitting that is free is extended and the rest are left as they were; the response lists them in `skippedBookings` (id, reference and table, no guest details), the admin names how many were extended and how many were not, in the four languages, and the CLI prints the same.
 
 ## [2.4.1] - 2026-10-14
 

@@ -872,6 +872,55 @@ public class AdminControllerTests(TestWebAppFactory factory) : IClassFixture<Tes
     }
 
     [Fact]
+    public async Task ExtendRestaurantBookings_ReportsASittingWithABookingRightAfterItAsSkipped()
+    {
+        HttpClient client = _factory.CreateAuthenticatedClient();
+        (int r, int s, _) = GetSeededIds();
+
+        int blockedId;
+        using (IServiceScope scope = _factory.Services.CreateScope())
+        {
+            AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var table = new Table { Name = "Late table", Seats = 2, SectionId = s };
+            db.Tables.Add(table);
+            await db.SaveChangesAsync();
+            DateTime start = DateTime.UtcNow.AddMinutes(-30);
+            var blocked = new Booking
+            {
+                RestaurantId = r, SectionId = s, TableId = table.Id, Seats = 2, BookingRef = "BLOCKED1",
+                CustomerEmail = "blocked@test.com", Date = start, EndTime = start.AddMinutes(60),
+            };
+            db.Bookings.Add(blocked);
+            db.Bookings.Add(new Booking
+            {
+                RestaurantId = r, SectionId = s, TableId = table.Id, Seats = 2, BookingRef = "NEXT1",
+                CustomerEmail = "next@test.com", Date = start.AddMinutes(75), EndTime = start.AddMinutes(135),
+            });
+            await db.SaveChangesAsync();
+            blockedId = blocked.Id;
+        }
+
+        HttpResponseMessage response = await client.PostAsJsonAsync($"/api/admin/restaurants/{r}/extend", new { minutes = 30 });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        JsonElement body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        JsonElement skipped = body.GetProperty("skippedBookings").EnumerateArray()
+            .Single(b => b.GetProperty("id").GetInt32() == blockedId);
+        Assert.Equal("BLOCKED1", skipped.GetProperty("bookingRef").GetString());
+        Assert.Equal("Late table", skipped.GetProperty("tableName").GetString());
+        Assert.False(skipped.TryGetProperty("customerEmail", out _));
+        Assert.DoesNotContain(body.GetProperty("extendedBookings").EnumerateArray(),
+            b => b.GetProperty("id").GetInt32() == blockedId);
+        Assert.Contains("except", body.GetProperty("message").GetString());
+
+        // The factory's database is shared with the other extend tests, which expect a clean run.
+        using IServiceScope cleanup = _factory.Services.CreateScope();
+        AppDbContext cleanDb = cleanup.ServiceProvider.GetRequiredService<AppDbContext>();
+        cleanDb.Bookings.RemoveRange(cleanDb.Bookings.Where(b => b.BookingRef == "BLOCKED1" || b.BookingRef == "NEXT1"));
+        await cleanDb.SaveChangesAsync();
+    }
+
+    [Fact]
     public async Task ExtendRestaurantBookings_SkipsExpiredBookingsWithNoEndTime()
     {
         HttpClient client = _factory.CreateAuthenticatedClient();

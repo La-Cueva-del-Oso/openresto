@@ -94,6 +94,27 @@ public class PauseRestaurantRequest
     public int Minutes { get; set; }
 }
 
+/// <summary>
+/// What a location-wide extension did: the sittings that were lengthened, and the ones left as they
+/// were because another booking follows on their table or group. Skipped entries carry no guest
+/// details, only what the admin needs to find the table.
+/// </summary>
+public class ExtendRestaurantBookingsResponse
+{
+    public string Message { get; set; } = string.Empty;
+    public List<BookingDetailDto> ExtendedBookings { get; set; } = [];
+    public List<SkippedExtensionDto> SkippedBookings { get; set; } = [];
+}
+
+public class SkippedExtensionDto
+{
+    public int Id { get; set; }
+    public string? BookingRef { get; set; }
+    public int? TableId { get; set; }
+    public int? TableGroupId { get; set; }
+    public string? TableName { get; set; }
+}
+
 public class ExtendRestaurantRequest
 {
     [Range(BookingLimits.MinExtendMinutes, BookingLimits.MaxExtendMinutes, ErrorMessage = BookingLimits.ExtendMinutesMessage)]

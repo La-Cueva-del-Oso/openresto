@@ -91,6 +91,58 @@ describe("locations confirmations", () => {
   }
 });
 
+describe("locations extend", () => {
+  const withSkipped = {
+    message: "Bookings extended, except those with another booking right after them.",
+    extendedBookings: [{ id: 1 }, { id: 2 }],
+    skippedBookings: [
+      { id: 7, bookingRef: "R7", tableId: 3, tableName: "T\x1b[31m3" },
+    ],
+  };
+
+  test("lists the bookings left as they were, with the API's text escaped", async () => {
+    globalThis.fetch = respond(() => json(200, withSkipped));
+
+    const lines = await run("en", ["locations", "extend", "4", "--minutes", "30"]);
+
+    assert.equal(lines[0], "Extended 2 booking(s) at location 4 by 30 minute(s).");
+    assert.equal(
+      lines[1],
+      "1 booking(s) left as they were because another booking follows on the same table:",
+    );
+    assert.match(lines[2], /^id\s+bookingRef\s+tableName$/);
+    assert.match(lines[4], /^7\s+R7\s+T\\x1b\[31m3$/);
+    assert.ok(lines.every((l) => !l.includes("\u001b")));
+  });
+
+  test("says nothing about skipped bookings when none were", async () => {
+    globalThis.fetch = respond(() =>
+      json(200, { extendedBookings: [{ id: 1 }], skippedBookings: [] }),
+    );
+
+    const lines = await run("es", ["locations", "extend", "4", "--minutes", "30"]);
+
+    assert.deepEqual(lines, [
+      "Se alargaron 1 reserva(s) de la ubicación 4 en 30 minuto(s).",
+    ]);
+  });
+
+  test("--json prints the response untouched", async () => {
+    globalThis.fetch = respond(() => json(200, withSkipped));
+
+    const lines = await run("es", [
+      "--json",
+      "locations",
+      "extend",
+      "4",
+      "--minutes",
+      "30",
+    ]);
+
+    assert.deepEqual(JSON.parse(lines.join("\n")), withSkipped);
+  });
+});
+
 describe("locations delete", () => {
   const preview = {
     name: "Cafe \x1b[31mNorte",
