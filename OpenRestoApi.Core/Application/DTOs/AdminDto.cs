@@ -129,7 +129,8 @@ public class SetBookingStatusRequest
 
 public class ExtendBookingRequest
 {
-    /// <summary>Additional minutes to add to the booking's EndTime.</summary>
+    /// <summary>Additional minutes to add to the booking's EndTime, 1 to 480.</summary>
+    [Range(BookingLimits.MinExtendMinutes, BookingLimits.MaxExtendMinutes, ErrorMessage = BookingLimits.ExtendMinutesMessage)]
     public int Minutes { get; set; }
 }
 

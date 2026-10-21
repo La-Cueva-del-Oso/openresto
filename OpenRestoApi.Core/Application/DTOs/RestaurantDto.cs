@@ -96,6 +96,7 @@ public class PauseRestaurantRequest
 
 public class ExtendRestaurantRequest
 {
+    [Range(BookingLimits.MinExtendMinutes, BookingLimits.MaxExtendMinutes, ErrorMessage = BookingLimits.ExtendMinutesMessage)]
     public int Minutes { get; set; }
 }
 

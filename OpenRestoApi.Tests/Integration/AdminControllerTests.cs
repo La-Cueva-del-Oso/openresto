@@ -154,6 +154,73 @@ public class AdminControllerTests(TestWebAppFactory factory) : IClassFixture<Tes
         Assert.True(body.TryGetProperty("endTime", out _));
     }
 
+    [Theory]
+    [InlineData(1, 230)]
+    [InlineData(480, 231)]
+    public async Task ExtendBooking_AcceptsMinutesAtEitherEndOfTheRange(int minutes, int daysAhead)
+    {
+        HttpClient client = _factory.CreateAuthenticatedClient();
+        (int restaurantId, int sectionId, int tableId) = GetSeededIds();
+        HttpResponseMessage createResp = await client.PostAsJsonAsync("/api/admin/bookings", new
+        {
+            restaurantId,
+            sectionId,
+            tableId,
+            date = DateTime.UtcNow.AddDays(daysAhead).ToString("yyyy-MM-ddT12:00:00"),
+            customerEmail = "extend-range@test.com",
+            seats = 2
+        });
+        int bookingId = (await createResp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32();
+
+        HttpResponseMessage response = await client.PostAsJsonAsync($"/api/admin/bookings/{bookingId}/extend", new { minutes });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(0, 232)]
+    [InlineData(-1, 233)]
+    [InlineData(481, 234)]
+    public async Task ExtendBooking_RejectsMinutesOutsideTheRange(int minutes, int daysAhead)
+    {
+        HttpClient client = _factory.CreateAuthenticatedClient();
+        (int restaurantId, int sectionId, int tableId) = GetSeededIds();
+        HttpResponseMessage createResp = await client.PostAsJsonAsync("/api/admin/bookings", new
+        {
+            restaurantId,
+            sectionId,
+            tableId,
+            date = DateTime.UtcNow.AddDays(daysAhead).ToString("yyyy-MM-ddT12:00:00"),
+            customerEmail = "extend-range@test.com",
+            seats = 2
+        });
+        JsonElement created = await createResp.Content.ReadFromJsonAsync<JsonElement>();
+        int bookingId = created.GetProperty("id").GetInt32();
+        string endBefore = created.GetProperty("endTime").ToString();
+
+        HttpResponseMessage response = await client.PostAsJsonAsync($"/api/admin/bookings/{bookingId}/extend", new { minutes });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        string body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("minutes to extend by", body);
+        JsonElement stored = await (await client.GetAsync($"/api/admin/bookings/{bookingId}")).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(endBefore, stored.GetProperty("endTime").ToString());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-30)]
+    [InlineData(481)]
+    public async Task ExtendRestaurantBookings_RejectsMinutesOutsideTheRange(int minutes)
+    {
+        HttpClient client = _factory.CreateAuthenticatedClient();
+        (int restaurantId, _, _) = GetSeededIds();
+
+        HttpResponseMessage response = await client.PostAsJsonAsync($"/api/admin/restaurants/{restaurantId}/extend", new { minutes });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Fact]
     public async Task CancelBooking_SoftDelete_Succeeds()
     {
