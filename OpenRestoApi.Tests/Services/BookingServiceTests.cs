@@ -892,6 +892,8 @@ public partial class BookingServiceTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("not-an-email")]
+    [InlineData("guest\u001b[2J@example.com")]
+    [InlineData("guest@exa\u0000mple.com")]
     public async Task CreateBookingAsync_Rejects_A_Missing_Or_Malformed_Email(string? email)
     {
         using AppDbContext db = TestDbFactory.Create(nameof(CreateBookingAsync_Rejects_A_Missing_Or_Malformed_Email) + (email ?? "null"));

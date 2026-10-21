@@ -153,6 +153,26 @@ public class WaitlistServiceTests
         Assert.Equal(ErrorCodes.WaitlistNameRequired, ex.Code);
     }
 
+    [Theory]
+    [InlineData("Ada\u001b[2J")]
+    [InlineData("Ada\u0000")]
+    [InlineData("A\nda")]
+    [InlineData("Ada\u009b")]
+    public async Task JoinAsync_Rejects_ANameWithControlCharacters(string name)
+    {
+        ValidationException ex = await Assert.ThrowsAsync<ValidationException>(() => CreateService().JoinAsync(1, Party(name: name)));
+        Assert.Equal(ErrorCodes.BookingNameInvalid, ex.Code);
+        Assert.Empty(_waitlist.Entries);
+    }
+
+    [Fact]
+    public async Task JoinAsync_Accepts_AnOrdinaryNameWithAccentsAndPunctuation()
+    {
+        await CreateService().JoinAsync(1, Party(name: "María-José O'Neil"));
+
+        Assert.Equal("María-José O'Neil", Assert.Single(_waitlist.Entries).Name);
+    }
+
     [Fact]
     public async Task JoinAsync_Rejects_AMalformedEmail()
     {

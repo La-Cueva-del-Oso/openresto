@@ -324,6 +324,8 @@ public class WaitlistService(
             throw new ValidationException("A name is required to join the waitlist.") { Code = ErrorCodes.WaitlistNameRequired };
         }
 
+        GuestText.RejectControlCharacters(name, specialRequests: null);
+
         string? email = string.IsNullOrWhiteSpace(req.Email) ? null : req.Email.Trim().ToLowerInvariant();
         if (email != null && !EmailValidator.IsValid(email))
         {

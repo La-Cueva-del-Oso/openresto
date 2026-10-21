@@ -16,6 +16,26 @@ public class EmailValidatorTests
     }
 
     [Theory]
+    [InlineData("josé+tag@example.cl")]
+    [InlineData("o'neil@example.com")]
+    [InlineData("ana@bücher.example")]
+    public void IsValid_AcceptsOrdinaryAddresses(string email)
+    {
+        Assert.True(EmailValidator.IsValid(email));
+    }
+
+    [Theory]
+    [InlineData("gu\u001best@example.com")]     // ESC
+    [InlineData("guest@exa\u0000mple.com")]     // NUL
+    [InlineData("guest\u007f@example.com")]     // DEL
+    [InlineData("guest@example.c\u009fom")]     // C1
+    [InlineData("guest@\u001b[2Jexample.com")]  // a terminal escape sequence
+    public void IsValid_RejectsControlCharacters(string email)
+    {
+        Assert.False(EmailValidator.IsValid(email));
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
