@@ -327,6 +327,13 @@ public class AdminService(
         }).ToList();
     }
 
+    /// <summary>
+    /// Records a walk-in on one table. The conflict check is the group-aware one every booking path
+    /// uses, so a table whose combinable group is seated is refused, while a sibling member booked
+    /// on its own is not.
+    /// </summary>
+    /// <seealso>AdminServiceTests.CreateBookingAsync_Rejects_ATableWhoseGroupIsBookedThen</seealso>
+    /// <seealso>AdminServiceTests.CreateBookingAsync_Creates_OnASiblingMember_WhenOnlyTheOtherMemberIsBooked</seealso>
     public virtual async Task<BookingDetailDto> CreateBookingAsync(AdminCreateBookingRequest req)
     {
         GuestText.RejectControlCharacters(req.CustomerName, specialRequests: null);
@@ -342,8 +349,6 @@ public class AdminService(
         DateTime newStart = TimeZoneHelper.ConvertLocalToUtc(req.Date, table.Section.Restaurant!.Timezone);
 
         int durationMinutes = BookingDuration.For(table.Section.Restaurant, req.Seats);
-        DateTime newEnd = newStart.AddMinutes(durationMinutes);
-
         var booking = new Booking
         {
             RestaurantId = req.RestaurantId,
@@ -359,7 +364,8 @@ public class AdminService(
 
         using (await _writeGate.EnterAsync())
         {
-            bool conflict = await _bookingRepository.HasConflictAsync(req.TableId, newStart, newEnd, durationMinutes);
+            bool conflict = await _bookingRepository.IsUnitBookedOnDateAsync(
+                req.TableId, tableGroupId: null, newStart, durationMinutes);
 
             if (conflict)
             {

@@ -282,16 +282,6 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories
                 .ToListAsync();
         }
 
-        public async Task<bool> HasConflictAsync(int? tableId, DateTime newStart, DateTime newEnd, int fallbackDurationMinutes, int? excludeBookingId = null)
-        {
-            return await _db.Bookings.AnyAsync(b =>
-                b.TableId == tableId &&
-                !b.IsCancelled &&
-                (excludeBookingId == null || b.Id != excludeBookingId.Value) &&
-                b.Date < newEnd &&
-                (b.EndTime != null ? b.EndTime > newStart : b.Date.AddMinutes(fallbackDurationMinutes) > newStart));
-        }
-
         public async Task<int> CountDistinctBookedTablesAsync(int restaurantId, DateTime startUtc, DateTime endUtc)
         {
             return await _db.Bookings
