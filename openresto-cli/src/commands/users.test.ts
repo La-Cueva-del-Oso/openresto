@@ -25,18 +25,28 @@ describe("users command surface", () => {
       .commands.map((c) => c.name())
       .sort();
 
-    assert.deepEqual(names, ["activate", "deactivate", "list"]);
+    assert.deepEqual(names, ["deactivate", "list"]);
+  });
+
+  /**
+   * Reactivating an account gives its old login back, so the server refuses it to an API key
+   * (`api_key.not_allowed`) and only a signed-in Owner may do it. A CLI verb for it could only
+   * ever return 403.
+   */
+  test("offers no way to reactivate an account", () => {
+    const names = usersCommand().commands.map((c) => c.name());
+
+    assert.ok(!names.includes("activate"));
   });
 
   /**
    * The other half of that boundary: what is left must still be there. Listing needs
-   * `users:read`, activation `users:write`, and neither grants a session.
+   * `users:read`, deactivation `users:write`, and neither grants a session.
    */
-  test("still reaches the account reads and activation a key may perform", () => {
+  test("still reaches the account reads and deactivation a key may perform", () => {
     const names = usersCommand().commands.map((c) => c.name());
 
     assert.ok(names.includes("list"));
-    assert.ok(names.includes("activate"));
     assert.ok(names.includes("deactivate"));
   });
 
