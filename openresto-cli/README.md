@@ -186,6 +186,11 @@ example per group:
   openresto bookings extend 42 --minutes 30
   ```
 
+  `create` and `update` take `--date` as ISO 8601. A value with no time zone
+  (`2026-10-10T19:00:00`) is the location's local time; one ending in `Z` or carrying an offset
+  (`2026-10-10T19:00:00Z`) is that exact instant. `extend` and `locations extend` accept 1 to 480
+  minutes.
+
   `purge` permanently deletes a booking (the GDPR purge path) and asks for confirmation; pass
   `--yes` to skip the prompt, which is required when stdin isn't a terminal (scripts/CI).
 

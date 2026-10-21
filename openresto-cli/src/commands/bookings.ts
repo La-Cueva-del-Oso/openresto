@@ -11,6 +11,10 @@ import { confirmOrExit } from "../confirm.js";
 import { omitUndefined, readTextInput } from "../io.js";
 import { readAllStdin } from "../prompt.js";
 
+const BOOKING_DATE_HELP =
+  "Booking date/time (ISO 8601). Without a time zone it is the location's local time; " +
+  "with Z or an offset it is that exact instant";
+
 const LIST_COLUMNS = [
   "id",
   "restaurantName",
@@ -104,7 +108,7 @@ export function registerBookingsCommands(program: Command): void {
     .requiredOption("--location <id>", "Restaurant/location id", Number)
     .requiredOption("--section <id>", "Section id", Number)
     .requiredOption("--table <id>", "Table id", Number)
-    .requiredOption("--date <date>", "Booking date/time (ISO 8601, UTC)")
+    .requiredOption("--date <date>", BOOKING_DATE_HELP)
     .requiredOption("--seats <n>", "Party size", Number)
     .requiredOption("--email <email>", "Customer email")
     .option("--name <name>", "Customer name")
@@ -146,7 +150,7 @@ export function registerBookingsCommands(program: Command): void {
     .option("--location <id>", "Restaurant/location id", Number)
     .option("--section <id>", "Section id", Number)
     .option("--table <id>", "Table id", Number)
-    .option("--date <date>", "Booking date/time (ISO 8601, UTC)")
+    .option("--date <date>", BOOKING_DATE_HELP)
     .option("--seats <n>", "Party size", Number)
     .option("--email <email>", "Customer email")
     .option("--name <name>", "Customer name")
