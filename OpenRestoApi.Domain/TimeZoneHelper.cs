@@ -39,7 +39,13 @@ public static class TimeZoneHelper
     /// as restaurant-local (the canonical case — client sends a date-only or naive-timestamp param),
     /// and <see cref="DateTimeKind.Local"/>/<see cref="DateTimeKind.Utc"/> inputs via the standard
     /// <see cref="DateTime.ToUniversalTime"/> path.
+    /// <para>
+    /// A wall-clock time the zone skipped (02:30 on the spring-forward night) does not throw: it
+    /// lands on the instant that follows the gap, as a clock that jumped over it would read.
+    /// </para>
     /// </summary>
+    /// <seealso>TimezoneLogicTests.ConvertLocalToUtc_ATimeInsideTheSpringGap_MovesPastTheGap</seealso>
+    /// <seealso>TimezoneLogicTests.ConvertLocalToUtc_TimesOutsideTheGap_AreNotShifted</seealso>
     public static DateTime ConvertLocalToUtc(DateTime local, string timezoneId)
     {
         if (local.Kind != DateTimeKind.Unspecified)
@@ -47,7 +53,20 @@ public static class TimeZoneHelper
             return local.ToUniversalTime();
         }
 
-        return TimeZoneInfo.ConvertTimeToUtc(local, Resolve(timezoneId));
+        return UnspecifiedToUtc(local, Resolve(timezoneId));
+    }
+
+    private static DateTime UnspecifiedToUtc(DateTime local, TimeZoneInfo tz)
+    {
+        if (!tz.IsInvalidTime(local))
+        {
+            return TimeZoneInfo.ConvertTimeToUtc(local, tz);
+        }
+
+        // Read the skipped time with the offset in force before the jump, which is what pushes it
+        // forward by the size of the gap.
+        TimeSpan offsetBeforeGap = tz.GetUtcOffset(local.AddDays(-1));
+        return DateTime.SpecifyKind(local - offsetBeforeGap, DateTimeKind.Utc);
     }
 
     /// <summary>
@@ -86,8 +105,8 @@ public static class TimeZoneHelper
         DateTime localStart = DateTime.SpecifyKind(localDay, DateTimeKind.Unspecified);
         DateTime localEnd = DateTime.SpecifyKind(localDay.AddDays(1), DateTimeKind.Unspecified);
 
-        DateTime utcStart = TimeZoneInfo.ConvertTimeToUtc(localStart, tz);
-        DateTime utcEnd = TimeZoneInfo.ConvertTimeToUtc(localEnd, tz);
+        DateTime utcStart = UnspecifiedToUtc(localStart, tz);
+        DateTime utcEnd = UnspecifiedToUtc(localEnd, tz);
 
         return (utcStart, utcEnd);
     }

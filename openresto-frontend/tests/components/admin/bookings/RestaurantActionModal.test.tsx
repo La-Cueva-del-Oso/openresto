@@ -138,6 +138,7 @@ describe("RestaurantActionModal", () => {
     ];
     (adminApi.extendRestaurantBookings as jest.Mock).mockResolvedValue({
       ok: true,
+      skippedBookings: [],
       extendedBookings,
     });
 
@@ -156,6 +157,77 @@ describe("RestaurantActionModal", () => {
       expect(getByText("Bookings Extended")).toBeTruthy();
       expect(getByText("test@example.com")).toBeTruthy();
     });
+  });
+
+  it("says how many bookings were extended and lists the ones left as they were", async () => {
+    (adminApi.extendRestaurantBookings as jest.Mock).mockResolvedValue({
+      ok: true,
+      extendedBookings: [
+        {
+          id: 101,
+          customerEmail: "test@example.com",
+          date: new Date().toISOString(),
+          seats: 2,
+          endTime: new Date(Date.now() + 7200000).toISOString(),
+        },
+      ],
+      skippedBookings: [
+        { id: 7, bookingRef: "R7", tableId: 3, tableGroupId: null, tableName: "Window 3" },
+        { id: 8, bookingRef: "R8", tableId: null, tableGroupId: 2, tableName: "Tables 4 + 5" },
+      ],
+    });
+
+    const { getByText, getByTestId, queryByTestId } = render(
+      <RestaurantActionModal visible={true} actionType="extend" onClose={() => {}} />
+    );
+    await waitFor(() => expect(queryByTestId("loading-indicator")).toBeNull());
+
+    fireEvent.press(getByText("Test Restaurant 1"));
+
+    await waitFor(() => {
+      expect(getByText("The following 1 booking has been extended by 1 hour:")).toBeTruthy();
+      expect(
+        getByText(
+          "2 bookings were left as they were because another booking follows them on the same table:"
+        )
+      ).toBeTruthy();
+      expect(getByText("Window 3 · R7")).toBeTruthy();
+      expect(getByText("Tables 4 + 5 · R8")).toBeTruthy();
+      expect(getByTestId("skipped-extensions")).toBeTruthy();
+    });
+  });
+
+  it("still shows the result, saying nothing could be extended, when every booking was skipped", async () => {
+    const onSuccess = jest.fn();
+    (adminApi.extendRestaurantBookings as jest.Mock).mockResolvedValue({
+      ok: true,
+      extendedBookings: [],
+      skippedBookings: [
+        { id: 7, bookingRef: "R7", tableId: 3, tableGroupId: null, tableName: "Window 3" },
+      ],
+    });
+
+    const { getByText, queryByTestId } = render(
+      <RestaurantActionModal
+        visible={true}
+        actionType="extend"
+        onClose={() => {}}
+        onSuccess={onSuccess}
+      />
+    );
+    await waitFor(() => expect(queryByTestId("loading-indicator")).toBeNull());
+
+    fireEvent.press(getByText("Test Restaurant 1"));
+
+    await waitFor(() => {
+      expect(getByText("No booking could be extended.")).toBeTruthy();
+      expect(
+        getByText(
+          "1 booking was left as it was because another booking follows it on the same table:"
+        )
+      ).toBeTruthy();
+    });
+    expect(onSuccess).not.toHaveBeenCalled();
   });
 
   it("calls onClose when close button is pressed", () => {
@@ -204,6 +276,7 @@ describe("RestaurantActionModal", () => {
     const onClose = jest.fn();
     (adminApi.extendRestaurantBookings as jest.Mock).mockResolvedValue({
       ok: true,
+      skippedBookings: [],
       extendedBookings: [],
     });
 
@@ -242,6 +315,7 @@ describe("RestaurantActionModal", () => {
     ];
     (adminApi.extendRestaurantBookings as jest.Mock).mockResolvedValue({
       ok: true,
+      skippedBookings: [],
       extendedBookings,
     });
 

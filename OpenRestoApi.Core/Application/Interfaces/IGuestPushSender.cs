@@ -27,7 +27,7 @@ public sealed record GuestPushResult(GuestPushOutcome Outcome, string? Error = n
 /// <summary>Delivers one message to one address over whichever channel it was registered on.</summary>
 public interface IGuestPushSender
 {
-    Task<GuestPushResult> SendAsync(GuestPushAddress address, GuestPushMessage message);
+    Task<GuestPushResult> SendAsync(GuestPushAddress address, GuestPushMessage message, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

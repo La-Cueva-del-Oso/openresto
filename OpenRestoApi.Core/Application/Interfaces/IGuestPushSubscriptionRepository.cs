@@ -10,6 +10,8 @@ public interface IGuestPushSubscriptionRepository
 {
     Task<GuestPushSubscription?> GetByBookingAndEndpointAsync(int bookingId, string endpoint);
 
+    Task<int> CountForBookingAsync(int bookingId);
+
     /// <summary>
     /// Subscriptions whose booking is still ahead of <paramref name="nowUtc"/> and not cancelled,
     /// with the booking and its restaurant loaded. The reminder pass decides which are due.

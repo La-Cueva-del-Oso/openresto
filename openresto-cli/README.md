@@ -135,8 +135,21 @@ OPENRESTO_URL=https://booking.example.com OPENRESTO_API_KEY="$CI_OPENRESTO_KEY" 
   openresto bookings list --json
 ```
 
+The CLI sends your API key on every request, so it only talks to `https://` addresses. A plain
+`http://` address is accepted only for this machine (`localhost`, `127.0.0.0/8`, `::1`). For a
+server on a trusted private network without TLS, set `OPENRESTO_ALLOW_HTTP=1`; the key you type
+at `auth login` and the one sent with every request then travel unencrypted.
+
 `openresto auth logout` removes the saved key for the active profile (the server URL stays, so
 `auth login` next time only needs to ask for a new key).
+
+## Language
+
+The messages the CLI prints on its own (errors, confirmations, prompts, warnings) come in English
+and Spanish. Set `OPENRESTO_LANG=es` or `OPENRESTO_LANG=en` to choose; when it is unset, or holds
+anything else, the CLI follows your system language (any `es*` locale is Spanish, everything else
+English). Command and flag names, `--help`, this README, `--json` output and the text the server
+sends back (an API error's message) are not translated.
 
 ## Output
 
@@ -172,6 +185,11 @@ example per group:
   openresto bookings list --location 1 --status upcoming
   openresto bookings extend 42 --minutes 30
   ```
+
+  `create` and `update` take `--date` as ISO 8601. A value with no time zone
+  (`2026-10-10T19:00:00`) is the location's local time; one ending in `Z` or carrying an offset
+  (`2026-10-10T19:00:00Z`) is that exact instant. `extend` and `locations extend` accept 1 to 480
+  minutes.
 
   `purge` permanently deletes a booking (the GDPR purge path) and asks for confirmation; pass
   `--yes` to skip the prompt, which is required when stdin isn't a terminal (scripts/CI).
@@ -242,7 +260,7 @@ example per group:
   openresto brand set --app-name "My Restaurant" --primary-color "#0a7ea4"
   ```
 
-- **users** — `list`, `activate`, `deactivate`. Owner-only server-side; a key without the `users`
+- **users** — `list`, `deactivate`. Owner-only server-side; a key without the `users`
   scope (or one whose underlying account isn't an Owner) gets a clear 403.
 
   ```bash
@@ -250,11 +268,12 @@ example per group:
   openresto users deactivate 3
   ```
 
-  There is deliberately no way to create an account, change a role or set a password from here.
-  Those three hand out or move interactive privilege, and the server refuses them to any API-key
-  session: a key that could mint a login would be a way to escalate out of its own scopes into the
-  full admin UI. Use the admin UI, signed in as an Owner, for those. `list` needs `users:read`;
-  `activate`/`deactivate` need `users:write`.
+  There is deliberately no way to create an account, change a role, set a password or reactivate
+  an account from here. Those four hand out or move interactive privilege (a reactivated account
+  gets its old login back), and the server refuses them to any API-key session: a key that could
+  mint a login would be a way to escalate out of its own scopes into the full admin UI. Use the
+  admin UI, signed in as an Owner, for those. `list` needs `users:read`; `deactivate` needs
+  `users:write`.
 
 - **audit** — `list`, with the same filters as the admin activity trail (`actorUserId`, an
   `action` prefix, `targetType`, `location`, `from`/`to`, `page`/`pageSize`). Owner-only.

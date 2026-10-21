@@ -76,7 +76,13 @@ export function EmailSettingsCard({
     handleSave,
     toggleConfirmations,
     confirmDisabled,
+    passwordRequired,
   } = email;
+
+  // Shares the save outcome's slot: both say why nothing was written, and only one can be current.
+  const notice = passwordRequired
+    ? { text: t("admin.settings.emailSettings.passwordRequiredNotice"), ok: false }
+    : saveMsg;
 
   return (
     <View style={[settingsStyles.secCard, { backgroundColor: cardBg, borderColor }]}>
@@ -357,34 +363,34 @@ export function EmailSettingsCard({
             accentSoft={accentSoft}
           />
 
-          {saveMsg && (
+          {notice && (
             <View
               style={[
                 settingsStyles.successBanner,
                 styles.saveBanner,
                 {
-                  backgroundColor: saveMsg.ok
+                  backgroundColor: notice.ok
                     ? `${theme.colors.success}10`
                     : `${theme.colors.warning}10`,
-                  borderColor: saveMsg.ok
+                  borderColor: notice.ok
                     ? `${theme.colors.success}30`
                     : `${theme.colors.warning}30`,
                 },
               ]}
             >
               <Icon
-                name={saveMsg.ok ? "checkmark-circle" : "warning-outline"}
+                name={notice.ok ? "checkmark-circle" : "warning-outline"}
                 size="md"
-                color={saveMsg.ok ? theme.colors.success : theme.colors.warning}
+                color={notice.ok ? theme.colors.success : theme.colors.warning}
               />
               <ThemedText
                 style={[
-                  saveMsg.ok ? settingsStyles.successText : settingsStyles.statusText,
+                  notice.ok ? settingsStyles.successText : settingsStyles.statusText,
                   styles.saveBannerText,
-                  { color: saveMsg.ok ? theme.colors.success : theme.colors.warning },
+                  { color: notice.ok ? theme.colors.success : theme.colors.warning },
                 ]}
               >
-                {saveMsg.text}
+                {notice.text}
               </ThemedText>
             </View>
           )}

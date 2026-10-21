@@ -19,6 +19,9 @@ import {
   configPath,
   type ConfigFile,
 } from "./config.js";
+import { withLang } from "./withLang.test.js";
+
+process.env.OPENRESTO_LANG = "en";
 
 // config.ts reads/writes ~/.config/openresto via HOME/USERPROFILE-derived homedir(); redirect it
 // to a scratch dir for the duration of each test so nothing touches the real user config.
@@ -73,6 +76,22 @@ describe("config file read/write", () => {
       writeFileSync(configPath(), "not json");
 
       assert.throws(() => loadConfigFile(), /not valid JSON/);
+    });
+  });
+
+  test("an unreadable config file is explained in Spanish, with the path and what to do", async () => {
+    await withLang("es", () => {
+      withScratchHome(() => {
+        mkdirSync(path.dirname(configPath()), { recursive: true });
+        writeFileSync(configPath(), "not json");
+
+        assert.throws(
+          () => loadConfigFile(),
+          (err: Error) =>
+            err.message ===
+            `El archivo de configuración en ${configPath()} está dañado (no es JSON válido). Corrígelo o bórralo y vuelve a ejecutar \`openresto auth login\`.`,
+        );
+      });
     });
   });
 

@@ -6,7 +6,13 @@ import {
 } from "../config.js";
 import { ApiError, Client } from "../transport.js";
 import { promptHidden, promptText, readAllStdin } from "../prompt.js";
-import { clientFor, getGlobalOptions, handle } from "../context.js";
+import {
+  clientFor,
+  getGlobalOptions,
+  handle,
+  printMessage,
+} from "../context.js";
+import { t } from "../i18n.js";
 import { printResult } from "../output.js";
 import { getCliVersion } from "../version.js";
 import { warnOnServerVersionMismatch } from "../versionCheck.js";
@@ -31,16 +37,16 @@ export function registerAuthCommands(program: Command): void {
         const globals = getGlobalOptions(command);
         const profileName = globals.profile ?? DEFAULT_PROFILE_NAME;
 
-        const url = options.url ?? (await promptText("Server URL"));
+        const url = options.url ?? (await promptText(t("prompt.serverUrl")));
         if (!url) {
-          throw new Error("A server URL is required.");
+          throw new Error(t("auth.urlRequired"));
         }
 
         const apiKey = process.stdin.isTTY
-          ? await promptHidden("API key")
+          ? await promptHidden(t("prompt.apiKey"))
           : await readAllStdin();
         if (!apiKey) {
-          throw new Error("An API key is required.");
+          throw new Error(t("auth.keyRequired"));
         }
 
         const client = new Client({ baseUrl: url, apiKey });
@@ -49,14 +55,14 @@ export function registerAuthCommands(program: Command): void {
         } catch (err) {
           if (err instanceof ApiError) {
             throw new Error(
-              `Could not verify the API key against ${url}: ${err.message}`,
+              t("auth.verifyFailed", { url, message: err.message }),
             );
           }
           throw err;
         }
 
         upsertProfile(profileName, { url, apiKey });
-        console.log(`Saved profile "${profileName}" for ${url}.`);
+        printMessage(command, "auth.saved", { profile: profileName, url });
         await warnOnServerVersionMismatch(client, getCliVersion());
       }),
     );
@@ -84,7 +90,7 @@ export function registerAuthCommands(program: Command): void {
         const globals = getGlobalOptions(command);
         const profileName = globals.profile ?? DEFAULT_PROFILE_NAME;
         clearProfileKey(profileName);
-        console.log(`Removed the API key for profile "${profileName}".`);
+        printMessage(command, "auth.keyRemoved", { profile: profileName });
       }),
     );
 }

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ThemedText } from "@/components/themed-text";
 import { SubLabel } from "./settingsShared";
 import type { EmailFailureDto } from "@/api/admin";
+import { apiErrorMessage } from "@/api/errors";
 import { Icon } from "@/components/common/Icon";
 import { fmtDateTime } from "@/utils/formatters";
 import { styles } from "./EmailFailuresList.styles";
@@ -58,7 +59,7 @@ export function EmailFailuresList({
                 </ThemedText>
               )}
               <ThemedText style={[styles.detail, { color: dangerColor }]} numberOfLines={2}>
-                {f.errorMessage}
+                {apiErrorMessage({ code: f.code, message: f.errorMessage }, f.errorMessage)}
               </ThemedText>
             </View>
           );

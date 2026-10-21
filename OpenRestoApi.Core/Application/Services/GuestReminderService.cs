@@ -37,6 +37,9 @@ public class GuestReminderService(
     /// <seealso>GuestReminderServiceTests.SubscribeAsync_RejectsABookingThatHasStarted</seealso>
     /// <seealso>GuestReminderServiceTests.SubscribeAsync_StoresTheSubscription</seealso>
     /// <seealso>GuestReminderServiceTests.SubscribeAsync_UpdatesAnExistingDeviceInsteadOfDuplicating</seealso>
+    /// <seealso>GuestReminderServiceTests.SubscribeAsync_AcceptsTheLastDeviceUnderTheCap</seealso>
+    /// <seealso>GuestReminderServiceTests.SubscribeAsync_RefusesADeviceOverTheCap</seealso>
+    /// <seealso>GuestReminderServiceTests.SubscribeAsync_ReRegistersAKnownDeviceEvenAtTheCap</seealso>
     public virtual async Task<bool> SubscribeAsync(string bookingRef, string email, GuestReminderSubscribeRequest request)
     {
         Booking? booking = await FindOwnedAsync(bookingRef, email);
@@ -83,6 +86,11 @@ public class GuestReminderService(
             existing.Locale = locale;
             await subscriptions.SaveChangesAsync();
             return true;
+        }
+
+        if (await subscriptions.CountForBookingAsync(booking.Id) >= _settings.MaxDevicesPerBooking)
+        {
+            throw new ConflictException("This booking already has the most devices that can receive reminders.") { Code = ErrorCodes.BookingReminderDeviceLimit };
         }
 
         await subscriptions.AddAsync(new GuestPushSubscription
@@ -134,6 +142,8 @@ public class GuestReminderService(
     /// <seealso>GuestReminderServiceTests.SendDueRemindersAsync_KeepsAFailedAddressButDoesNotRetryTheSameLead</seealso>
     /// <seealso>GuestReminderServiceTests.SendDueRemindersAsync_PrunesSpentSubscriptions</seealso>
     /// <seealso>GuestReminderServiceTests.SendDueRemindersAsync_WritesTheReminderInTheGuestsLocaleAndTimezone</seealso>
+    /// <seealso>GuestReminderServiceTests.SendDueRemindersAsync_SendsTheCapAndLeavesTheRestForTheNextPass</seealso>
+    /// <seealso>GuestReminderServiceTests.SendDueRemindersAsync_LeavesNothingPendingWhenDueEqualsTheCap</seealso>
     public virtual async Task<int> SendDueRemindersAsync()
     {
         DateTime now = clock.UtcNow;
@@ -142,6 +152,7 @@ public class GuestReminderService(
 
         string? websiteUrl = null;
         int delivered = 0;
+        int attempted = 0;
         List<GuestPushSubscription> stale = [];
 
         foreach (GuestPushSubscription sub in upcoming)
@@ -151,6 +162,14 @@ public class GuestReminderService(
             {
                 continue;
             }
+
+            if (attempted >= _settings.MaxSendsPerPass)
+            {
+                logger.LogWarning("[GuestPush] Reached {Max} sends in one pass; the rest go out on the next one", _settings.MaxSendsPerPass);
+                break;
+            }
+
+            attempted++;
 
             websiteUrl ??= brandService.GetWebsiteUrl(await brandService.GetAsync());
             GuestPushMessage message = Compose(sub, now, websiteUrl);

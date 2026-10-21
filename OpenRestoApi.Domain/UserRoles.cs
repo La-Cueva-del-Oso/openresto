@@ -15,14 +15,6 @@ public static class UserRoles
     /// <summary>Full access to bookings/locations/brand, but cannot manage users.</summary>
     public const string Manager = "Manager";
 
-    /// <summary>
-    /// The role claim minted before multi-user support existed. No user row ever carries it —
-    /// it only appears in 30-day JWTs issued by an older build. Both policies honour it so an
-    /// in-flight session survives the upgrade instead of being silently logged out; it can be
-    /// dropped once every pre-upgrade token has expired.
-    /// </summary>
-    public const string LegacyAdmin = "Admin";
-
     /// <summary>Roles that may be stored on a user row / assigned through the API.</summary>
     public static readonly HashSet<string> Assignable =
         new(StringComparer.OrdinalIgnoreCase) { Owner, Manager };

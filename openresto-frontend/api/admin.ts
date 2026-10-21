@@ -101,6 +101,15 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats | nu
   }
 }
 
+/** A sitting the location-wide extension left as it was; carries no guest details. */
+export interface SkippedExtensionDto {
+  id: number;
+  bookingRef: string | null;
+  tableId: number | null;
+  tableGroupId: number | null;
+  tableName: string | null;
+}
+
 export interface BookingDetailDto {
   id: number;
   restaurantId: number;
@@ -228,18 +237,20 @@ export async function adminCreateBooking(
   return await res.json();
 }
 
+/**
+ * Throws with the server's reason when the extension is refused (another booking starts before
+ * the new end), so the popup can say why instead of doing nothing.
+ */
 export async function adminExtendBooking(
   id: number,
   minutes: number
-): Promise<{ endTime: string } | null> {
-  try {
-    const res = await post(`/admin/bookings/${id}/extend`, { minutes });
-    if (!res.ok) throw new Error("Failed to extend booking");
-    return await res.json();
-  } catch (err) {
-    console.error("adminExtendBooking error:", err);
-    return null;
+): Promise<{ endTime: string }> {
+  const res = await post(`/admin/bookings/${id}/extend`, { minutes });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(apiErrorMessage(body, "Failed to extend booking"));
   }
+  return await res.json();
 }
 
 /**
@@ -290,7 +301,7 @@ export async function sendBookingEmail(
   try {
     const res = await post(`/admin/bookings/${bookingId}/email`, { subject, body });
     const data = await res.json();
-    return { ok: res.ok, message: data.message };
+    return { ok: res.ok, message: res.ok ? data.message : apiErrorMessage(data, data.message) };
   } catch {
     return { ok: false, message: "Network error." };
   }
@@ -384,15 +395,23 @@ export async function unpauseRestaurantBookings(id: number): Promise<boolean> {
 export async function extendRestaurantBookings(
   id: number,
   minutes: number
-): Promise<{ ok: boolean; extendedBookings: BookingDetailDto[] }> {
+): Promise<{
+  ok: boolean;
+  extendedBookings: BookingDetailDto[];
+  skippedBookings: SkippedExtensionDto[];
+}> {
   try {
     const res = await post(`/admin/restaurants/${id}/extend`, { minutes });
-    if (!res.ok) return { ok: false, extendedBookings: [] };
+    if (!res.ok) return { ok: false, extendedBookings: [], skippedBookings: [] };
     const data = await res.json();
-    return { ok: true, extendedBookings: data.extendedBookings || [] };
+    return {
+      ok: true,
+      extendedBookings: data.extendedBookings || [],
+      skippedBookings: data.skippedBookings || [],
+    };
   } catch (err) {
     console.error("extendRestaurantBookings error:", err);
-    return { ok: false, extendedBookings: [] };
+    return { ok: false, extendedBookings: [], skippedBookings: [] };
   }
 }
 
@@ -506,6 +525,8 @@ export interface EmailFailureDto {
   id: number;
   bookingRef: string | null;
   recipientEmail: string;
+  /** Stable reason code (`email.auth_failed`, ...); `errorMessage` is its fixed English sentence. */
+  code?: string;
   errorMessage: string;
   attemptedAt: string;
 }
@@ -575,12 +596,21 @@ export async function getEmailSettings(): Promise<EmailSettingsDto> {
   }
 }
 
+/**
+ * Result-typed for the same reason as `saveBrandSettings`: a rejection (the server refusing to
+ * reuse the stored password against a new server) comes back as a message too, and must not read
+ * as a saved form. Null means the request never landed.
+ */
 export async function saveEmailSettings(
   data: Omit<EmailSettingsDto, "isConfigured">
-): Promise<{ message: string } | null> {
+): Promise<AdminMutationResult<{ message: string }> | null> {
   try {
     const res = await patch("/admin/email-settings", data);
-    return await res.json();
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      return { ok: false, message: apiErrorMessage(err, "Failed to save.") };
+    }
+    return { ok: true, data: await res.json() };
   } catch {
     return null;
   }
@@ -590,7 +620,7 @@ export async function testEmailConnection(): Promise<{ ok: boolean; message: str
   try {
     const res = await post("/admin/email-settings/test");
     const data = await res.json();
-    return { ok: res.ok, message: data.message };
+    return { ok: res.ok, message: res.ok ? data.message : apiErrorMessage(data, data.message) };
   } catch {
     return { ok: false, message: "Network error." };
   }

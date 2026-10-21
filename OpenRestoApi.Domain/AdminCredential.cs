@@ -30,11 +30,11 @@ public class AdminCredential
 
     /// <summary>
     /// Stamped into every token minted for this account. A token carrying an older value is
-    /// refused, so raising it signs the account out everywhere.
+    /// refused, so raising it signs the account out everywhere. Raised only through
+    /// <c>IAdminCredentialRepository.RevokeSessionsAsync</c> (or the deactivation that revokes in
+    /// the same statement), never by assignment: it is incremented in SQL.
     /// </summary>
     public int SessionVersion { get; set; }
-
-    public void RevokeSessions() => SessionVersion++;
 
     // ── Personal Verification Question ──────────────────────────────────────
     public string? PvqQuestion { get; set; }

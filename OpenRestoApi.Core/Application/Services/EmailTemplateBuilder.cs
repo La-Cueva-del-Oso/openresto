@@ -14,8 +14,9 @@ public static class EmailTemplateBuilder
         string headerHtml,
         string contentHtml)
     {
-        string cleanUrl = websiteUrl.TrimEnd('/');
+        string cleanUrl = Encode(websiteUrl.TrimEnd('/'));
         string displayUrl = cleanUrl.Replace("https://", "").Replace("http://", "");
+        primaryColor = Encode(primaryColor);
         int year = DateTime.UtcNow.Year;
 
         return $"""
@@ -57,7 +58,7 @@ public static class EmailTemplateBuilder
             $"<p style='margin:8px 0 0;font-size:16px;color:#6b7280;'>{WebUtility.HtmlEncode(subtitle)}</p>";
         return $"""
             <tr><td style="padding:0;text-align:center;background-color:#ffffff;">
-              <img src="{imageUrl}" alt="{WebUtility.HtmlEncode(altText)}"
+              <img src="{Encode(imageUrl)}" alt="{Encode(altText)}"
                    width="520"
                    style="width:100%;max-width:520px;height:200px;object-fit:cover;display:block;">
               <div style="padding:24px 40px 20px;">
@@ -78,7 +79,7 @@ public static class EmailTemplateBuilder
             $"<p style='margin:8px 0 0;font-size:16px;color:#6b7280;'>{WebUtility.HtmlEncode(subtitle)}</p>";
         return $"""
             <tr><td style="padding:40px 40px 24px;text-align:center;background-color:#ffffff;">
-              <img src="{iconUrl}" alt="{WebUtility.HtmlEncode(altText)}"
+              <img src="{Encode(iconUrl)}" alt="{Encode(altText)}"
                    width="72" height="72"
                    style="width:72px;height:72px;display:block;margin:0 auto 16px;border-radius:12px;">
               <h1 style="margin:0;font-size:24px;font-weight:700;color:#111827;">{WebUtility.HtmlEncode(title)}</h1>
@@ -93,10 +94,17 @@ public static class EmailTemplateBuilder
     /// </summary>
     public static string TextHeader(string appName, string primaryColor)
     {
+        primaryColor = Encode(primaryColor);
         return $"""
             <tr><td style="padding:32px 40px 24px;text-align:center;border-bottom:3px solid {primaryColor};">
               <h1 style="margin:0;font-size:20px;font-weight:700;color:{primaryColor};">{WebUtility.HtmlEncode(appName)}</h1>
             </td></tr>
             """;
     }
+
+    /// <summary>
+    /// Every value that reaches an attribute or text node goes through here: the URLs and colour come
+    /// from brand and location settings, and a quote in one would otherwise end the attribute.
+    /// </summary>
+    public static string Encode(string value) => WebUtility.HtmlEncode(value);
 }

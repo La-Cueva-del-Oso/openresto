@@ -189,6 +189,8 @@ native app also follows the phone's language.
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | `OPENRESTO_DEFAULT_LOCALE` / `Locale:Default`                                     | Default language (`en`, `fr`, `es`, `de`)                    |
 | `Audit:RetentionDays`                                                             | Days to keep activity log entries (default 365)              |
+| `Retention:EmailFailureDays`                                                      | Days to keep email failure records (default 30; 0 keeps them) |
+| `Retention:NotificationDays`                                                      | Days to keep admin notifications (default 90; 0 keeps them)  |
 | `GuestPush__ReminderLeadHours`                                                    | Reminder times before a booking, in hours (default `24,2`)   |
 | `Wallet__Apple__*`, `Wallet__Google__*`                                           | Wallet pass issuers, see [native app guide](/guides/native-app/)    |
 | `Vapid__*`                                                                        | Web Push keys for admin notifications and browser reminders  |

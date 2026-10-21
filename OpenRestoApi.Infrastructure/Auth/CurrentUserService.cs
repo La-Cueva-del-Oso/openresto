@@ -16,6 +16,8 @@ internal sealed class CurrentUserService(IHttpContextAccessor httpContextAccesso
 
     public int? UserId => Principal?.UserId();
 
+    public int SessionVersion => Principal?.SessionVersion() ?? 0;
+
     public string? Email => Principal?.Email();
 
     public string? Role => Claim(ClaimTypes.Role);

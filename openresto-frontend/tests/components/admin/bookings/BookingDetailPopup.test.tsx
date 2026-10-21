@@ -580,6 +580,23 @@ describe("BookingDetailPopup", () => {
     expect(adminApi.adminExtendBooking).toHaveBeenCalledWith(1, 30);
   });
 
+  it("shows the server's reason when an extension is refused", async () => {
+    (adminApi.adminExtendBooking as jest.Mock).mockRejectedValue(
+      new Error(
+        "Another booking starts before the sitting would end, so it cannot be extended that long."
+      )
+    );
+    render(<BookingDetailPopup {...baseProps} />);
+    await waitFor(() => expect(screen.getByTestId("extend-btn")).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("extend-btn"));
+    });
+    expect(screen.getByTestId("alert-message").props.children).toBe(
+      "Another booking starts before the sitting would end, so it cannot be extended that long."
+    );
+    expect(baseProps.onMutated).not.toHaveBeenCalled();
+  });
+
   it("updates endTime after successful extend", async () => {
     (adminApi.adminExtendBooking as jest.Mock).mockResolvedValue({
       endTime: "2026-06-01T20:00:00Z",
@@ -737,16 +754,6 @@ describe("BookingDetailPopup", () => {
     await waitFor(() => {
       expect(screen.getByTestId("alert-message")).toBeTruthy();
     });
-  });
-
-  it("handles extend when result is null (no-op)", async () => {
-    (adminApi.adminExtendBooking as jest.Mock).mockResolvedValue(null);
-    render(<BookingDetailPopup {...baseProps} />);
-    await waitFor(() => expect(screen.getByTestId("extend-btn")).toBeTruthy());
-    await act(async () => {
-      fireEvent.press(screen.getByTestId("extend-btn"));
-    });
-    expect(adminApi.adminExtendBooking).toHaveBeenCalledWith(1, 30);
   });
 
   it("calls sendBookingEmail when send email button is pressed with content", async () => {
@@ -1093,6 +1100,20 @@ describe("BookingDetailPopup", () => {
       await waitFor(() => {
         expect(screen.getByTestId("alert-message").props.children).toBe(
           "Failed to cancel the booking."
+        );
+      });
+    });
+
+    it("shows a generic message when extending fails with a non-Error rejection", async () => {
+      (adminApi.adminExtendBooking as jest.Mock).mockRejectedValue("boom");
+      render(<BookingDetailPopup {...baseProps} />);
+      await waitFor(() => expect(screen.getByTestId("extend-btn")).toBeTruthy());
+      await act(async () => {
+        fireEvent.press(screen.getByTestId("extend-btn"));
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId("alert-message").props.children).toBe(
+          "Failed to update booking."
         );
       });
     });

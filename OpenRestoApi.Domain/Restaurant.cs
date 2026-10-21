@@ -148,6 +148,14 @@ public class Restaurant
     /// </summary>
     public BookingRefFormat BookingRefFormat { get; set; } = BookingRefFormat.AlphaNumeric;
 
+    /// <summary>
+    /// True when <paramref name="tableId"/> is a table of this location, in section
+    /// <paramref name="sectionId"/>. A request names its table and section by id, so nothing else
+    /// stops it naming another location's.
+    /// </summary>
+    public bool HasTableInSection(int tableId, int sectionId)
+        => Sections.Any(s => s.Id == sectionId && s.Tables.Any(t => t.Id == tableId));
+
     /// <summary>True while a pause is running — for badges and counts, not as a booking gate.</summary>
     public bool IsPaused()
         => BookingsPausedUntil.HasValue && BookingsPausedUntil.Value > DateTime.UtcNow;

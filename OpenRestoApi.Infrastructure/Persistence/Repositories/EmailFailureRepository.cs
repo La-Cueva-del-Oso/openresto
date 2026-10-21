@@ -9,6 +9,7 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories;
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.BookingServiceTests")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.BookingConfirmationServiceTests")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.EmailSettingsServiceTests")]
+[OnlyAccessibleBy("OpenRestoApi.Tests.Services.GuestDataRetentionServiceTests")]
 [ExternalAccessAllowed]
 internal class EmailFailureRepository(AppDbContext db) : IEmailFailureRepository
 {
@@ -27,4 +28,7 @@ internal class EmailFailureRepository(AppDbContext db) : IEmailFailureRepository
             .Take(count)
             .ToListAsync();
     }
+
+    public async Task<int> DeleteOlderThanAsync(DateTime cutoffUtc)
+        => await _db.EmailFailures.Where(f => f.AttemptedAt < cutoffUtc).ExecuteDeleteAsync();
 }

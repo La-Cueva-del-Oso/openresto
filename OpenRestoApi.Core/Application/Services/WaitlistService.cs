@@ -21,8 +21,11 @@ public class WaitlistService(
     IWaitlistReadyNotifier? readyNotifier = null,
     INotificationQueue? notificationQueue = null,
     ICurrentUserService? currentUser = null,
-    IAuditScope? audit = null)
+    IAuditScope? audit = null,
+    BookingWriteGate? writeGate = null)
 {
+    private readonly BookingWriteGate _writeGate = writeGate ?? new BookingWriteGate();
+
     /// <summary>A party still queued this long after joining has almost certainly gone, and would clog the queue.</summary>
     public static readonly TimeSpan StaleAfter = TimeSpan.FromHours(6);
 
@@ -114,18 +117,21 @@ public class WaitlistService(
     /// <summary>The guest withdrawing. Idempotent once the entry has left the queue.</summary>
     public async Task<bool> LeaveAsync(string entryRef)
     {
-        WaitlistEntry? entry = await _waitlist.GetByRefAsync(entryRef);
-        if (entry == null)
+        using (await _writeGate.EnterAsync())
         {
-            return false;
-        }
+            WaitlistEntry? entry = await _waitlist.GetByRefAsync(entryRef);
+            if (entry == null)
+            {
+                return false;
+            }
 
-        if (entry.IsActive)
-        {
-            Close(entry, WaitlistStatus.Left);
-            await _waitlist.SaveChangesAsync();
+            if (entry.IsActive)
+            {
+                Close(entry, WaitlistStatus.Left);
+                await _waitlist.SaveChangesAsync();
+            }
+            return true;
         }
-        return true;
     }
 
     /// <summary>
@@ -137,31 +143,34 @@ public class WaitlistService(
     /// <seealso>WaitlistServiceTests.SetPushAsync_RejectsAnEntryThatHasLeft</seealso>
     public async Task<bool> SetPushAsync(string entryRef, WaitlistPushRequest req)
     {
-        WaitlistEntry? entry = await _waitlist.GetByRefAsync(entryRef);
-        if (entry == null)
+        using (await _writeGate.EnterAsync())
         {
-            return false;
-        }
+            WaitlistEntry? entry = await _waitlist.GetByRefAsync(entryRef);
+            if (entry == null)
+            {
+                return false;
+            }
 
-        if (!entry.IsActive)
-        {
-            throw new ConflictException("This party has already left the waitlist.") { Code = ErrorCodes.WaitlistNotActive };
-        }
+            if (!entry.IsActive)
+            {
+                throw new ConflictException("This party has already left the waitlist.") { Code = ErrorCodes.WaitlistNotActive };
+            }
 
-        string endpoint = req.Endpoint.Trim();
-        bool hasKeys = req.Channel != GuestPushChannels.WebPush
-            || (!string.IsNullOrWhiteSpace(req.P256dh) && !string.IsNullOrWhiteSpace(req.Auth));
-        if (!hasKeys || !PushEndpointValidator.IsValidFor(req.Channel, endpoint))
-        {
-            throw new ValidationException("The push address is not one this server will send to.") { Code = ErrorCodes.WaitlistPushInvalid };
-        }
+            string endpoint = req.Endpoint.Trim();
+            bool hasKeys = req.Channel != GuestPushChannels.WebPush
+                || (!string.IsNullOrWhiteSpace(req.P256dh) && !string.IsNullOrWhiteSpace(req.Auth));
+            if (!hasKeys || !PushEndpointValidator.IsValidFor(req.Channel, endpoint))
+            {
+                throw new ValidationException("The push address is not one this server will send to.") { Code = ErrorCodes.WaitlistPushInvalid };
+            }
 
-        entry.PushChannel = req.Channel;
-        entry.PushEndpoint = endpoint;
-        entry.PushP256dh = req.P256dh;
-        entry.PushAuth = req.Auth;
-        await _waitlist.SaveChangesAsync();
-        return true;
+            entry.PushChannel = req.Channel;
+            entry.PushEndpoint = endpoint;
+            entry.PushP256dh = req.P256dh;
+            entry.PushAuth = req.Auth;
+            await _waitlist.SaveChangesAsync();
+            return true;
+        }
     }
 
     public async Task<WaitlistBoardDto> GetBoardAsync(int restaurantId)
@@ -210,10 +219,14 @@ public class WaitlistService(
     /// <summary>Calls the party up. Calling again re-sends the message.</summary>
     public async Task NotifyAsync(int entryId)
     {
-        WaitlistEntry entry = await LoadActiveEntryAsync(entryId);
-        entry.Status = WaitlistStatus.Notified;
-        entry.NotifiedAt = _clock.UtcNow;
-        await _waitlist.SaveChangesAsync();
+        WaitlistEntry entry;
+        using (await _writeGate.EnterAsync())
+        {
+            entry = await LoadActiveEntryAsync(entryId);
+            entry.Status = WaitlistStatus.Notified;
+            entry.NotifiedAt = _clock.UtcNow;
+            await _waitlist.SaveChangesAsync();
+        }
 
         if (_readyNotifier != null)
         {
@@ -233,35 +246,42 @@ public class WaitlistService(
     /// <seealso>WaitlistServiceTests.SeatAsync_UsesAWalkInOnlyTable</seealso>
     /// <seealso>WaitlistServiceTests.SeatAsync_Rejects_WhenNoTableIsFree</seealso>
     /// <seealso>WaitlistServiceTests.SeatAsync_Rejects_ATableThatIsNotFree</seealso>
+    /// <seealso>BookingConcurrencyTests.ConcurrentSeatsOfOneTicket_CreateOneBookingAndRefuseTheRest</seealso>
     public async Task<SeatWaitlistEntryResponse> SeatAsync(int entryId, SeatWaitlistEntryRequest req)
     {
-        WaitlistEntry entry = await LoadActiveEntryAsync(entryId);
-        Restaurant restaurant = await LoadRestaurantAsync(entry.RestaurantId);
-        DateTime now = _clock.UtcNow;
-
-        IReadOnlyList<TableCandidate> free = await _autoAssigner.BuildCandidatesAsync(restaurant, entry.Seats, now, includeWalkInOnly: true);
-        TableCandidate unit = PickUnit(free, req)
-            ?? throw new ConflictException("No free table can seat this party right now.") { Code = ErrorCodes.WaitlistNoTableFree };
-
-        var booking = new Booking
+        WaitlistEntry entry;
+        Restaurant restaurant;
+        Booking booking;
+        using (await _writeGate.EnterAsync())
         {
-            RestaurantId = restaurant.Id,
-            SectionId = unit.SectionId,
-            TableId = unit.IsGroup ? null : unit.TableId,
-            TableGroupId = unit.TableGroupId,
-            Date = now,
-            EndTime = now.AddMinutes(BookingDuration.For(restaurant, entry.Seats)),
-            CustomerName = entry.Name,
-            CustomerEmail = entry.Email,
-            Seats = entry.Seats,
-            BookingRef = BookingRefFactory.GenerateFor(restaurant),
-            Status = BookingStatus.Seated,
-        };
-        await _bookings.AddAsync(booking);
+            entry = await LoadActiveEntryAsync(entryId);
+            restaurant = await LoadRestaurantAsync(entry.RestaurantId);
+            DateTime now = _clock.UtcNow;
 
-        Close(entry, WaitlistStatus.Seated);
-        entry.BookingId = booking.Id;
-        await _waitlist.SaveChangesAsync();
+            IReadOnlyList<TableCandidate> free = await _autoAssigner.BuildCandidatesAsync(restaurant, entry.Seats, now, includeWalkInOnly: true);
+            TableCandidate unit = PickUnit(free, req)
+                ?? throw new ConflictException("No free table can seat this party right now.") { Code = ErrorCodes.WaitlistNoTableFree };
+
+            booking = new Booking
+            {
+                RestaurantId = restaurant.Id,
+                SectionId = unit.SectionId,
+                TableId = unit.IsGroup ? null : unit.TableId,
+                TableGroupId = unit.TableGroupId,
+                Date = now,
+                EndTime = now.AddMinutes(BookingDuration.For(restaurant, entry.Seats)),
+                CustomerName = entry.Name,
+                CustomerEmail = entry.Email,
+                Seats = entry.Seats,
+                BookingRef = BookingRefFactory.GenerateFor(restaurant),
+                Status = BookingStatus.Seated,
+            };
+            await _bookings.AddAsync(booking);
+
+            Close(entry, WaitlistStatus.Seated);
+            entry.BookingId = booking.Id;
+            await _waitlist.SaveChangesAsync();
+        }
 
         _notificationQueue?.EnqueueBookingCreated(booking, restaurant.Name);
         Describe(AuditActions.WaitlistSeat, entry, $"Seated ticket #{entry.Number} as booking {booking.BookingRef}");
@@ -276,9 +296,13 @@ public class WaitlistService(
 
     public async Task RemoveAsync(int entryId)
     {
-        WaitlistEntry entry = await LoadActiveEntryAsync(entryId);
-        Close(entry, WaitlistStatus.Left);
-        await _waitlist.SaveChangesAsync();
+        WaitlistEntry entry;
+        using (await _writeGate.EnterAsync())
+        {
+            entry = await LoadActiveEntryAsync(entryId);
+            Close(entry, WaitlistStatus.Left);
+            await _waitlist.SaveChangesAsync();
+        }
 
         Describe(AuditActions.WaitlistRemove, entry, $"Removed ticket #{entry.Number} from the waitlist");
     }
@@ -299,6 +323,8 @@ public class WaitlistService(
         {
             throw new ValidationException("A name is required to join the waitlist.") { Code = ErrorCodes.WaitlistNameRequired };
         }
+
+        GuestText.RejectControlCharacters(name, specialRequests: null);
 
         string? email = string.IsNullOrWhiteSpace(req.Email) ? null : req.Email.Trim().ToLowerInvariant();
         if (email != null && !EmailValidator.IsValid(email))

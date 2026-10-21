@@ -1,4 +1,6 @@
+using Microsoft.Extensions.Logging;
 using OpenRestoApi.Core.Application.Interfaces;
+using OpenRestoApi.Core.Application.Utilities;
 using OpenRestoApi.Core.Domain;
 
 namespace OpenRestoApi.Core.Application.Services;
@@ -9,8 +11,10 @@ public sealed class BookingConfirmationService(
     IEmailService? emailService,
     IEmailFailureRepository? emailFailureRepository,
     IEmailTemplateService templateService,
-    BrandService brandService) : IBookingConfirmationService
+    BrandService brandService,
+    ILogger<BookingConfirmationService>? logger = null) : IBookingConfirmationService
 {
+    private readonly ILogger<BookingConfirmationService>? _logger = logger;
     private readonly EmailSettingsService? _emailSettingsService = emailSettingsService;
     private readonly IEmailService? _emailService = emailService;
     private readonly IEmailFailureRepository? _emailFailureRepository = emailFailureRepository;
@@ -42,14 +46,15 @@ public sealed class BookingConfirmationService(
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[BookingConfirmationService] Confirmation email failed for ref {booking.BookingRef}: {ex.Message}");
+            // The full exception stays in the log; the table keeps only the category.
+            _logger?.LogError(ex, "Confirmation email failed for booking {BookingRef}.", booking.BookingRef);
             if (_emailFailureRepository != null)
             {
                 await _emailFailureRepository.AddAsync(new EmailFailure
                 {
                     BookingRef = booking.BookingRef,
                     RecipientEmail = booking.CustomerEmail,
-                    ErrorMessage = ex.Message,
+                    ErrorMessage = EmailFailureReason.CodeFor(ex),
                     AttemptedAt = DateTime.UtcNow,
                 });
             }

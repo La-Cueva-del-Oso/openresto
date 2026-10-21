@@ -11,8 +11,9 @@ const LIST_COLUMNS = ["id", "email", "displayName", "role", "isActive"];
  * Deliberately no create, role or reset-password verb. Those three hand out or move interactive
  * privilege, so the server refuses them to any API-key session outright (`[NoApiKeyAccess]` on
  * `UsersController`), and an API key is the only credential this CLI has. Offering a command that
- * can only ever return 403 would be worse than not offering it. Listing and activation remain,
- * because neither grants a session.
+ * can only ever return 403 would be worse than not offering it. Reactivating an account is in that
+ * list too: it gives an old login back, so only a signed-in Owner session may do it. Listing and
+ * deactivation remain, because neither grants a session.
  */
 export function registerUsersCommands(program: Command): void {
   const users = program
@@ -32,26 +33,17 @@ export function registerUsersCommands(program: Command): void {
     );
 
   users
-    .command("activate <id>")
-    .description("Reactivate a deactivated account")
-    .action(handle(setActive(true)));
-
-  users
     .command("deactivate <id>")
     .description("Deactivate an account (cannot deactivate your own)")
-    .action(handle(setActive(false)));
-}
-
-function setActive(isActive: boolean) {
-  return async (id: string, _options: unknown, command: Command) => {
-    const { client } = clientFor(command);
-    const globals = getGlobalOptions(command);
-    const result = await client.patch(
-      `/api/admin/users/${encodeURIComponent(id)}/active`,
-      {
-        body: { isActive },
-      },
+    .action(
+      handle(async (id: string, _options: unknown, command: Command) => {
+        const { client } = clientFor(command);
+        const globals = getGlobalOptions(command);
+        const result = await client.patch(
+          `/api/admin/users/${encodeURIComponent(id)}/active`,
+          { body: { isActive: false } },
+        );
+        printResult(result, Boolean(globals.json));
+      }),
     );
-    printResult(result, Boolean(globals.json));
-  };
 }

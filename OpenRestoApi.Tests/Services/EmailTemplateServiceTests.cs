@@ -198,6 +198,31 @@ public class EmailTemplateServiceTests
     }
 
     [Fact]
+    public void BuildConfirmationEmail_EncodesTheGuestName_AndKeepsAnOrdinaryOneReadable()
+    {
+        string hostile = _svc.BuildConfirmationEmail(
+            MakeBooking(customerName: "<script>alert(1)</script> \"O'Neil\""), MakeRestaurant(), _defaultBrand, DefaultWebsiteUrl);
+        string ordinary = _svc.BuildConfirmationEmail(
+            MakeBooking(customerName: "Ada Lovelace"), MakeRestaurant(), _defaultBrand, DefaultWebsiteUrl);
+
+        Assert.DoesNotContain("<script>", hostile);
+        Assert.Contains("&lt;script&gt;", hostile);
+        Assert.Contains("You're all set, Ada Lovelace!", ordinary);
+    }
+
+    [Fact]
+    public void BuildConfirmationEmail_EncodesBrandColourAndUrlsWhereTheyLeaveTheirAttributes()
+    {
+        BrandSettings brand = new() { AppName = "Open Resto", PrimaryColor = "red\"><script>alert(1)</script>" };
+
+        string html = _svc.BuildConfirmationEmail(
+            MakeBooking(), MakeRestaurant(imageUrl: "https://cdn.example.com/a.jpg\"><script>alert(2)</script>"), brand, "https://openres.to/\"><script>alert(3)</script>");
+
+        Assert.DoesNotContain("<script>", html);
+        Assert.Contains("&lt;script&gt;", html);
+    }
+
+    [Fact]
     public void BuildConfirmationEmail_OmitsSpecialRequests_WhenAbsent()
     {
         var restaurant = MakeRestaurant();

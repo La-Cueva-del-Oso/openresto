@@ -45,7 +45,7 @@ public class GuestReminderServiceTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private GuestReminderService CreateService()
+    private GuestReminderService CreateService(GuestPushSettings? settings = null)
     {
         var config = new Mock<IConfiguration>();
         config.Setup(c => c[It.IsAny<string>()]).Returns(string.Empty);
@@ -56,7 +56,7 @@ public class GuestReminderServiceTests : IDisposable
             new GuestPushSubscriptionRepository(_db),
             _sender.Object,
             new BrandService(new BrandSettingsRepository(_db), config.Object),
-            Options.Create(new GuestPushSettings()),
+            Options.Create(settings ?? new GuestPushSettings()),
             _clock,
             NullLogger<GuestReminderService>.Instance);
     }
@@ -125,7 +125,7 @@ public class GuestReminderServiceTests : IDisposable
     };
 
     private void SenderAnswers(GuestPushResult result) =>
-        _sender.Setup(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>())).ReturnsAsync(result);
+        _sender.Setup(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>(), It.IsAny<CancellationToken>())).ReturnsAsync(result);
 
     private Task<List<GuestPushSubscription>> StoredAsync() => _db.GuestPushSubscriptions.AsNoTracking().ToListAsync();
 
@@ -310,6 +310,63 @@ public class GuestReminderServiceTests : IDisposable
         Assert.Equal(2, (await StoredAsync()).Count);
     }
 
+    [Fact]
+    public async Task SubscribeAsync_AcceptsTheLastDeviceUnderTheCap()
+    {
+        var settings = new GuestPushSettings();
+        Booking booking = SeedBooking(Now.AddDays(3));
+        Booking other = SeedBooking(Now.AddDays(3), bookingRef: "another-booking");
+        for (int i = 0; i < settings.MaxDevicesPerBooking; i++)
+        {
+            SeedSubscription(other, Now, endpoint: $"ExponentPushToken[other-{i}]");
+        }
+
+        for (int i = 0; i < settings.MaxDevicesPerBooking - 1; i++)
+        {
+            SeedSubscription(booking, Now, endpoint: $"ExponentPushToken[device-{i}]");
+        }
+
+        bool ok = await CreateService().SubscribeAsync(Ref, Email, ExpoRequest(endpoint: "ExponentPushToken[last]"));
+
+        Assert.True(ok);
+        Assert.Equal(settings.MaxDevicesPerBooking, (await StoredAsync()).Count(s => s.BookingId == booking.Id));
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_RefusesADeviceOverTheCap()
+    {
+        var settings = new GuestPushSettings();
+        Booking booking = SeedBooking(Now.AddDays(3));
+        for (int i = 0; i < settings.MaxDevicesPerBooking; i++)
+        {
+            SeedSubscription(booking, Now, endpoint: $"ExponentPushToken[device-{i}]");
+        }
+
+        var ex = await Assert.ThrowsAsync<ConflictException>(
+            () => CreateService().SubscribeAsync(Ref, Email, ExpoRequest(endpoint: "ExponentPushToken[one-too-many]")));
+
+        Assert.Equal(ErrorCodes.BookingReminderDeviceLimit, ex.Code);
+        Assert.Equal(settings.MaxDevicesPerBooking, (await StoredAsync()).Count);
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_ReRegistersAKnownDeviceEvenAtTheCap()
+    {
+        var settings = new GuestPushSettings();
+        Booking booking = SeedBooking(Now.AddDays(3));
+        for (int i = 0; i < settings.MaxDevicesPerBooking; i++)
+        {
+            SeedSubscription(booking, Now, endpoint: $"ExponentPushToken[device-{i}]", locale: "en");
+        }
+
+        bool ok = await CreateService().SubscribeAsync(Ref, Email, ExpoRequest(endpoint: "ExponentPushToken[device-0]", locale: "de"));
+
+        Assert.True(ok);
+        List<GuestPushSubscription> stored = await StoredAsync();
+        Assert.Equal(settings.MaxDevicesPerBooking, stored.Count);
+        Assert.Equal("de", stored.Single(s => s.Endpoint == "ExponentPushToken[device-0]").Locale);
+    }
+
     // ---- UnsubscribeAsync ----
 
     [Fact]
@@ -377,7 +434,8 @@ public class GuestReminderServiceTests : IDisposable
             It.Is<GuestPushAddress>(to => to.Endpoint == Endpoint),
             It.Is<GuestPushMessage>(m =>
                 m.Tag == $"booking-{booking.Id}" &&
-                m.Url == $"{WebsiteUrl}/booking-confirmation/{Ref}?email=guest%40example.com")),
+                m.Url == $"{WebsiteUrl}/booking-confirmation/{Ref}?email=guest%40example.com"),
+            It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -393,7 +451,7 @@ public class GuestReminderServiceTests : IDisposable
         GuestPushSubscription stored = Assert.Single(await StoredAsync());
         Assert.Null(stored.LastReminderLeadHours);
         Assert.Null(stored.LastReminderSentAt);
-        _sender.Verify(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>()), Times.Never);
+        _sender.Verify(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -405,7 +463,7 @@ public class GuestReminderServiceTests : IDisposable
         int delivered = await CreateService().SendDueRemindersAsync();
 
         Assert.Equal(0, delivered);
-        _sender.Verify(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>()), Times.Never);
+        _sender.Verify(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -437,14 +495,14 @@ public class GuestReminderServiceTests : IDisposable
         GuestPushSubscription stored = Assert.Single(await StoredAsync());
         Assert.Equal(24, stored.LastReminderLeadHours);
         Assert.Equal(Now, stored.LastReminderSentAt);
-        _sender.Verify(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>()), Times.Once);
+        _sender.Verify(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>(), It.IsAny<CancellationToken>()), Times.Once);
 
         // The next lead window still gets its own attempt.
         _clock.UtcNow = Now.AddHours(22);
         await service.SendDueRemindersAsync();
 
         Assert.Equal(2, Assert.Single(await StoredAsync()).LastReminderLeadHours);
-        _sender.Verify(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>()), Times.Exactly(2));
+        _sender.Verify(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
@@ -469,6 +527,54 @@ public class GuestReminderServiceTests : IDisposable
         Assert.Equal(2, Assert.Single(await StoredAsync()).LastReminderLeadHours);
     }
 
+    private void SeedDueSubscriptions(int count)
+    {
+        // Every sitting is inside its 24h window and every guest opted in an hour ago.
+        for (int i = 0; i < count; i++)
+        {
+            Booking booking = SeedBooking(Now.AddHours(24).AddMinutes(-i), bookingRef: $"due-{i}");
+            SeedSubscription(booking, Now.AddHours(-1), endpoint: $"ExponentPushToken[due-{i}]");
+        }
+    }
+
+    [Fact]
+    public async Task SendDueRemindersAsync_SendsTheCapAndLeavesTheRestForTheNextPass()
+    {
+        var settings = new GuestPushSettings { MaxSendsPerPass = 3 };
+        SeedDueSubscriptions(settings.MaxSendsPerPass + 1);
+        SenderAnswers(GuestPushResult.Delivered);
+        GuestReminderService service = CreateService(settings);
+
+        int firstPass = await service.SendDueRemindersAsync();
+
+        Assert.Equal(3, firstPass);
+        Assert.Single((await StoredAsync()).Where(s => s.LastReminderLeadHours is null));
+        _sender.Verify(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
+
+        int secondPass = await service.SendDueRemindersAsync();
+
+        Assert.Equal(1, secondPass);
+        Assert.All(await StoredAsync(), s => Assert.Equal(24, s.LastReminderLeadHours));
+        _sender.Verify(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>(), It.IsAny<CancellationToken>()), Times.Exactly(4));
+    }
+
+    [Fact]
+    public async Task SendDueRemindersAsync_LeavesNothingPendingWhenDueEqualsTheCap()
+    {
+        var settings = new GuestPushSettings { MaxSendsPerPass = 3 };
+        SeedDueSubscriptions(settings.MaxSendsPerPass);
+        SenderAnswers(GuestPushResult.Delivered);
+        GuestReminderService service = CreateService(settings);
+
+        int firstPass = await service.SendDueRemindersAsync();
+        int secondPass = await service.SendDueRemindersAsync();
+
+        Assert.Equal(3, firstPass);
+        Assert.Equal(0, secondPass);
+        Assert.All(await StoredAsync(), s => Assert.Equal(24, s.LastReminderLeadHours));
+        _sender.Verify(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
+    }
+
     [Fact]
     public async Task SendDueRemindersAsync_PrunesSpentSubscriptions()
     {
@@ -484,7 +590,7 @@ public class GuestReminderServiceTests : IDisposable
         Assert.Equal(0, delivered);
         GuestPushSubscription remaining = Assert.Single(await StoredAsync());
         Assert.Equal("ExponentPushToken[upcoming]", remaining.Endpoint);
-        _sender.Verify(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>()), Times.Never);
+        _sender.Verify(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -498,8 +604,8 @@ public class GuestReminderServiceTests : IDisposable
         SeedSubscription(booking, _clock.UtcNow.AddHours(-1), locale: "fr");
         GuestPushMessage? pushed = null;
         _sender
-            .Setup(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>()))
-            .Callback<GuestPushAddress, GuestPushMessage>((_, message) => pushed = message)
+            .Setup(s => s.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>(), It.IsAny<CancellationToken>()))
+            .Callback<GuestPushAddress, GuestPushMessage, CancellationToken>((_, message, _) => pushed = message)
             .ReturnsAsync(GuestPushResult.Delivered);
 
         int delivered = await CreateService().SendDueRemindersAsync();

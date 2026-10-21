@@ -4552,12 +4552,14 @@
         "type": "object",
         "properties": {
           "minutes": {
+            "maximum": 480,
+            "minimum": 1,
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
               "integer",
               "string"
             ],
-            "description": "Additional minutes to add to the booking\u0027s EndTime.",
+            "description": "Additional minutes to add to the booking\u0027s EndTime, 1 to 480.",
             "format": "int32"
           }
         }
@@ -4566,6 +4568,8 @@
         "type": "object",
         "properties": {
           "minutes": {
+            "maximum": 480,
+            "minimum": 1,
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
               "integer",
@@ -5065,6 +5069,9 @@
       "SetupPvqRequest": {
         "type": "object",
         "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
           "question": {
             "type": "string"
           },

@@ -1,7 +1,8 @@
 import type { Command } from "commander";
 import { resolveProfile, type ResolvedProfile } from "./config.js";
 import { ApiError, Client } from "./transport.js";
-import { ConfirmationRequiredError } from "./confirm.js";
+import { t, type MessageKey } from "./i18n.js";
+import { neutralizeControl } from "./output.js";
 
 export interface GlobalOptions {
   json?: boolean;
@@ -11,6 +12,22 @@ export interface GlobalOptions {
 
 export function getGlobalOptions(cmd: Command): GlobalOptions {
   return cmd.optsWithGlobals() as GlobalOptions;
+}
+
+/**
+ * Prints a command's confirmation line. Under `--json` the output is for a script, so it stays in
+ * English whatever the language; otherwise it follows the language like every other message.
+ *
+ * @see [jsonLanguage.test.ts](./jsonLanguage.test.ts) — pins that `--json` fixes the confirmation
+ * lines to English while the same command without it follows the language.
+ */
+export function printMessage(
+  command: Command,
+  key: MessageKey,
+  params?: Record<string, string | number>,
+): void {
+  const lang = getGlobalOptions(command).json ? "en" : undefined;
+  console.log(t(key, params, lang));
 }
 
 export function clientFor(cmd: Command): {
@@ -40,15 +57,16 @@ export function handle<TArgs extends unknown[]>(
   };
 }
 
+/** Messages can carry API-supplied text (an ApiError's body, a redirect's Location), so every
+ * branch goes through `neutralizeControl`. */
 export function printError(err: unknown): void {
+  const say = (line: string) => console.error(neutralizeControl(line, true));
   if (err instanceof ApiError) {
-    const codePart = err.code ? ` [${err.code}]` : "";
-    console.error(`Error (${err.status})${codePart}: ${err.message}`);
-  } else if (err instanceof ConfirmationRequiredError) {
-    console.error(`Error: ${err.message}`);
+    const code = err.code ? ` [${err.code}]` : "";
+    say(t("error.api", { status: err.status, code, message: err.message }));
   } else if (err instanceof Error) {
-    console.error(`Error: ${err.message}`);
+    say(t("error.generic", { message: err.message }));
   } else {
-    console.error("Error:", err);
+    say(t("error.generic", { message: String(err) }));
   }
 }

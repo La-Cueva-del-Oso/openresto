@@ -122,4 +122,51 @@ public class EmailTemplateBuilderTests
         Assert.Contains("My &lt;App&gt;", html);
         Assert.DoesNotContain("My <App>", html);
     }
+
+    private const string Hostile = "x\"><script>alert(1)</script>";
+
+    [Fact]
+    public void Wrap_EncodesTheWebsiteUrlAndColour_WhereTheyLeaveTheirAttributes()
+    {
+        string html = EmailTemplateBuilder.Wrap(Hostile, "App", "https://example.com/" + Hostile, "", "");
+
+        Assert.DoesNotContain("<script>", html);
+        Assert.Contains("&lt;script&gt;", html);
+        Assert.Contains("href=\"https://example.com/x&quot;&gt;&lt;script", html);
+    }
+
+    [Fact]
+    public void Wrap_LeavesAnOrdinaryUrlAndColourUntouched()
+    {
+        string html = EmailTemplateBuilder.Wrap("#0a7ea4", "App", "https://example.com/path/", "", "");
+
+        Assert.Contains("href=\"https://example.com/path\" style=\"color:#0a7ea4;", html);
+        Assert.Contains(">example.com/path</a>", html);
+    }
+
+    [Fact]
+    public void BannerHeader_EncodesAnImageUrlThatContainsAQuote()
+    {
+        string html = EmailTemplateBuilder.BannerHeader("https://x.com/" + Hostile, "Alt", "Title", "");
+
+        Assert.DoesNotContain("<script>", html);
+        Assert.Contains("src=\"https://x.com/x&quot;&gt;&lt;script", html);
+    }
+
+    [Fact]
+    public void IconHeader_EncodesAnIconUrlThatContainsAQuote()
+    {
+        string html = EmailTemplateBuilder.IconHeader("https://x.com/" + Hostile, "Alt", "Title", "");
+
+        Assert.DoesNotContain("<script>", html);
+        Assert.Contains("src=\"https://x.com/x&quot;&gt;&lt;script", html);
+    }
+
+    [Fact]
+    public void TextHeader_EncodesAColourThatContainsAQuote()
+    {
+        string html = EmailTemplateBuilder.TextHeader("App", Hostile);
+
+        Assert.DoesNotContain("<script>", html);
+    }
 }

@@ -280,15 +280,13 @@ public static class ServiceCollectionExtensions
             });
 
         // The role → capability mapping lives here and nowhere else; controllers only ever
-        // name a policy. LegacyAdmin satisfies both because it is what the pre-multi-user
-        // build minted for the one and only admin, who becomes an Owner on upgrade — honouring
-        // it keeps in-flight 30-day sessions working instead of silently signing everyone out.
+        // name a policy.
         services.AddAuthorization(options =>
         {
             options.AddPolicy(AuthPolicies.RequireAdmin, policy =>
-                policy.RequireRole(UserRoles.Owner, UserRoles.Manager, UserRoles.LegacyAdmin));
+                policy.RequireRole(UserRoles.Owner, UserRoles.Manager));
             options.AddPolicy(AuthPolicies.RequireOwner, policy =>
-                policy.RequireRole(UserRoles.Owner, UserRoles.LegacyAdmin));
+                policy.RequireRole(UserRoles.Owner));
         });
 
         return services;
@@ -310,7 +308,7 @@ public static class ServiceCollectionExtensions
     {
         ClaimsPrincipal principal = context.Principal!;
         IAdminCredentialRepository credentials = context.HttpContext.RequestServices.GetRequiredService<IAdminCredentialRepository>();
-        AdminCredential? account = await CurrentUserResolver.ResolveAsync(principal.UserId(), principal.Email(), credentials);
+        AdminCredential? account = await CurrentUserResolver.ResolveAsync(principal.UserId(), credentials);
         if (account is null)
         {
             context.Fail("Session no longer matches an active account.");
@@ -333,6 +331,12 @@ public static class ServiceCollectionExtensions
     /// <summary>How long the native-app readiness checks wait on one <c>/.well-known/</c> fetch
     /// before reporting it unreachable — the admin screen blocks on them, so this is short.</summary>
     private static readonly TimeSpan WellKnownProbeTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>The most response body the Web Push client will buffer from a push service: the
+    /// endpoint is chosen by a guest, and the library reads the whole body of a refusal.</summary>
+    public const int WebPushMaxResponseBytes = 64 * 1024;
+
+    private static readonly TimeSpan WebPushTimeout = TimeSpan.FromSeconds(15);
 
     public static IServiceCollection AddProjectDependencies(this IServiceCollection services, IHostEnvironment env)
     {
@@ -387,6 +391,11 @@ public static class ServiceCollectionExtensions
                 .BindConfiguration("Audit");
         services.AddHostedService<OpenRestoApi.Infrastructure.Auditing.AuditRetentionWorker>();
 
+        services.AddScoped<GuestDataRetentionService>();
+        services.AddOptions<OpenRestoApi.Core.Application.Settings.RetentionSettings>()
+                .BindConfiguration("Retention");
+        services.AddHostedService<OpenRestoApi.Infrastructure.Retention.GuestDataRetentionWorker>();
+
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IPasswordService, PasswordService>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
@@ -394,6 +403,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<UserService>();
         services.AddScoped<ApiKeyService>();
+        services.AddSingleton<BookingWriteGate>();
         services.AddScoped<BookingService>();
         services.AddScoped<AdminService>();
         services.AddScoped<RestaurantManagementService>();
@@ -415,15 +425,15 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<OpenRestoApi.Infrastructure.NativeClients.NativeClientStatsWorker>();
 
         // Only ever fetches this deployment's own configured public address — see WellKnownProbe.
-        // No redirects: neither store's verifier follows one, and a redirect is also how a public
-        // host would hand the probe an internal address after the host check has passed.
+        // The address is brand:write-controlled, so the connection is only ever opened to a public
+        // address (no redirects either: neither store's verifier follows one) — see PublicOnlyConnector.
         services.AddHttpClient(OpenRestoApi.Infrastructure.NativeClients.WellKnownProbe.HttpClientName,
             client =>
             {
                 client.Timeout = WellKnownProbeTimeout;
                 client.MaxResponseContentBufferSize = OpenRestoApi.Infrastructure.NativeClients.WellKnownProbe.MaxBodyBytes;
             })
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+            .ConfigurePrimaryHttpMessageHandler(() => new OpenRestoApi.Infrastructure.Notifications.PublicOnlyConnector().CreateHandler());
         services.AddScoped<IWellKnownProbe, OpenRestoApi.Infrastructure.NativeClients.WellKnownProbe>();
 
         services.AddSingleton<OpenRestoApi.Core.Application.Mappings.BookingMapper>();
@@ -442,7 +452,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationService, OpenRestoApi.Core.Application.Services.NotificationService>();
         // Endpoints come from browsers and guests, so the connection is only ever opened to a
         // public address — see PublicOnlyConnector.
-        services.AddHttpClient(OpenRestoApi.Infrastructure.Notifications.PublicOnlyConnector.HttpClientName)
+        services.AddHttpClient(OpenRestoApi.Infrastructure.Notifications.PublicOnlyConnector.HttpClientName,
+            client =>
+            {
+                client.Timeout = WebPushTimeout;
+                client.MaxResponseContentBufferSize = WebPushMaxResponseBytes;
+            })
             .ConfigurePrimaryHttpMessageHandler(() => new OpenRestoApi.Infrastructure.Notifications.PublicOnlyConnector().CreateHandler());
         services.AddScoped<IWebPushClient>(sp => new WebPushClient(
             sp.GetRequiredService<IHttpClientFactory>().CreateClient(OpenRestoApi.Infrastructure.Notifications.PublicOnlyConnector.HttpClientName)));

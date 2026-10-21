@@ -96,7 +96,7 @@ public class EmailStatusControllerTests
         Assert.True(status.SendBookingConfirmations);
     }
 
-    private void SetupOneFailure()
+    private void SetupOneFailure(string storedReason = ErrorCodes.EmailAuthFailed)
     {
         _service.Setup(s => s.GetFailuresAsync()).ReturnsAsync(new List<EmailFailure>
         {
@@ -105,10 +105,27 @@ public class EmailStatusControllerTests
                 Id = 1,
                 BookingRef = "ABC",
                 RecipientEmail = "guest@test.com",
-                ErrorMessage = "err",
+                ErrorMessage = storedReason,
                 AttemptedAt = DateTime.UtcNow,
             },
         });
+    }
+
+    /// <summary>
+    /// Rows written before reasons were codes hold raw exception text, which can name the host and
+    /// the account: the list must flatten them instead of handing them to the client.
+    /// </summary>
+    [Fact]
+    public async Task Failures_NeverReturnsStoredExceptionText()
+    {
+        SetupOneFailure("535 5.7.8 user bob@corp.example rejected by smtp.internal.example");
+
+        EmailFailureResponse only =
+            Assert.Single(FailuresOf(await ControllerFor(FakeCurrentUser.Anonymous()).GetFailures()));
+
+        Assert.Equal(ErrorCodes.EmailSendFailed, only.Code);
+        Assert.DoesNotContain("smtp.internal.example", only.ErrorMessage);
+        Assert.DoesNotContain("bob@corp.example", only.ErrorMessage);
     }
 
     [Fact]
@@ -122,7 +139,8 @@ public class EmailStatusControllerTests
         EmailFailureResponse only = Assert.Single(failures);
         Assert.Equal(1, only.Id);
         Assert.Equal("ABC", only.BookingRef);
-        Assert.Equal("err", only.ErrorMessage);
+        Assert.Equal(ErrorCodes.EmailAuthFailed, only.Code);
+        Assert.Equal("The mail server rejected the username or password.", only.ErrorMessage);
     }
 
     /// <summary>

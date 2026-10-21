@@ -1144,6 +1144,56 @@ public class AvailabilityServiceTests
         });
     }
 
+    [Fact]
+    public async Task GetAvailabilityAsync_AServiceThatCrossesTheSpringForwardGap_StillAnswersWithSlotsAfterIt()
+    {
+        // Madrid jumps 02:00 -> 03:00 on 2026-03-29, so the 02:00 and 02:30 slots of the 28th's
+        // late service name wall-clock times that never happen.
+        AvailabilityResponseDto result = await MadridLateServiceAsync(
+            blockedUtcStart: new DateTime(2026, 3, 29, 1, 0, 0, DateTimeKind.Utc), new DateTime(2026, 3, 28));
+
+        Assert.Equal(["18:00", "18:30"], result.Slots.Take(2).Select(s => s.Time));
+        Assert.Equal("02:30", result.Slots[^1].Time);
+        // 02:00 reads as the 03:00 CEST that follows the gap = 01:00Z, which the booking holds;
+        // 02:30 = 01:30Z is free.
+        Assert.False(result.Slots.First(s => s.Time == "02:00").IsAvailable);
+        Assert.True(result.Slots.First(s => s.Time == "02:30").IsAvailable);
+        Assert.True(result.Slots.First(s => s.Time == "01:30").IsAvailable);
+    }
+
+    [Fact]
+    public async Task GetAvailabilityAsync_AnOrdinaryDayInTheSameZone_KeepsItsSlotInstants()
+    {
+        // 2026-03-27 is a plain CET day (UTC+1): 01:30 local on the 28th is 00:30Z.
+        AvailabilityResponseDto result = await MadridLateServiceAsync(
+            blockedUtcStart: new DateTime(2026, 3, 28, 0, 30, 0, DateTimeKind.Utc), new DateTime(2026, 3, 27));
+
+        Assert.False(result.Slots.First(s => s.Time == "01:30").IsAvailable);
+        Assert.True(result.Slots.First(s => s.Time == "02:00").IsAvailable);
+        Assert.True(result.Slots.First(s => s.Time == "01:00").IsAvailable);
+    }
+
+    private static async Task<AvailabilityResponseDto> MadridLateServiceAsync(DateTime blockedUtcStart, DateTime localDay)
+    {
+        using AppDbContext db = TestDbFactory.Create($"madrid-late-{localDay:yyyyMMdd}");
+        db.Restaurants.Add(new Restaurant
+        {
+            Id = 1, Name = "T", OpenTime = "18:00", CloseTime = "03:00", Timezone = "Europe/Madrid",
+            DefaultBookingDurationMinutes = 15,
+        });
+        db.Sections.Add(new Section { Id = 1, Name = "Main", RestaurantId = 1 });
+        db.Tables.Add(new Table { Id = 1, Name = "T1", Seats = 2, SectionId = 1 });
+        db.Bookings.Add(new Booking
+        {
+            Id = 1, RestaurantId = 1, TableId = 1, SectionId = 1, Seats = 2,
+            Date = blockedUtcStart, EndTime = blockedUtcStart.AddMinutes(15), BookingRef = "B1",
+        });
+        db.SaveChanges();
+
+        var svc = new AvailabilityService(new BookingRepository(db), new RestaurantRepository(db), new Mock<IHoldService>().Object);
+        return await svc.GetAvailabilityAsync(1, DateTime.SpecifyKind(localDay, DateTimeKind.Unspecified), 2);
+    }
+
     /// <summary>A slot time past the opening hour belongs to the same day; one before it has wrapped.</summary>
     private static DateTime SlotInstant(DateTime localDate, string slotTime)
     {

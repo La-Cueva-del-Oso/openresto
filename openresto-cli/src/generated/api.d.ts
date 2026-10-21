@@ -4404,7 +4404,7 @@ export interface components {
         ExtendBookingRequest: {
             /**
              * Format: int32
-             * @description Additional minutes to add to the booking's EndTime.
+             * @description Additional minutes to add to the booking's EndTime, 1 to 480.
              */
             minutes?: number | string;
         };
@@ -4579,6 +4579,7 @@ export interface components {
             status?: string;
         };
         SetupPvqRequest: {
+            currentPassword?: string;
             question?: string;
             answer?: string;
         };

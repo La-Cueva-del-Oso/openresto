@@ -48,48 +48,55 @@ public class NotificationService(
     /// <summary>
     /// <seealso>NotificationServiceTests.SubscribeAsync_RejectsAnEndpointThatIsNotAPublicHttpsUrl</seealso>
     /// </summary>
-    public async Task SubscribeAsync(PushSubscribeRequest request)
+    /// <seealso>NotificationServiceTests.SubscribeAsync_AssignsTheCallerAsOwner</seealso>
+    /// <seealso>NotificationServiceTests.SubscribeAsync_TransfersAnEndpointAnotherUserHeld_ToTheCaller</seealso>
+    /// <seealso>NotificationServiceTests.SubscribeAsync_RegistersWhenTheSessionVersionStillMatches</seealso>
+    /// <seealso>NotificationServiceTests.SubscribeAsync_RefusesASessionTheAccountHasMovedPast_AndLeavesNoRow</seealso>
+    /// <seealso>NotificationServiceTests.SubscribeAsync_RefusesADeactivatedAccount_AndLeavesNoRow</seealso>
+    /// <seealso>NotificationServiceTests.SubscribeAsync_FromAnEndedSession_DoesNotTakeOverTheEndpointAnotherAccountHolds</seealso>
+    public async Task<bool> SubscribeAsync(int userId, int sessionVersion, PushSubscribeRequest request)
     {
         if (!PushEndpointValidator.IsValidWebPushEndpoint(request.Endpoint))
         {
             throw new ValidationException("The push endpoint must be a public https URL.") { Code = ErrorCodes.NotificationPushEndpointInvalid };
         }
 
-        // Deduplicate per endpoint: one row covers every location, so re-subscribing from
-        // the same browser refreshes the keys rather than adding a row per restaurant.
-        AdminPushSubscription? existing = await _pushSubscriptionRepository.GetByEndpointAsync(request.Endpoint);
-
-        if (existing is not null)
-        {
-            existing.P256dh = request.P256dh;
-            existing.Auth = request.Auth;
-            existing.UserAgent = request.UserAgent;
-            _log.LogInformation("[Push] Updated subscription id={Id}", existing.Id);
-            await _pushSubscriptionRepository.SaveChangesAsync();
-        }
-        else
-        {
-            await _pushSubscriptionRepository.AddAsync(new AdminPushSubscription
+        // One row per endpoint covers every location, so re-subscribing from the same browser
+        // refreshes the keys, and a browser another admin used follows whoever subscribes last.
+        bool registered = await _pushSubscriptionRepository.TryRegisterAsync(
+            new AdminPushSubscription
             {
+                UserId = userId,
                 Endpoint = request.Endpoint,
                 P256dh = request.P256dh,
                 Auth = request.Auth,
                 UserAgent = request.UserAgent,
                 CreatedAt = DateTime.UtcNow,
-            });
-            _log.LogInformation("[Push] New subscription registered");
+            },
+            sessionVersion);
+        if (!registered)
+        {
+            _log.LogWarning("[Push] Subscribe refused: the caller's session has ended");
+            return false;
         }
+
+        _log.LogInformation("[Push] Subscription registered");
 
         // No endpoint or key material: a push subscription's keys are credentials.
         // No restaurantId either — the subscription covers every location.
         _audit.Describe(AuditActions.PushSubscribe,
             summary: "Enabled push notifications for a device");
+        return true;
     }
 
-    public async Task UnsubscribeAsync(string endpoint)
+    /// <seealso>NotificationServiceTests.UnsubscribeAsync_RemovesTheCallersOwnEndpoint_AndLeavesOtherBrowsersAlone</seealso>
+    /// <seealso>NotificationServiceTests.UnsubscribeAsync_LeavesAnotherUsersEndpointAlone</seealso>
+    public async Task UnsubscribeAsync(int userId, string endpoint)
     {
         AdminPushSubscription? sub = await _pushSubscriptionRepository.GetByEndpointAsync(endpoint);
-        if (sub is not null)
+        // Another user's endpoint is a silent no-op, the same as an unknown one: the caller
+        // learns nothing about who holds it.
+        if (sub is not null && sub.UserId == userId)
         {
             _pushSubscriptionRepository.RemoveRange([sub]);
             await _pushSubscriptionRepository.SaveChangesAsync();

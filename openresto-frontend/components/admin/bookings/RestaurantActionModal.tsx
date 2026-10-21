@@ -11,6 +11,7 @@ import {
   unpauseRestaurantBookings,
   extendRestaurantBookings,
   BookingDetailDto,
+  SkippedExtensionDto,
 } from "@/api/admin";
 import { styles } from "./RestaurantActionModal.styles";
 import { theme } from "@/theme/theme";
@@ -38,10 +39,12 @@ export default function RestaurantActionModal({
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState<number | null>(null);
   const [extendedBookings, setExtendedBookings] = useState<BookingDetailDto[] | null>(null);
+  const [skippedBookings, setSkippedBookings] = useState<SkippedExtensionDto[]>([]);
   const [willPauseUntil, setWillPauseUntil] = useState("");
 
   async function loadRestaurants() {
     setExtendedBookings(null);
+    setSkippedBookings([]);
     setWillPauseUntil(fmtTime(new Date(Date.now() + 60 * 60 * 1000)));
     setLoading(true);
     try {
@@ -73,8 +76,9 @@ export default function RestaurantActionModal({
       if (actionType === "extend") {
         const result = await extendRestaurantBookings(restaurantId, 60);
         if (result.ok) {
-          if (result.extendedBookings.length > 0) {
+          if (result.extendedBookings.length > 0 || result.skippedBookings.length > 0) {
             setExtendedBookings(result.extendedBookings);
+            setSkippedBookings(result.skippedBookings);
           } else {
             onSuccess?.(
               t("admin.bookings.restaurantAction.noActiveToExtend", { name: restaurantName })
@@ -144,9 +148,11 @@ export default function RestaurantActionModal({
 
           <ThemedText style={[styles.subtitle, { color: colors.muted }]}>
             {extendedBookings
-              ? t("admin.bookings.restaurantAction.extendedSubtitle", {
-                  count: extendedBookings.length,
-                })
+              ? extendedBookings.length > 0
+                ? t("admin.bookings.restaurantAction.extendedSubtitle", {
+                    count: extendedBookings.length,
+                  })
+                : t("admin.bookings.restaurantAction.noneExtendedSubtitle")
               : actionType === "pause"
                 ? t("admin.bookings.restaurantAction.pauseSubtitle")
                 : t("admin.bookings.restaurantAction.extendSubtitle")}
@@ -177,6 +183,22 @@ export default function RestaurantActionModal({
                     </View>
                   </View>
                 ))}
+                {skippedBookings.length > 0 && (
+                  <View testID="skipped-extensions">
+                    <ThemedText style={[styles.itemMeta, { color: colors.muted }]}>
+                      {t("admin.bookings.restaurantAction.skippedSubtitle", {
+                        count: skippedBookings.length,
+                      })}
+                    </ThemedText>
+                    {skippedBookings.map((b) => (
+                      <View key={b.id} style={[styles.item, { borderBottomColor: colors.border }]}>
+                        <ThemedText style={styles.itemName}>
+                          {[b.tableName, b.bookingRef].filter(Boolean).join(" · ")}
+                        </ThemedText>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </ScrollView>
               <ButtonRow style={styles.footer}>
                 <Button size="md" onPress={onClose}>

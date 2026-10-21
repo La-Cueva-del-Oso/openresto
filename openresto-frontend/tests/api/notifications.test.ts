@@ -5,6 +5,7 @@ import {
   markAllRead,
   getVapidPublicKey,
   subscribePush,
+  PushSubscribeRejected,
   unsubscribePush,
   deleteNotification,
   deleteNotifications,
@@ -198,9 +199,46 @@ describe("subscribePush", () => {
     expect(mockFetch.mock.calls[0][0]).not.toContain("restaurantId");
   });
 
-  it("does not throw on error", async () => {
-    mockFetch.mockRejectedValueOnce(new Error("fail"));
+  it("resolves when the server accepts the registration", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 204 });
     await expect(subscribePush({ endpoint: "x", p256dh: "y", auth: "z" })).resolves.toBeUndefined();
+  });
+
+  it("rejects when the session has ended, without a reason of its own", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      json: async () => {
+        throw new Error("no body");
+      },
+    });
+    const attempt = subscribePush({ endpoint: "x", p256dh: "y", auth: "z" });
+    await expect(attempt).rejects.toBeInstanceOf(PushSubscribeRejected);
+    await expect(attempt).rejects.toHaveProperty("message", "");
+  });
+
+  it("rejects with the server's reason when it gives one", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({ message: "That address is not allowed." }),
+    });
+    await expect(subscribePush({ endpoint: "x", p256dh: "y", auth: "z" })).rejects.toThrow(
+      "That address is not allowed."
+    );
+  });
+
+  it("lets a network failure through as it came", async () => {
+    mockFetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const attempt = subscribePush({ endpoint: "x", p256dh: "y", auth: "z" });
+    await expect(attempt).rejects.toThrow("Failed to fetch");
+    await expect(attempt).rejects.not.toBeInstanceOf(PushSubscribeRejected);
+  });
+
+  it("never writes the failure to the console", async () => {
+    mockFetch.mockRejectedValueOnce(new Error("fail"));
+    await subscribePush({ endpoint: "x", p256dh: "y", auth: "z" }).catch(() => undefined);
+    expect(console.error).not.toHaveBeenCalled();
   });
 });
 

@@ -154,6 +154,73 @@ public class AdminControllerTests(TestWebAppFactory factory) : IClassFixture<Tes
         Assert.True(body.TryGetProperty("endTime", out _));
     }
 
+    [Theory]
+    [InlineData(1, 230)]
+    [InlineData(480, 231)]
+    public async Task ExtendBooking_AcceptsMinutesAtEitherEndOfTheRange(int minutes, int daysAhead)
+    {
+        HttpClient client = _factory.CreateAuthenticatedClient();
+        (int restaurantId, int sectionId, int tableId) = GetSeededIds();
+        HttpResponseMessage createResp = await client.PostAsJsonAsync("/api/admin/bookings", new
+        {
+            restaurantId,
+            sectionId,
+            tableId,
+            date = DateTime.UtcNow.AddDays(daysAhead).ToString("yyyy-MM-ddT12:00:00"),
+            customerEmail = "extend-range@test.com",
+            seats = 2
+        });
+        int bookingId = (await createResp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32();
+
+        HttpResponseMessage response = await client.PostAsJsonAsync($"/api/admin/bookings/{bookingId}/extend", new { minutes });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(0, 232)]
+    [InlineData(-1, 233)]
+    [InlineData(481, 234)]
+    public async Task ExtendBooking_RejectsMinutesOutsideTheRange(int minutes, int daysAhead)
+    {
+        HttpClient client = _factory.CreateAuthenticatedClient();
+        (int restaurantId, int sectionId, int tableId) = GetSeededIds();
+        HttpResponseMessage createResp = await client.PostAsJsonAsync("/api/admin/bookings", new
+        {
+            restaurantId,
+            sectionId,
+            tableId,
+            date = DateTime.UtcNow.AddDays(daysAhead).ToString("yyyy-MM-ddT12:00:00"),
+            customerEmail = "extend-range@test.com",
+            seats = 2
+        });
+        JsonElement created = await createResp.Content.ReadFromJsonAsync<JsonElement>();
+        int bookingId = created.GetProperty("id").GetInt32();
+        string endBefore = created.GetProperty("endTime").ToString();
+
+        HttpResponseMessage response = await client.PostAsJsonAsync($"/api/admin/bookings/{bookingId}/extend", new { minutes });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        string body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("minutes to extend by", body);
+        JsonElement stored = await (await client.GetAsync($"/api/admin/bookings/{bookingId}")).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(endBefore, stored.GetProperty("endTime").ToString());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-30)]
+    [InlineData(481)]
+    public async Task ExtendRestaurantBookings_RejectsMinutesOutsideTheRange(int minutes)
+    {
+        HttpClient client = _factory.CreateAuthenticatedClient();
+        (int restaurantId, _, _) = GetSeededIds();
+
+        HttpResponseMessage response = await client.PostAsJsonAsync($"/api/admin/restaurants/{restaurantId}/extend", new { minutes });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Fact]
     public async Task CancelBooking_SoftDelete_Succeeds()
     {
@@ -802,6 +869,55 @@ public class AdminControllerTests(TestWebAppFactory factory) : IClassFixture<Tes
         JsonElement body = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("Bookings extended successfully.", body.GetProperty("message").GetString());
         Assert.True(body.GetProperty("extendedBookings").GetArrayLength() >= 1);
+    }
+
+    [Fact]
+    public async Task ExtendRestaurantBookings_ReportsASittingWithABookingRightAfterItAsSkipped()
+    {
+        HttpClient client = _factory.CreateAuthenticatedClient();
+        (int r, int s, _) = GetSeededIds();
+
+        int blockedId;
+        using (IServiceScope scope = _factory.Services.CreateScope())
+        {
+            AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var table = new Table { Name = "Late table", Seats = 2, SectionId = s };
+            db.Tables.Add(table);
+            await db.SaveChangesAsync();
+            DateTime start = DateTime.UtcNow.AddMinutes(-30);
+            var blocked = new Booking
+            {
+                RestaurantId = r, SectionId = s, TableId = table.Id, Seats = 2, BookingRef = "BLOCKED1",
+                CustomerEmail = "blocked@test.com", Date = start, EndTime = start.AddMinutes(60),
+            };
+            db.Bookings.Add(blocked);
+            db.Bookings.Add(new Booking
+            {
+                RestaurantId = r, SectionId = s, TableId = table.Id, Seats = 2, BookingRef = "NEXT1",
+                CustomerEmail = "next@test.com", Date = start.AddMinutes(75), EndTime = start.AddMinutes(135),
+            });
+            await db.SaveChangesAsync();
+            blockedId = blocked.Id;
+        }
+
+        HttpResponseMessage response = await client.PostAsJsonAsync($"/api/admin/restaurants/{r}/extend", new { minutes = 30 });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        JsonElement body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        JsonElement skipped = body.GetProperty("skippedBookings").EnumerateArray()
+            .Single(b => b.GetProperty("id").GetInt32() == blockedId);
+        Assert.Equal("BLOCKED1", skipped.GetProperty("bookingRef").GetString());
+        Assert.Equal("Late table", skipped.GetProperty("tableName").GetString());
+        Assert.False(skipped.TryGetProperty("customerEmail", out _));
+        Assert.DoesNotContain(body.GetProperty("extendedBookings").EnumerateArray(),
+            b => b.GetProperty("id").GetInt32() == blockedId);
+        Assert.Contains("except", body.GetProperty("message").GetString());
+
+        // The factory's database is shared with the other extend tests, which expect a clean run.
+        using IServiceScope cleanup = _factory.Services.CreateScope();
+        AppDbContext cleanDb = cleanup.ServiceProvider.GetRequiredService<AppDbContext>();
+        cleanDb.Bookings.RemoveRange(cleanDb.Bookings.Where(b => b.BookingRef == "BLOCKED1" || b.BookingRef == "NEXT1"));
+        await cleanDb.SaveChangesAsync();
     }
 
     [Fact]

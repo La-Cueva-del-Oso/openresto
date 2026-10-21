@@ -96,6 +96,23 @@ public class ApiKeyAuthTests(TestWebAppFactory factory) : IClassFixture<TestWebA
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    /// <seealso>AdminServiceTests.GetBookingsAsync_RejectsTheEmailFilter_ForAnApiKeyWithoutGuestsRead</seealso>
+    [Fact]
+    public async Task BookingsEmailFilter_Returns400WithTheGuestFilterCode_ForAKeyWithoutGuestsRead()
+    {
+        AdminCredential owner = _factory.GetSeededAdmin();
+        string secret = await CreateKeyAsync(owner, BookingsRead("NoGuestsEmailFilter"));
+        HttpClient client = ClientWithKey(secret);
+
+        HttpResponseMessage rejected = await client.GetAsync("/api/admin/bookings?email=%40example.com");
+        HttpResponseMessage allowed = await client.GetAsync("/api/admin/bookings?bookingRef=REF1");
+
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        JsonElement body = await rejected.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(ErrorCodes.BookingGuestFilterForbidden, body.GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+    }
+
     [Fact]
     public async Task MalformedKey_Returns401()
     {
@@ -311,6 +328,47 @@ public class ApiKeyAuthTests(TestWebAppFactory factory) : IClassFixture<TestWebA
             $"/api/admin/users/{target.Id}/active", new { isActive = false });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    /// <summary>
+    /// Deactivating shuts a login off, reactivating hands one back to whoever still knows an old
+    /// password, so only the first is something a headless credential may do.
+    /// </summary>
+    [Fact]
+    public async Task UsersWriteKey_CannotReactivateAnAccount()
+    {
+        AdminCredential owner = _factory.GetSeededAdmin();
+        AdminCredential target = await SeedUserAsync("apikey-reactivate-target@test.com", UserRoles.Manager);
+        await DeactivateAsync(target.Email);
+        string secret = await CreateKeyAsync(owner, UsersWrite("Reactivation attempt"));
+
+        HttpResponseMessage response = await ClientWithKey(secret).PatchAsJsonAsync(
+            $"/api/admin/users/{target.Id}/active", new { isActive = true });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        JsonElement body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(ErrorCodes.ApiKeyNotAllowed, body.GetProperty("code").GetString());
+        Assert.False(await IsActiveAsync(target.Email));
+    }
+
+    [Fact]
+    public async Task OwnerSession_CanReactivateAnAccount()
+    {
+        AdminCredential target = await SeedUserAsync("session-reactivate-target@test.com", UserRoles.Manager);
+        await DeactivateAsync(target.Email);
+
+        HttpResponseMessage response = await _factory.CreateAuthenticatedClient().PatchAsJsonAsync(
+            $"/api/admin/users/{target.Id}/active", new { isActive = true });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(await IsActiveAsync(target.Email));
+    }
+
+    private async Task<bool> IsActiveAsync(string email)
+    {
+        using IServiceScope scope = _factory.Services.CreateScope();
+        AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return (await db.AdminCredentials.AsNoTracking().SingleAsync(c => c.Email == email)).IsActive;
     }
 
     [Fact]

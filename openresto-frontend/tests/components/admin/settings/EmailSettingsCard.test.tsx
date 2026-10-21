@@ -236,7 +236,10 @@ describe("EmailSettingsCard", () => {
   });
 
   it("calls saveEmailSettings when Save SMTP settings is pressed", async () => {
-    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({ message: "Settings saved." });
+    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({
+      ok: true,
+      data: { message: "Settings saved." },
+    });
     render(<EmailSettings {...baseProps} />);
     await waitFor(() => expect(screen.getByText("Email (SMTP)")).toBeTruthy());
     fireEvent.changeText(screen.getByPlaceholderText("smtp.gmail.com"), "smtp.gmail.com");
@@ -248,7 +251,10 @@ describe("EmailSettingsCard", () => {
   });
 
   it("shows save success message after successful save", async () => {
-    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({ message: "Settings saved." });
+    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({
+      ok: true,
+      data: { message: "Settings saved." },
+    });
     render(<EmailSettings {...baseProps} />);
     await waitFor(() => expect(screen.getByText("Email (SMTP)")).toBeTruthy());
     fireEvent.changeText(screen.getByPlaceholderText("smtp.gmail.com"), "smtp.gmail.com");
@@ -271,12 +277,12 @@ describe("EmailSettingsCard", () => {
       fireEvent.press(screen.getByText("Save SMTP settings"));
     });
     await waitFor(() => {
-      expect(screen.getByText("Failed to save.")).toBeTruthy();
+      expect(screen.getByText("Save failed")).toBeTruthy();
     });
   });
 
   it("shows Saving… while saving is in progress", async () => {
-    let resolve: (v: { message: string }) => void;
+    let resolve: (v: { ok: true; data: { message: string } }) => void;
     (adminApi.saveEmailSettings as jest.Mock).mockReturnValue(
       new Promise((r) => {
         resolve = r;
@@ -291,12 +297,15 @@ describe("EmailSettingsCard", () => {
     });
     expect(screen.getByText("Saving…")).toBeTruthy();
     await act(async () => {
-      resolve!({ message: "Done." });
+      resolve!({ ok: true, data: { message: "Done." } });
     });
   });
 
   it("runs test connection when Send test is pressed with host and username", async () => {
-    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({ message: "Saved." });
+    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({
+      ok: true,
+      data: { message: "Saved." },
+    });
     (adminApi.testEmailConnection as jest.Mock).mockResolvedValue({
       ok: true,
       message: "Connected.",
@@ -314,7 +323,10 @@ describe("EmailSettingsCard", () => {
   });
 
   it("shows connection successful status after successful test", async () => {
-    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({ message: "Saved." });
+    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({
+      ok: true,
+      data: { message: "Saved." },
+    });
     (adminApi.testEmailConnection as jest.Mock).mockResolvedValue({
       ok: true,
       message: "Authentication accepted.",
@@ -332,7 +344,10 @@ describe("EmailSettingsCard", () => {
   });
 
   it("shows connection failed status after failed test", async () => {
-    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({ message: "Saved." });
+    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({
+      ok: true,
+      data: { message: "Saved." },
+    });
     (adminApi.testEmailConnection as jest.Mock).mockResolvedValue({
       ok: false,
       message: "Connection refused.",
@@ -350,7 +365,10 @@ describe("EmailSettingsCard", () => {
   });
 
   it("shows Re-test button after successful connection test", async () => {
-    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({ message: "Saved." });
+    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({
+      ok: true,
+      data: { message: "Saved." },
+    });
     (adminApi.testEmailConnection as jest.Mock).mockResolvedValue({
       ok: true,
       message: "Connected.",
@@ -480,7 +498,10 @@ describe("EmailSettingsCard", () => {
   });
 
   it("toggles booking confirmation when connection is tested and ok", async () => {
-    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({ message: "Saved." });
+    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({
+      ok: true,
+      data: { message: "Saved." },
+    });
     (adminApi.testEmailConnection as jest.Mock).mockResolvedValue({ ok: true, message: "OK." });
     render(<EmailSettings {...baseProps} />);
     await waitFor(() => expect(screen.getByText("Email (SMTP)")).toBeTruthy());
@@ -534,7 +555,10 @@ describe("EmailSettingsCard", () => {
   });
 
   it("toggles booking confirmation toggle when connection is enabled (role=switch)", async () => {
-    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({ message: "Saved." });
+    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({
+      ok: true,
+      data: { message: "Saved." },
+    });
     (adminApi.testEmailConnection as jest.Mock).mockResolvedValue({ ok: true, message: "OK." });
     render(<EmailSettings {...baseProps} />);
     await waitFor(() => expect(screen.getByText("Email (SMTP)")).toBeTruthy());
@@ -556,7 +580,10 @@ describe("EmailSettingsCard", () => {
 
   it("shows Testing… status while test is in progress", async () => {
     let resolve: (v: { ok: boolean; message: string }) => void;
-    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({ message: "Saved." });
+    (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({
+      ok: true,
+      data: { message: "Saved." },
+    });
     (adminApi.testEmailConnection as jest.Mock).mockReturnValue(
       new Promise((r) => {
         resolve = r;
@@ -575,6 +602,138 @@ describe("EmailSettingsCard", () => {
     expect(screen.getByText("Testing…")).toBeTruthy();
     await act(async () => {
       resolve!({ ok: true, message: "OK." });
+    });
+  });
+
+  describe("stored password only follows the destination it was saved for", () => {
+    const NOTICE =
+      "To change the server, port, username or encryption, re-enter the email password.";
+    const PASSWORD_PLACEHOLDER = "SMTP password or app token";
+
+    const configured = {
+      host: "smtp.real.com",
+      port: 587,
+      username: "user@real.com",
+      password: "••••••••",
+      enableSsl: true,
+      isConfigured: true,
+      sendBookingConfirmations: false,
+    };
+
+    async function renderConfigured() {
+      (adminApi.getEmailSettings as jest.Mock).mockResolvedValue({ ...configured });
+      render(<EmailSettings {...baseProps} />);
+      await waitFor(() => expect(screen.getByDisplayValue("smtp.real.com")).toBeTruthy());
+    }
+
+    it("shows no notice while the destination is unchanged", async () => {
+      await renderConfigured();
+      expect(screen.queryByText(NOTICE)).toBeNull();
+    });
+
+    it("shows no notice when only the host's case or padding changes", async () => {
+      await renderConfigured();
+      fireEvent.changeText(screen.getByDisplayValue("smtp.real.com"), "  SMTP.Real.COM ");
+      expect(screen.queryByText(NOTICE)).toBeNull();
+    });
+
+    it("shows the notice when the host changes and the password was not retyped", async () => {
+      await renderConfigured();
+      fireEvent.changeText(screen.getByDisplayValue("smtp.real.com"), "attacker.example");
+      expect(screen.getByText(NOTICE)).toBeTruthy();
+    });
+
+    it("shows the notice when the port changes", async () => {
+      await renderConfigured();
+      fireEvent.press(screen.getByText("465"));
+      expect(screen.getByText(NOTICE)).toBeTruthy();
+    });
+
+    it("shows the notice when the username changes", async () => {
+      await renderConfigured();
+      fireEvent.changeText(screen.getByDisplayValue("user@real.com"), "someone@else.com");
+      expect(screen.getByText(NOTICE)).toBeTruthy();
+    });
+
+    it("shows the notice when encryption is switched off", async () => {
+      await renderConfigured();
+      fireEvent.press(screen.getByText("None"));
+      expect(screen.getByText(NOTICE)).toBeTruthy();
+    });
+
+    it("shows the notice when the password field is emptied and the host changes", async () => {
+      await renderConfigured();
+      fireEvent.changeText(screen.getByDisplayValue("••••••••"), "");
+      fireEvent.changeText(screen.getByDisplayValue("smtp.real.com"), "attacker.example");
+      expect(screen.getByText(NOTICE)).toBeTruthy();
+    });
+
+    it("drops the notice once a new password is typed", async () => {
+      await renderConfigured();
+      fireEvent.changeText(screen.getByDisplayValue("smtp.real.com"), "other.host");
+      fireEvent.changeText(screen.getByPlaceholderText(PASSWORD_PLACEHOLDER), "fresh-secret");
+      expect(screen.queryByText(NOTICE)).toBeNull();
+    });
+
+    it("shows no notice before any password is stored", async () => {
+      render(<EmailSettings {...baseProps} />);
+      await waitFor(() => expect(screen.getByText("Email (SMTP)")).toBeTruthy());
+      fireEvent.changeText(screen.getByPlaceholderText("smtp.gmail.com"), "any.host");
+      expect(screen.queryByText(NOTICE)).toBeNull();
+    });
+
+    it("treats a saved destination as the new baseline", async () => {
+      (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({
+        ok: true,
+        data: { message: "Saved." },
+      });
+      await renderConfigured();
+      fireEvent.changeText(screen.getByDisplayValue("smtp.real.com"), "other.host");
+      fireEvent.changeText(screen.getByPlaceholderText(PASSWORD_PLACEHOLDER), "fresh-secret");
+      await act(async () => {
+        fireEvent.press(screen.getByText("Save SMTP settings"));
+      });
+      await waitFor(() => expect(screen.getByText("Saved.")).toBeTruthy());
+
+      fireEvent.changeText(screen.getByPlaceholderText(PASSWORD_PLACEHOLDER), "••••••••");
+      expect(screen.queryByText(NOTICE)).toBeNull();
+      fireEvent.changeText(screen.getByDisplayValue("other.host"), "third.host");
+      expect(screen.getByText(NOTICE)).toBeTruthy();
+    });
+
+    it("shows the server's message when it refuses the save", async () => {
+      (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({
+        ok: false,
+        message: "The server said no.",
+      });
+      await renderConfigured();
+      await act(async () => {
+        fireEvent.press(screen.getByText("Save SMTP settings"));
+      });
+      await waitFor(() => expect(screen.getByText("The server said no.")).toBeTruthy());
+    });
+
+    it("does not test the old server when the save was refused", async () => {
+      (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue({
+        ok: false,
+        message: "The server said no.",
+      });
+      await renderConfigured();
+      await act(async () => {
+        fireEvent.press(screen.getByText("Re-test"));
+      });
+      expect(adminApi.testEmailConnection).not.toHaveBeenCalled();
+      await waitFor(() => expect(screen.getByText("Connection failed")).toBeTruthy());
+    });
+
+    it("does not test the old server when the save never reached it", async () => {
+      (adminApi.saveEmailSettings as jest.Mock).mockResolvedValue(null);
+      await renderConfigured();
+      await act(async () => {
+        fireEvent.press(screen.getByText("Re-test"));
+      });
+      expect(adminApi.testEmailConnection).not.toHaveBeenCalled();
+      await waitFor(() => expect(screen.getByText("Connection failed")).toBeTruthy());
     });
   });
 });

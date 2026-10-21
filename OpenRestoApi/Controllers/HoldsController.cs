@@ -66,7 +66,7 @@ public class HoldsController(
 
         HoldPolicyResult policy = autoAssign
             ? await _holdPolicyService.ValidateAnyTableAsync(request.RestaurantId, request.Date)
-            : await _holdPolicyService.ValidateAsync(request.RestaurantId, request.TableId!.Value, request.Date, request.Seats);
+            : await _holdPolicyService.ValidateAsync(request.RestaurantId, request.TableId!.Value, request.SectionId!.Value, request.Date, request.Seats);
 
         return policy.Status switch
         {

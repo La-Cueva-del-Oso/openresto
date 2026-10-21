@@ -27,4 +27,15 @@ public static class BookingLimits
     /// <seealso>BookingsControllerTests.CreateBooking_AcceptsAFieldAtItsLengthCap</seealso>
     /// <seealso>BookingsControllerTests.CreateBooking_RejectsAFieldOneOverItsLengthCap</seealso>
     public const int MaxSpecialRequestsLength = 500;
+
+    /// <seealso>AdminControllerTests.ExtendBooking_AcceptsMinutesAtEitherEndOfTheRange</seealso>
+    /// <seealso>AdminControllerTests.ExtendBooking_RejectsMinutesOutsideTheRange</seealso>
+    public const int MinExtendMinutes = 1;
+
+    /// <summary>Eight hours: past that a sitting is a mistake, not a late table.</summary>
+    /// <seealso>AdminControllerTests.ExtendBooking_AcceptsMinutesAtEitherEndOfTheRange</seealso>
+    /// <seealso>AdminControllerTests.ExtendBooking_RejectsMinutesOutsideTheRange</seealso>
+    public const int MaxExtendMinutes = 480;
+
+    public const string ExtendMinutesMessage = "Choose between 1 and 480 minutes to extend by.";
 }

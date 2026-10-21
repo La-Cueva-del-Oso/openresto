@@ -444,9 +444,29 @@ describe("adminExtendBooking", () => {
     expect(JSON.parse(opts.body)).toEqual({ minutes: 30 });
   });
 
-  it("returns null on failure", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false });
-    expect(await adminExtendBooking(5, 30)).toBeNull();
+  it("throws with the server's reason when the extension is refused", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({
+        message:
+          "Another booking starts before the sitting would end, so it cannot be extended that long.",
+      }),
+    });
+
+    await expect(adminExtendBooking(5, 30)).rejects.toThrow(
+      "Another booking starts before the sitting would end, so it cannot be extended that long."
+    );
+  });
+
+  it("throws a generic message when the refusal has no readable body", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => {
+        throw new Error("not json");
+      },
+    });
+
+    await expect(adminExtendBooking(5, 30)).rejects.toThrow("Failed to extend booking");
   });
 });
 
@@ -720,10 +740,38 @@ describe("saveEmailSettings", () => {
 
     const result = await saveEmailSettings(data);
 
-    expect(result).toEqual({ message: "Saved" });
+    expect(result).toEqual({ ok: true, data: { message: "Saved" } });
     const [url, opts] = mockFetch.mock.calls[0];
     expect(url).toContain("/api/admin/email-settings");
     expect(opts.method).toBe("PATCH");
+  });
+
+  it("returns the translated message when the server asks for the password again", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({
+        message: "Re-enter the email password to change the server, port, username or encryption.",
+        code: "email.password_required",
+      }),
+    });
+
+    const result = await saveEmailSettings(data);
+
+    expect(result).toEqual({
+      ok: false,
+      message: "To change the server, port, username or encryption, re-enter the email password.",
+    });
+  });
+
+  it("returns a generic message when a rejection carries no body", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => {
+        throw new Error("no json");
+      },
+    });
+
+    expect(await saveEmailSettings(data)).toEqual({ ok: false, message: "Failed to save." });
   });
 
   it("returns null on network error", async () => {
@@ -754,6 +802,23 @@ describe("testEmailConnection", () => {
 
     const result = await testEmailConnection();
     expect(result).toEqual({ ok: false, message: "SMTP unreachable" });
+  });
+
+  it("translates the failure code instead of showing the server's English", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({
+        message: "The mail server rejected the username or password.",
+        code: "email.auth_failed",
+      }),
+    });
+
+    const result = await testEmailConnection();
+
+    expect(result).toEqual({
+      ok: false,
+      message: "The mail server rejected the username or password. Check them and try again.",
+    });
   });
 
   it("returns network error on exception", async () => {
@@ -1118,32 +1183,44 @@ describe("extendRestaurantBookings", () => {
 
     const result = await extendRestaurantBookings(4, 15);
 
-    expect(result).toEqual({ ok: true, extendedBookings: bookings });
+    expect(result).toEqual({ ok: true, extendedBookings: bookings, skippedBookings: [] });
     const [url, opts] = mockFetch.mock.calls[0];
     expect(url).toContain("/api/admin/restaurants/4/extend");
     expect(opts.method).toBe("POST");
     expect(JSON.parse(opts.body)).toEqual({ minutes: 15 });
   });
 
-  it("returns ok false with empty array on non-ok response", async () => {
+  it("returns the bookings the server left as they were", async () => {
+    const skipped = [{ id: 7, bookingRef: "R7", tableId: 3, tableGroupId: null, tableName: "T3" }];
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ extendedBookings: [{ id: 1 }], skippedBookings: skipped }),
+    });
+
+    const result = await extendRestaurantBookings(4, 15);
+
+    expect(result).toEqual({ ok: true, extendedBookings: [{ id: 1 }], skippedBookings: skipped });
+  });
+
+  it("returns ok false with empty arrays on non-ok response", async () => {
     mockFetch.mockResolvedValueOnce({ ok: false });
 
     const result = await extendRestaurantBookings(4, 15);
-    expect(result).toEqual({ ok: false, extendedBookings: [] });
+    expect(result).toEqual({ ok: false, extendedBookings: [], skippedBookings: [] });
   });
 
-  it("returns ok false with empty array on network error", async () => {
+  it("returns ok false with empty arrays on network error", async () => {
     mockFetch.mockRejectedValueOnce(new Error("offline"));
 
     const result = await extendRestaurantBookings(4, 15);
-    expect(result).toEqual({ ok: false, extendedBookings: [] });
+    expect(result).toEqual({ ok: false, extendedBookings: [], skippedBookings: [] });
   });
 
-  it("falls back to empty array when extendedBookings is absent from response", async () => {
+  it("falls back to empty arrays when the lists are absent from the response", async () => {
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
 
     const result = await extendRestaurantBookings(4, 15);
-    expect(result).toEqual({ ok: true, extendedBookings: [] });
+    expect(result).toEqual({ ok: true, extendedBookings: [], skippedBookings: [] });
   });
 });
 

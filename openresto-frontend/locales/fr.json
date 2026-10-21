@@ -347,6 +347,18 @@
     "admin": {
       "password_not_configured": "Admin:Password doit être configuré avant la première utilisation. Définissez-le via la variable d'environnement ADMIN_PASSWORD."
     },
+    "api_key": {
+      "expires_at_in_past": "La date d'expiration doit être dans le futur. Choisissez une date plus tardive.",
+      "expires_at_with_never_expires": "Une clé qui n'expire jamais ne peut pas avoir de date d'expiration. Retirez l'une des deux options.",
+      "name_required": "Saisissez un nom pour la clé d'API.",
+      "name_too_long": "Le nom de la clé d'API ne peut pas dépasser {{max}} caractères.",
+      "not_a_session": "Cette requête ne fonctionne qu'avec une clé d'API, pas avec un compte connecté.",
+      "not_allowed": "Cette action n'est pas disponible avec une clé d'API. Connectez-vous à votre compte pour l'effectuer.",
+      "not_found": "Cette clé d'API est introuvable. Elle a peut-être déjà été révoquée. Actualisez la liste puis réessayez.",
+      "scope_invalid": "Une des autorisations sélectionnées n'est pas valide. Vérifiez la sélection puis réessayez.",
+      "scope_missing": "Cette clé d'API n'a pas l'autorisation d'effectuer cette action. Utilisez une clé disposant de la bonne autorisation.",
+      "scopes_required": "Sélectionnez au moins une autorisation."
+    },
     "auth": {
       "email_already_in_use": "Cette adresse e-mail est déjà utilisée.",
       "email_unchanged": "La nouvelle adresse e-mail doit être différente de l'actuelle.",
@@ -363,11 +375,14 @@
       "cancel_email_required": "Une adresse e-mail est requise pour annuler une réservation.",
       "email_fields_required": "L'objet et le message sont obligatoires.",
       "email_invalid": "Cette adresse e-mail ne semble pas valide.",
-      "email_send_failed": "Échec de l'envoi : {{detail}}",
+      "email_send_failed": "L'e-mail n'a pas pu être envoyé. Vérifiez les paramètres de messagerie et réessayez.",
+      "extend_conflict": "Une autre réservation commence avant la fin de ce service, qui ne peut donc pas être prolongé autant.",
+      "guest_filter_forbidden": "Cette clé d'API ne peut pas rechercher par e-mail car elle n'a pas le droit de voir les coordonnées des clients.",
       "invalid_table_for_restaurant": "Table invalide pour ce restaurant.",
       "lookup_email_required": "Une adresse e-mail est requise pour retrouver une réservation.",
       "lookup_not_found": "Aucune réservation ne correspond à cette référence et à cette adresse e-mail.",
       "move_conflict": "Cette modification entrerait en conflit avec une réservation existante.",
+      "name_invalid": "Le nom ne peut pas contenir de caractères de contrôle. Veuillez le saisir à nouveau.",
       "no_customer_email": "L'adresse e-mail du client n'est pas disponible.",
       "no_show_before_start": "Une réservation ne peut être marquée comme absente qu'une fois le service commencé.",
       "no_tables_available": "Aucune table n'est disponible pour l'horaire et le nombre de convives demandés.",
@@ -375,7 +390,14 @@
       "past_date": "Impossible de créer une réservation dans le passé.",
       "paused": "Les réservations sont suspendues jusqu'à {{until}}. Veuillez choisir un horaire plus tardif.",
       "paused_indefinitely": "Les réservations pour ce restaurant sont actuellement suspendues. Veuillez réessayer plus tard.",
+      "reminder_cancelled": "Cette réservation est annulée : les rappels ne peuvent pas être activés.",
+      "reminder_channel_invalid": "Cet appareil ne peut pas recevoir de rappels de ce site.",
+      "reminder_device_limit": "Trop d'appareils reçoivent déjà des rappels pour cette réservation. Désactivez-les sur l'un d'eux pour ajouter celui-ci.",
+      "reminder_endpoint_invalid": "Cet appareil ne peut pas recevoir de rappels de ce site.",
+      "reminder_keys_required": "Nous n'avons pas pu activer les rappels sur cet appareil. Réactivez-les puis réessayez.",
+      "reminder_too_late": "Cette réservation a déjà commencé : les rappels ne peuvent plus être activés.",
       "section_mismatch": "Cette salle n'appartient pas à ce restaurant.",
+      "special_requests_invalid": "Les demandes spéciales ne peuvent pas contenir de caractères de contrôle. Veuillez les saisir à nouveau.",
       "status_cancelled": "Une réservation annulée ne peut pas changer de statut.",
       "status_invalid": "Le statut doit être l'une des valeurs suivantes : {{allowed}}.",
       "status_transition_invalid": "Une réservation au statut {{from}} ne peut pas passer à {{to}}.",
@@ -383,9 +405,12 @@
       "table_held": "Cette table est déjà réservée par un autre utilisateur. Veuillez choisir une autre table ou réessayer dans un instant.",
       "table_id_required_for_section_change": "Indiquez tableId lors d'un changement de salle.",
       "table_not_in_section": "Table introuvable dans la salle indiquée.",
+      "undo_conflict": "Une autre réservation a pris la table depuis la fin de ce service, la modification ne peut donc pas être annulée.",
       "walk_in_only": "Cet établissement accepte uniquement les visites sans réservation et ne prend pas de réservations en ligne.",
       "walk_in_only_today": "Cet établissement accepte uniquement les visites sans réservation le jour sélectionné. Choisissez un autre jour ou présentez-vous sur place.",
-      "pacing_full": "Seulement {{remaining}} convives de plus peuvent arriver à {{time}}. Veuillez choisir un autre horaire."
+      "pacing_full": "Seulement {{remaining}} convives de plus peuvent arriver à {{time}}. Veuillez choisir un autre horaire.",
+      "wallet_cancelled": "Cette réservation est annulée : elle ne peut pas être ajoutée à votre Wallet.",
+      "wallet_not_configured": "Ce site ne propose pas encore de cartes Apple Wallet ni Google Wallet."
     },
     "brand": {
       "accent_color_invalid": "Code hexadécimal de couleur d'accentuation invalide.",
@@ -395,8 +420,11 @@
       "header_image_fit_invalid": "HeaderImageFit doit être l'une des valeurs suivantes : {{allowed}}.",
       "highlights_heading_too_long": "Le titre des points forts ne peut pas dépasser 60 caractères.",
       "highlights_subheading_too_long": "Le sous-titre des points forts ne peut pas dépasser 60 caractères.",
+      "minimum_app_version_invalid": "La version minimale de l'application doit comporter trois nombres séparés par des points, par exemple 1.9.0.",
       "primary_color_invalid": "Code hexadécimal de couleur principale invalide.",
-      "subtitle_too_long": "Le sous-titre ne peut pas dépasser 160 caractères."
+      "privacy_policy_url_invalid": "L'adresse de la politique de confidentialité doit commencer par http:// ou https://. Vérifiez-la puis réessayez.",
+      "subtitle_too_long": "Le sous-titre ne peut pas dépasser 160 caractères.",
+      "website_url_invalid": "L'adresse du site web doit commencer par http:// ou https://. Vérifiez-la puis réessayez."
     },
     "contact": {
       "email_invalid": "L'adresse e-mail doit être une adresse valide.",
@@ -404,8 +432,15 @@
       "phone_too_long": "Le numéro de téléphone ne peut pas dépasser {{max}} caractères."
     },
     "email": {
-      "connection_failed": "Échec de la connexion : {{detail}}",
-      "not_configured": "L'e-mail n'est pas configuré."
+      "auth_failed": "Le serveur de messagerie a refusé l'identifiant ou le mot de passe. Vérifiez-les et réessayez.",
+      "connection_failed": "Impossible de se connecter au serveur de messagerie. Vérifiez le serveur et le port.",
+      "host_required": "Saisissez l'adresse (hôte) du serveur de messagerie.",
+      "not_configured": "L'e-mail n'est pas configuré.",
+      "password_required": "Pour modifier le serveur, le port, le nom d'utilisateur ou le chiffrement, saisissez à nouveau le mot de passe de messagerie.",
+      "port_invalid": "Le port doit être un nombre compris entre 1 et 65535.",
+      "recipient_rejected": "Le serveur de messagerie n'a pas accepté l'adresse du destinataire. Vérifiez qu'elle est correcte.",
+      "send_failed": "L'e-mail n'a pas pu être envoyé. Réessayez dans quelques minutes.",
+      "username_required": "Saisissez l'identifiant du serveur de messagerie."
     },
     "generic": "Une erreur s'est produite",
     "genericMessage": "Une erreur inattendue s'est produite. Réessayez.",
@@ -431,6 +466,9 @@
       "menu_too_large": "Le fichier du menu doit faire moins de 10 Mo.",
       "unsupported_image_type": "Seules les images JPEG, PNG et WebP sont acceptées.",
       "unsupported_menu_type": "Seuls les menus au format PDF sont acceptés."
+    },
+    "notification": {
+      "push_endpoint_invalid": "Cet appareil ne peut pas recevoir de notifications de ce site."
     },
     "restaurant": {
       "archive_before_delete": "Archivez cet établissement avant de le supprimer. L'archivage le retire du site public et peut être annulé ; la suppression non.",
@@ -984,6 +1022,9 @@
         "extendSubtitle": "Sélectionnez un établissement pour prolonger toutes les réservations actives d'une heure.",
         "extendedSubtitle_one": "La réservation suivante a été prolongée d'une heure :",
         "extendedSubtitle_other": "Les {{count}} réservations suivantes ont été prolongées d'une heure :",
+        "noneExtendedSubtitle": "Aucune réservation n'a pu être prolongée.",
+        "skippedSubtitle_one": "{{count}} réservation est restée telle quelle car une autre réservation la suit sur la même table :",
+        "skippedSubtitle_other": "{{count}} réservations sont restées telles quelles car une autre réservation les suit sur la même table :",
         "loadingRestaurants": "Chargement des établissements",
         "noRestaurants": "Aucun établissement trouvé.",
         "pausedBadge": "SUSPENDU",
@@ -1120,7 +1161,9 @@
         "extend_one": "Prolonger {{count}} réservation active de 60 min",
         "extend_other": "Prolonger {{count}} réservations actives de 60 min",
         "extended_one": "{{count}} réservation active prolongée de 60 min",
-        "extended_other": "{{count}} réservations actives prolongées de 60 min"
+        "extended_other": "{{count}} réservations actives prolongées de 60 min",
+        "extendedSkipped_one": "{{extended}} prolongées ; {{count}} inchangée (une autre réservation suit)",
+        "extendedSkipped_other": "{{extended}} prolongées ; {{count}} inchangées (une autre réservation suit)"
       },
       "addForm": {
         "namePlaceholder": "Nom de l'établissement (p. ex. Centre-ville, Rive ouest)",
@@ -1747,6 +1790,7 @@
         "fromEmailLabel": "E-mail de l'expéditeur",
         "footerHintVerified": "Connexion vérifiée · confirmations prêtes",
         "footerHintUnverified": "Testez la connexion avant d'activer les confirmations",
+        "passwordRequiredNotice": "Pour modifier le serveur, le port, le nom d'utilisateur ou le chiffrement, saisissez à nouveau le mot de passe de messagerie.",
         "saveButton": "Enregistrer les paramètres SMTP"
       },
       "users": {

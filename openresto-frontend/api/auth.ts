@@ -105,11 +105,12 @@ export async function getMyPvqStatus(): Promise<PvqStatus | null> {
 }
 
 export async function setupPvq(
+  currentPassword: string,
   question: string,
   answer: string
 ): Promise<{ ok: boolean; message: string }> {
   try {
-    const res = await post("/admin/auth/pvq/setup", { question, answer });
+    const res = await post("/admin/auth/pvq/setup", { currentPassword, question, answer });
     const body = await res.json().catch(() => ({}));
     return {
       ok: res.ok,

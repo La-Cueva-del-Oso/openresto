@@ -160,16 +160,55 @@ describe("SecurityCard", () => {
       "My question?"
     );
     fireEvent.changeText(screen.getByPlaceholderText("Your answer"), "my answer");
+    fireEvent.changeText(screen.getByPlaceholderText("••••••••"), "my-password");
     await act(async () => {
       fireEvent.press(screen.getByText("Save Question"));
     });
-    expect(authApi.setupPvq).toHaveBeenCalledWith("My question?", "my answer");
+    expect(authApi.setupPvq).toHaveBeenCalledWith("my-password", "My question?", "my answer");
+  });
+
+  it("does not call setupPvq without the current password", async () => {
+    renderCard();
+    await waitFor(() => expect(screen.getByText("Set up")).toBeTruthy());
+    fireEvent.press(screen.getByText("Set up"));
+    fireEvent.changeText(
+      screen.getByPlaceholderText("e.g. What was the name of your first pet?"),
+      "My question?"
+    );
+    fireEvent.changeText(screen.getByPlaceholderText("Your answer"), "my answer");
+    expect(screen.getByText("Current password")).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(screen.getByText("Save Question"));
+    });
+    expect(authApi.setupPvq).not.toHaveBeenCalled();
+  });
+
+  it("clears the typed password once the question is saved", async () => {
+    (authApi.setupPvq as jest.Mock).mockResolvedValue({ ok: true, message: "Saved." });
+    renderCard();
+    await waitFor(() => expect(screen.getByText("Set up")).toBeTruthy());
+    fireEvent.press(screen.getByText("Set up"));
+    fireEvent.changeText(
+      screen.getByPlaceholderText("e.g. What was the name of your first pet?"),
+      "My question?"
+    );
+    fireEvent.changeText(screen.getByPlaceholderText("Your answer"), "my answer");
+    fireEvent.changeText(screen.getByPlaceholderText("••••••••"), "my-password");
+    await act(async () => {
+      fireEvent.press(screen.getByText("Save Question"));
+    });
+    await waitFor(() => expect(screen.queryByText("Save Question")).toBeNull());
+
+    // The security-question row is the first "Change"; the password row's comes after it.
+    fireEvent.press(screen.getAllByText("Change")[0]);
+    expect(screen.getByPlaceholderText("••••••••").props.value).toBe("");
   });
 
   it("does not call setupPvq when question is empty", async () => {
     renderCard();
     await waitFor(() => expect(screen.getByText("Set up")).toBeTruthy());
     fireEvent.press(screen.getByText("Set up"));
+    fireEvent.changeText(screen.getByPlaceholderText("••••••••"), "my-password");
     fireEvent.changeText(screen.getByPlaceholderText("Your answer"), "some answer");
     // question is empty, so Save Question should be disabled
     await act(async () => {
@@ -247,11 +286,34 @@ describe("SecurityCard", () => {
       "My question?"
     );
     fireEvent.changeText(screen.getByPlaceholderText("Your answer"), "my answer");
+    fireEvent.changeText(screen.getByPlaceholderText("••••••••"), "my-password");
     await act(async () => {
       fireEvent.press(screen.getByText("Save Question"));
     });
     await waitFor(() => expect(screen.getByText("Failed to save question.")).toBeTruthy());
-    expect(authApi.setupPvq).toHaveBeenCalledWith("My question?", "my answer");
+    expect(authApi.setupPvq).toHaveBeenCalledWith("my-password", "My question?", "my answer");
+  });
+
+  it("keeps the PVQ form open and shows the error when the current password is wrong", async () => {
+    (authApi.setupPvq as jest.Mock).mockResolvedValue({
+      ok: false,
+      message: "Current password is incorrect.",
+    });
+    renderCard();
+    await waitFor(() => expect(screen.getByText("Set up")).toBeTruthy());
+    fireEvent.press(screen.getByText("Set up"));
+    fireEvent.changeText(
+      screen.getByPlaceholderText("e.g. What was the name of your first pet?"),
+      "My question?"
+    );
+    fireEvent.changeText(screen.getByPlaceholderText("Your answer"), "my answer");
+    fireEvent.changeText(screen.getByPlaceholderText("••••••••"), "wrong-password");
+    await act(async () => {
+      fireEvent.press(screen.getByText("Save Question"));
+    });
+    await waitFor(() => expect(screen.getByText("Current password is incorrect.")).toBeTruthy());
+    expect(screen.getByText("Save Question")).toBeTruthy();
+    expect(screen.queryByText(/Not configured/)).toBeTruthy();
   });
 
   it("calls changePassword and clears form on success", async () => {

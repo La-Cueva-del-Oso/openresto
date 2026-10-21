@@ -17,8 +17,10 @@ public class BookingService(
     ITableGroupRepository tableGroupRepository,
     IBookingConfirmationService? confirmationService = null,
     INotificationQueue? notificationQueue = null,
-    ICurrentUserService? currentUser = null)
+    ICurrentUserService? currentUser = null,
+    BookingWriteGate? writeGate = null)
 {
+    private readonly BookingWriteGate _writeGate = writeGate ?? new BookingWriteGate();
     private readonly IBookingRepository _bookingRepository = bookingRepository;
     private readonly ITableRepository _tableRepository = tableRepository;
     private readonly IRestaurantRepository _restaurantRepository = restaurantRepository;
@@ -30,12 +32,17 @@ public class BookingService(
     private readonly INotificationQueue? _notificationQueue = notificationQueue;
     private readonly ICurrentUserService _currentUser = currentUser ?? NullCurrentUserService.Instance;
 
-    public virtual async Task<BookingDto> CreateBookingAsync(BookingDto bookingDto)
+    /// <param name="bookingDto">The public request.</param>
+    /// <param name="clientKey">The caller's address, so a hold this call places counts toward the per-client hold limit.</param>
+    public virtual async Task<BookingDto> CreateBookingAsync(BookingDto bookingDto, string? clientKey = null)
     {
         if (!EmailValidator.IsValid(bookingDto.CustomerEmail))
         {
             throw new ValidationException("That email address doesn't look right.") { Code = ErrorCodes.BookingEmailInvalid };
         }
+
+        bookingDto.CustomerEmail = bookingDto.CustomerEmail!.Trim();
+        GuestText.RejectControlCharacters(bookingDto.CustomerName, bookingDto.SpecialRequests);
 
         Restaurant restaurant = await _restaurantRepository.GetByIdAsync(bookingDto.RestaurantId)
             ?? throw new NotFoundException("Restaurant not found.") { Code = ErrorCodes.RestaurantNotFound };
@@ -52,23 +59,40 @@ public class BookingService(
             return await CreateGroupBookingAsync(bookingDto, restaurant, bookingDate);
         }
 
-        if (bookingDto.TableId is null || bookingDto.SectionId is null)
+        bool autoAssign = bookingDto.TableId is null || bookingDto.SectionId is null;
+        if (bookingDto.TableId is null ^ bookingDto.SectionId is null)
         {
-            bool ambiguousSelection = bookingDto.TableId is null ^ bookingDto.SectionId is null;
-            if (ambiguousSelection)
+            throw new ValidationException("Specify both TableId and SectionId, or neither for auto-assign.") { Code = ErrorCodes.BookingAmbiguousTableSelection };
+        }
+
+        // A hold the auto-assign placed here belongs to no one yet: a request that fails after it
+        // would leave the table held for the full hold lifetime, so it is released on the way out.
+        string? placedHoldId = null;
+        try
+        {
+            if (autoAssign)
             {
-                throw new ValidationException("Specify both TableId and SectionId, or neither for auto-assign.") { Code = ErrorCodes.BookingAmbiguousTableSelection };
+                placedHoldId = await ResolveAutoAssignAsync(bookingDto, restaurant, bookingDate, clientKey);
             }
 
-            await ResolveAutoAssignAsync(bookingDto, restaurant, bookingDate);
+            // Auto-assign may have landed on a group rather than a table.
+            return bookingDto.TableGroupId.HasValue
+                ? await CreateGroupBookingAsync(bookingDto, restaurant, bookingDate)
+                : await CreateTableBookingAsync(bookingDto, restaurant, bookingDate);
         }
-
-        // Auto-assign may have landed on a group rather than a table.
-        if (bookingDto.TableGroupId.HasValue)
+        catch
         {
-            return await CreateGroupBookingAsync(bookingDto, restaurant, bookingDate);
-        }
+            if (placedHoldId is not null)
+            {
+                _holdService.ReleaseHold(placedHoldId);
+            }
 
+            throw;
+        }
+    }
+
+    private async Task<BookingDto> CreateTableBookingAsync(BookingDto bookingDto, Restaurant restaurant, DateTime bookingDate)
+    {
         int tableId = bookingDto.TableId!.Value;
         int sectionId = bookingDto.SectionId!.Value;
         int durationMinutes = BookingDuration.For(restaurant, bookingDto.Seats);
@@ -76,36 +100,42 @@ public class BookingService(
         Table table = await _tableRepository.GetForRestaurantAsync(tableId, sectionId, restaurant.Id)
             ?? throw new ValidationException("Invalid table for this restaurant.") { Code = ErrorCodes.BookingInvalidTableForRestaurant };
 
-        bool alreadyBooked = await _bookingRepository.IsUnitBookedOnDateAsync(
-            tableId, tableGroupId: null, bookingDate, durationMinutes);
-        if (alreadyBooked)
+        Booking newBooking;
+        using (await _writeGate.EnterAsync())
         {
-            throw new ConflictException("This table is already booked for that time.") { Code = ErrorCodes.BookingTableConflict };
+            await RejectIfOverCoverCapAsync(restaurant, bookingDate, bookingDto.Seats);
+
+            bool alreadyBooked = await _bookingRepository.IsUnitBookedOnDateAsync(
+                tableId, tableGroupId: null, bookingDate, durationMinutes);
+            if (alreadyBooked)
+            {
+                throw new ConflictException("This table is already booked for that time.") { Code = ErrorCodes.BookingTableConflict };
+            }
+
+            bool heldByOther = _holdService.IsTableHeld(
+                tableId, bookingDate, excludeHoldId: bookingDto.HoldId,
+                durationMinutes: durationMinutes);
+            if (heldByOther)
+            {
+                throw new ConflictException("This table is currently being held by another user. Please try again shortly.") { Code = ErrorCodes.BookingTableHeld };
+            }
+
+            RejectIfTableCannotSeat(table, restaurant, bookingDto.Seats);
+            if (table.WalkInOnly)
+            {
+                throw WalkInOnlyTable();
+            }
+
+            Booking booking = _mapper.ToNewEntity(bookingDto);
+            booking.Date = bookingDate;
+            booking.BookingRef = BookingRefFactory.GenerateFor(restaurant);
+            booking.EndTime = bookingDate.AddMinutes(durationMinutes);
+            booking.Table = table;
+            booking.Section = table.Section;
+            booking.Restaurant = restaurant;
+
+            newBooking = await _bookingRepository.AddAsync(booking);
         }
-
-        bool heldByOther = _holdService.IsTableHeld(
-            tableId, bookingDate, excludeHoldId: bookingDto.HoldId,
-            durationMinutes: durationMinutes);
-        if (heldByOther)
-        {
-            throw new ConflictException("This table is currently being held by another user. Please try again shortly.") { Code = ErrorCodes.BookingTableHeld };
-        }
-
-        RejectIfTableCannotSeat(table, restaurant, bookingDto.Seats);
-        if (table.WalkInOnly)
-        {
-            throw WalkInOnlyTable();
-        }
-
-        Booking booking = _mapper.ToEntity(bookingDto);
-        booking.Date = bookingDate;
-        booking.BookingRef = BookingRefFactory.GenerateFor(restaurant);
-        booking.EndTime = bookingDate.AddMinutes(durationMinutes);
-        booking.Table = table;
-        booking.Section = table.Section;
-        booking.Restaurant = restaurant;
-
-        Booking newBooking = await _bookingRepository.AddAsync(booking);
 
         if (!string.IsNullOrEmpty(bookingDto.HoldId))
         {
@@ -118,7 +148,8 @@ public class BookingService(
     }
 
     /// <summary>
-    /// The three ways a location refuses an online booking for a given sitting. Admin-recorded
+    /// The four ways a location refuses an online booking for a given sitting (past, paused,
+    /// walk-in only, closed at that time). Admin-recorded
     /// bookings go through <c>AdminService.CreateBookingAsync</c> and are deliberately exempt
     /// from all of them, so staff can still log a walk-in during a pause.
     /// </summary>
@@ -143,6 +174,11 @@ public class BookingService(
                 ? "This location accepts walk-ins only and does not take online bookings."
                 : "This location accepts walk-ins only on the selected day. Please choose another day or just come in.")
             { Code = restaurant.WalkInOnly ? ErrorCodes.BookingWalkInOnly : ErrorCodes.BookingWalkInOnlyToday };
+        }
+
+        if (OpeningHoursHelper.IsClosedAt(restaurant, bookingDate))
+        {
+            throw new ConflictException(OpeningHoursHelper.ClosedMessage) { Code = ErrorCodes.RestaurantClosedAtTime };
         }
     }
 
@@ -232,12 +268,13 @@ public class BookingService(
     /// <paramref name="bookingDto"/>, so everything downstream runs unchanged. A hold the caller
     /// already owns is adopted rather than re-raced; otherwise a fresh one is placed atomically.
     /// The resulting <see cref="BookingDto.HoldId"/> is always the one to release after persisting.
+    /// Returns the id of a hold placed by this call, or <c>null</c> when the caller's own was adopted.
     /// </summary>
-    private async Task ResolveAutoAssignAsync(BookingDto bookingDto, Restaurant restaurant, DateTime bookingDate)
+    private async Task<string?> ResolveAutoAssignAsync(BookingDto bookingDto, Restaurant restaurant, DateTime bookingDate, string? clientKey)
     {
         if (await TryAdoptExistingHoldAsync(bookingDto, restaurant, bookingDate))
         {
-            return;
+            return null;
         }
 
         IReadOnlyList<TableCandidate> candidates = await _autoAssigner.BuildCandidatesAsync(
@@ -253,7 +290,8 @@ public class BookingService(
             candidates,
             bookingDate,
             currentHoldId: bookingDto.HoldId,
-            BookingDuration.For(restaurant, bookingDto.Seats))
+            BookingDuration.For(restaurant, bookingDto.Seats),
+            clientKey)
             ?? throw new ConflictException("All suitable tables are currently being held by other users. Please try again shortly.") { Code = ErrorCodes.BookingAllTablesHeld };
 
         if (assigned.IsGroup)
@@ -267,6 +305,7 @@ public class BookingService(
         }
 
         bookingDto.HoldId = assigned.HoldId;
+        return assigned.HoldId;
     }
 
     /// <summary>
@@ -345,33 +384,39 @@ public class BookingService(
         var memberIds = group.Members.Select(m => m.TableId).ToList();
         int durationMinutes = BookingDuration.For(restaurant, bookingDto.Seats);
 
-        bool groupConflict = await _bookingRepository.IsUnitBookedOnDateAsync(
-            tableId: null, tableGroupId: group.Id, bookingDate, durationMinutes);
-        if (groupConflict)
+        Booking newBooking;
+        using (await _writeGate.EnterAsync())
         {
-            throw new ConflictException("One of the combined tables is already booked for that time.") { Code = ErrorCodes.TableGroupBookingConflict };
+            await RejectIfOverCoverCapAsync(restaurant, bookingDate, bookingDto.Seats);
+
+            bool groupConflict = await _bookingRepository.IsUnitBookedOnDateAsync(
+                tableId: null, tableGroupId: group.Id, bookingDate, durationMinutes);
+            if (groupConflict)
+            {
+                throw new ConflictException("One of the combined tables is already booked for that time.") { Code = ErrorCodes.TableGroupBookingConflict };
+            }
+
+            bool anyMemberHeldByOther = memberIds.Any(id => _holdService.IsTableHeld(
+                id, bookingDate, excludeHoldId: bookingDto.HoldId, durationMinutes: durationMinutes));
+            if (anyMemberHeldByOther)
+            {
+                throw new ConflictException("One of the combined tables is currently being held by another user. Please try again shortly.") { Code = ErrorCodes.TableGroupHoldConflict };
+            }
+
+            Booking booking = _mapper.ToNewEntity(bookingDto);
+            booking.Date = bookingDate;
+            booking.BookingRef = BookingRefFactory.GenerateFor(restaurant);
+            booking.EndTime = bookingDate.AddMinutes(durationMinutes);
+            booking.TableId = null;
+            booking.TableGroupId = group.Id;
+            booking.TableGroup = group;
+            // Kept so the admin grid can still group the booking by section.
+            booking.SectionId = bookingDto.SectionId
+                ?? group.Members.OrderBy(m => m.TableId).FirstOrDefault()?.Table?.SectionId;
+            booking.Restaurant = restaurant;
+
+            newBooking = await _bookingRepository.AddAsync(booking);
         }
-
-        bool anyMemberHeldByOther = memberIds.Any(id => _holdService.IsTableHeld(
-            id, bookingDate, excludeHoldId: bookingDto.HoldId, durationMinutes: durationMinutes));
-        if (anyMemberHeldByOther)
-        {
-            throw new ConflictException("One of the combined tables is currently being held by another user. Please try again shortly.") { Code = ErrorCodes.TableGroupHoldConflict };
-        }
-
-        Booking booking = _mapper.ToEntity(bookingDto);
-        booking.Date = bookingDate;
-        booking.BookingRef = BookingRefFactory.GenerateFor(restaurant);
-        booking.EndTime = bookingDate.AddMinutes(durationMinutes);
-        booking.TableId = null;
-        booking.TableGroupId = group.Id;
-        booking.TableGroup = group;
-        // Kept so the admin grid can still group the booking by section.
-        booking.SectionId = bookingDto.SectionId
-            ?? group.Members.OrderBy(m => m.TableId).FirstOrDefault()?.Table?.SectionId;
-        booking.Restaurant = restaurant;
-
-        Booking newBooking = await _bookingRepository.AddAsync(booking);
 
         if (!string.IsNullOrEmpty(bookingDto.HoldId))
         {

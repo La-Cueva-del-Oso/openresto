@@ -85,14 +85,40 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories
             return booking;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <seealso>AdminServiceTests.PurgeBookingAsync_WithASharedReference_ErasesOnlyThatGuestsRows</seealso>
+        /// <seealso>AdminServiceTests.PurgeBookingAsync_OfABookingWithNoReference_KeepsRowsThatHaveNoReferenceEither</seealso>
         public async Task DeleteAsync(int id)
         {
             Booking? booking = await _db.Bookings.FindAsync(id);
-            if (booking != null)
+            if (booking == null)
             {
-                _db.Bookings.Remove(booking);
-                await _db.SaveChangesAsync();
+                return;
             }
+
+            // The guest's name, address and reference are copied onto rows with no cascade
+            // (SET NULL, or no FK at all), so deleting only the booking would leave them behind.
+            // One SaveChanges keeps the erasure atomic. A reference is not unique (nothing checks a
+            // draw against the table), so where it is the only link it must also agree with the
+            // guest's own name or address once another booking carries it too.
+            string bookingRef = booking.BookingRef;
+            bool hasRef = !string.IsNullOrEmpty(bookingRef); // "" would match every capacity notification
+            string refKey = bookingRef.ToLowerInvariant();
+#pragma warning disable CA1862, CA1311, CA1304 // ToLower in LINQ-to-EF is intentional, as in the lookup by reference
+            bool refShared = hasRef && await _db.Bookings.AnyAsync(b => b.Id != id && b.BookingRef.ToLower() == refKey);
+#pragma warning restore CA1862, CA1311, CA1304
+            string name = booking.CustomerName ?? string.Empty;
+            string email = (booking.CustomerEmail ?? string.Empty).Trim();
+            _db.AdminNotifications.RemoveRange(_db.AdminNotifications
+                .Where(n => n.BookingId == id
+                    || (hasRef && n.BookingId == null && n.BookingRef == bookingRef && (!refShared || n.CustomerName == name))));
+            _db.EmailFailures.RemoveRange(_db.EmailFailures
+                .Where(f => hasRef && f.BookingRef == bookingRef && (!refShared || f.RecipientEmail.Trim() == email)));
+            _db.WaitlistEntries.RemoveRange(_db.WaitlistEntries.Where(w => w.BookingId == id));
+            _db.Bookings.Remove(booking);
+            await _db.SaveChangesAsync();
         }
 
         public async Task<Dictionary<string, int>> CountNoShowsByEmailAsync(IEnumerable<string> emails)
@@ -184,11 +210,19 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories
                 reservedGroupIds.Add(tableGroupId.Value);
             }
 
+            // A row with no EndTime holds its unit for the restaurant's default, not for the
+            // requester's length. Every booking on these tables belongs to the one restaurant.
+            int restaurantDefault = await _db.Restaurants
+                .Where(r => r.Sections.Any(s => s.Tables.Any(t => reservedTableIds.Contains(t.Id))))
+                .Select(r => r.DefaultBookingDurationMinutes)
+                .FirstOrDefaultAsync();
+            DateTime legacyThreshold = restaurantDefault > 0 ? newStart.AddMinutes(-restaurantDefault) : thresholdStart;
+
             return await _db.Bookings.AnyAsync(b =>
                 !b.IsCancelled &&
                 (excludeBookingId == null || b.Id != excludeBookingId.Value) &&
                 b.Date < newEnd &&
-                (b.EndTime != null ? b.EndTime > newStart : b.Date > thresholdStart) &&
+                (b.EndTime != null ? b.EndTime > newStart : b.Date > legacyThreshold) &&
                 ((b.TableId.HasValue && reservedTableIds.Contains(b.TableId.Value)) ||
                  (b.TableGroupId.HasValue && reservedGroupIds.Contains(b.TableGroupId.Value))));
         }
@@ -257,16 +291,6 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories
                             !b.IsCancelled)
                 .OrderBy(b => b.Date)
                 .ToListAsync();
-        }
-
-        public async Task<bool> HasConflictAsync(int? tableId, DateTime newStart, DateTime newEnd, int fallbackDurationMinutes, int? excludeBookingId = null)
-        {
-            return await _db.Bookings.AnyAsync(b =>
-                b.TableId == tableId &&
-                !b.IsCancelled &&
-                (excludeBookingId == null || b.Id != excludeBookingId.Value) &&
-                b.Date < newEnd &&
-                (b.EndTime != null ? b.EndTime > newStart : b.Date.AddMinutes(fallbackDurationMinutes) > newStart));
         }
 
         public async Task<int> CountDistinctBookedTablesAsync(int restaurantId, DateTime startUtc, DateTime endUtc)

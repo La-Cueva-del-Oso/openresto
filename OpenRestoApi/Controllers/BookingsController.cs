@@ -72,7 +72,7 @@ namespace OpenRestoApi.Controllers
             }
 
             BookingDto? booking = await _bookingService.GetBookingByRefAsync(bookingRef);
-            if (booking == null || !string.Equals(booking.CustomerEmail, email.Trim(), StringComparison.OrdinalIgnoreCase))
+            if (booking == null || !string.Equals(booking.CustomerEmail?.Trim(), email.Trim(), StringComparison.OrdinalIgnoreCase))
             {
                 return NotFound(new MessageResponse { Message = "No booking found matching that reference and email.", Code = ErrorCodes.BookingLookupNotFound });
             }
@@ -90,7 +90,8 @@ namespace OpenRestoApi.Controllers
             // ConflictException (overlap, paused, walk-in, past, held, seats) → 409 is mapped
             // by GlobalExceptionHandler with a MessageResponse { Message } body, which
             // serializes identically to the prior anonymous { message } shape.
-            BookingDto newBooking = await _bookingService.CreateBookingAsync(bookingDto);
+            BookingDto newBooking = await _bookingService.CreateBookingAsync(
+                bookingDto, HttpContext.Connection.RemoteIpAddress?.ToString());
 
             string? restaurantName = await _bookingService.GetRestaurantNameAsync(bookingDto.RestaurantId);
 

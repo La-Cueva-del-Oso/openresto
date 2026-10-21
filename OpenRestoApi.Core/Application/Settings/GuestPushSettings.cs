@@ -21,7 +21,38 @@ public class GuestPushSettings
     public string ReminderLeadHours { get; set; } = DefaultReminderLeadHours;
 
     /// <summary>
-    /// 
+    /// Devices that may hold reminders for one booking. Opt-in needs only a reference and an email,
+    /// so without a cap one booking could be given an unbounded number of addresses to push to.
+    /// Re-registering a device already on the booking is never refused.
+    /// </summary>
+    public int MaxDevicesPerBooking { get; set; } = 5;
+
+    /// <summary>
+    /// Most pushes one reminder pass sends. What is still due when the pass reaches it is sent by
+    /// the next pass (the worker runs every minute); it is not marked as sent.
+    /// </summary>
+    public int MaxSendsPerPass { get; set; } = 200;
+
+    public static readonly TimeSpan DefaultSendTimeout = TimeSpan.FromSeconds(10);
+
+    private TimeSpan _sendTimeout = DefaultSendTimeout;
+
+    /// <summary>
+    /// How long one push may take before it counts as that subscription's failure. Zero,
+    /// negative (including "infinite") and anything <see cref="CancellationTokenSource.CancelAfter(TimeSpan)"/>
+    /// cannot take become <see cref="DefaultSendTimeout"/>: left as set, they would fail every push
+    /// at once or throw out of the reminder pass.
+    /// </summary>
+    /// <seealso>GuestPushSettingsTests.SendTimeout_ReplacesAValueTheTimerCannotTakeWithTheDefault</seealso>
+    /// <seealso>GuestPushSettingsTests.SendTimeout_KeepsAPositiveValue</seealso>
+    public TimeSpan SendTimeout
+    {
+        get => _sendTimeout;
+        set => _sendTimeout = value > TimeSpan.Zero && value.TotalMilliseconds < uint.MaxValue ? value : DefaultSendTimeout;
+    }
+
+    /// <summary>
+    ///
     /// </summary>
     /// <seealso>GuestPushSettingsTests.ReminderLeads_ParsesDistinctPositiveHoursDescending</seealso>
     /// <seealso>GuestPushSettingsTests.ReminderLeads_FallsBackToTheDefaultWhenNothingParses</seealso>

@@ -347,6 +347,18 @@
     "admin": {
       "password_not_configured": "Admin:Password must be configured before first use. Set it via ADMIN_PASSWORD env var."
     },
+    "api_key": {
+      "expires_at_in_past": "The expiry date must be in the future. Choose a later date.",
+      "expires_at_with_never_expires": "A key that never expires can't also have an expiry date. Remove one of the two.",
+      "name_required": "Enter a name for the API key.",
+      "name_too_long": "The API key name can't be longer than {{max}} characters.",
+      "not_a_session": "This request only works with an API key, not with a signed-in account.",
+      "not_allowed": "This action isn't available with an API key. Sign in to your account to do it.",
+      "not_found": "That API key wasn't found. It may have been revoked already. Refresh the list and try again.",
+      "scope_invalid": "One of the selected permissions isn't valid. Check the selection and try again.",
+      "scope_missing": "This API key doesn't have permission to do this. Use a key with the right permission.",
+      "scopes_required": "Select at least one permission."
+    },
     "auth": {
       "email_already_in_use": "That email address is already in use.",
       "email_unchanged": "New email must be different from the current email.",
@@ -363,11 +375,14 @@
       "cancel_email_required": "Email is required to cancel a booking.",
       "email_fields_required": "Subject and body are required.",
       "email_invalid": "That email address doesn't look right.",
-      "email_send_failed": "Failed to send: {{detail}}",
+      "email_send_failed": "The email could not be sent. Check the email settings and try again.",
+      "extend_conflict": "Another booking starts before the sitting would end, so it cannot be extended that long.",
+      "guest_filter_forbidden": "This API key can't search by email because it isn't allowed to see guest details.",
       "invalid_table_for_restaurant": "Invalid table for this restaurant.",
       "lookup_email_required": "Email is required to look up a booking.",
       "lookup_not_found": "No booking found matching that reference and email.",
       "move_conflict": "This update would cause a conflict with an existing booking.",
+      "name_invalid": "The name can't contain control characters. Please retype it.",
       "no_customer_email": "Customer email is not available.",
       "no_show_before_start": "A booking can only be marked as a no-show once its sitting has started.",
       "no_tables_available": "No tables are available for the requested time and party size.",
@@ -375,7 +390,14 @@
       "past_date": "Cannot create a booking in the past.",
       "paused": "Bookings are paused until {{until}}. Please choose a later time.",
       "paused_indefinitely": "Bookings for this restaurant are currently paused. Please try again later.",
+      "reminder_cancelled": "This booking has been cancelled, so reminders can't be turned on.",
+      "reminder_channel_invalid": "This device can't receive reminders from this site.",
+      "reminder_device_limit": "There are already too many devices with reminders for this booking. Turn them off on one of them to add this one.",
+      "reminder_endpoint_invalid": "This device can't receive reminders from this site.",
+      "reminder_keys_required": "We couldn't set up reminders on this device. Turn reminders on again and retry.",
+      "reminder_too_late": "This booking has already started, so reminders can no longer be turned on.",
       "section_mismatch": "Section does not belong to this restaurant.",
+      "special_requests_invalid": "The special requests can't contain control characters. Please retype them.",
       "status_cancelled": "A cancelled booking takes no status changes.",
       "status_invalid": "Status must be one of: {{allowed}}.",
       "status_transition_invalid": "A booking that is {{from}} cannot be marked {{to}}.",
@@ -383,9 +405,12 @@
       "table_held": "This table is already held by another user. Please select a different table or try again shortly.",
       "table_id_required_for_section_change": "Provide tableId when reassigning to a different section.",
       "table_not_in_section": "Table not found in the specified section.",
+      "undo_conflict": "Another booking has taken the table since this sitting ended, so the change cannot be undone.",
       "walk_in_only": "This location accepts walk-ins only and does not take online bookings.",
       "walk_in_only_today": "This location accepts walk-ins only on the selected day. Please choose another day or just come in.",
-      "pacing_full": "Only {{remaining}} more guests can start at {{time}}. Please pick another time."
+      "pacing_full": "Only {{remaining}} more guests can start at {{time}}. Please pick another time.",
+      "wallet_cancelled": "This booking has been cancelled, so it can't be added to your wallet.",
+      "wallet_not_configured": "This site doesn't offer Apple Wallet or Google Wallet passes yet."
     },
     "brand": {
       "accent_color_invalid": "Invalid accent color hex code.",
@@ -395,8 +420,11 @@
       "header_image_fit_invalid": "HeaderImageFit must be one of: {{allowed}}.",
       "highlights_heading_too_long": "Highlights heading cannot exceed 60 characters.",
       "highlights_subheading_too_long": "Highlights subheading cannot exceed 60 characters.",
+      "minimum_app_version_invalid": "The minimum app version must be three numbers separated by dots, for example 1.9.0.",
       "primary_color_invalid": "Invalid primary color hex code.",
-      "subtitle_too_long": "Subtitle cannot exceed 160 characters."
+      "privacy_policy_url_invalid": "The privacy policy address must start with http:// or https://. Check it and try again.",
+      "subtitle_too_long": "Subtitle cannot exceed 160 characters.",
+      "website_url_invalid": "The website address must start with http:// or https://. Check it and try again."
     },
     "contact": {
       "email_invalid": "Email address must be a valid email address.",
@@ -404,8 +432,15 @@
       "phone_too_long": "Phone number cannot exceed {{max}} characters."
     },
     "email": {
-      "connection_failed": "Connection failed: {{detail}}",
-      "not_configured": "Email is not configured."
+      "auth_failed": "The mail server rejected the username or password. Check them and try again.",
+      "connection_failed": "Could not connect to the mail server. Check the server and the port.",
+      "host_required": "Enter the address (host) of the mail server.",
+      "not_configured": "Email is not configured.",
+      "password_required": "To change the server, port, username or encryption, re-enter the email password.",
+      "port_invalid": "The port must be a number between 1 and 65535.",
+      "recipient_rejected": "The mail server did not accept the recipient's address. Check that it is correct.",
+      "send_failed": "The email could not be sent. Try again in a few minutes.",
+      "username_required": "Enter the username for the mail server."
     },
     "generic": "Something went wrong",
     "genericMessage": "An unexpected error occurred. Try again.",
@@ -431,6 +466,9 @@
       "menu_too_large": "Menu file must be under 10 MB.",
       "unsupported_image_type": "Only JPEG, PNG, and WebP images are accepted.",
       "unsupported_menu_type": "Only PDF menu files are accepted."
+    },
+    "notification": {
+      "push_endpoint_invalid": "This device can't receive notifications from this site."
     },
     "restaurant": {
       "archive_before_delete": "Archive this location before deleting it. Archiving takes it off the public site and can be undone; deleting cannot.",
@@ -984,6 +1022,9 @@
         "extendSubtitle": "Select a restaurant to extend all active bookings by 1 hour.",
         "extendedSubtitle_one": "The following {{count}} booking has been extended by 1 hour:",
         "extendedSubtitle_other": "The following {{count}} bookings have been extended by 1 hour:",
+        "noneExtendedSubtitle": "No booking could be extended.",
+        "skippedSubtitle_one": "{{count}} booking was left as it was because another booking follows it on the same table:",
+        "skippedSubtitle_other": "{{count}} bookings were left as they were because another booking follows them on the same table:",
         "loadingRestaurants": "Loading restaurants",
         "noRestaurants": "No restaurants found.",
         "pausedBadge": "PAUSED",
@@ -1120,7 +1161,9 @@
         "extend_one": "Extend {{count}} active Booking by 60m",
         "extend_other": "Extend {{count}} active Bookings by 60m",
         "extended_one": "Extended {{count}} active booking +60m",
-        "extended_other": "Extended {{count}} active bookings +60m"
+        "extended_other": "Extended {{count}} active bookings +60m",
+        "extendedSkipped_one": "Extended {{extended}}; {{count}} left as is (another booking follows)",
+        "extendedSkipped_other": "Extended {{extended}}; {{count}} left as is (another booking follows)"
       },
       "addForm": {
         "namePlaceholder": "Location name (e.g. Downtown, Westside)",
@@ -1747,6 +1790,7 @@
         "fromEmailLabel": "From email",
         "footerHintVerified": "Connection verified · confirmations ready",
         "footerHintUnverified": "Test the connection before enabling confirmations",
+        "passwordRequiredNotice": "To change the server, port, username or encryption, re-enter the email password.",
         "saveButton": "Save SMTP settings"
       },
       "users": {

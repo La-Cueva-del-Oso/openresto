@@ -5,6 +5,9 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerBookingsCommands } from "./bookings.js";
+import { withLang } from "../withLang.test.js";
+
+process.env.OPENRESTO_LANG = "en";
 
 function buildProgram(): Command {
   const program = new Command();
@@ -122,6 +125,37 @@ describe("bookings list status column", () => {
   });
 });
 
+describe("bookings list --email refused by the server", () => {
+  test("shows the server's own message and code instead of a generic failure", async () => {
+    const message =
+      "This key can't search by email: it has no permission to see guest details.";
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({ message, code: "booking.guest_filter_forbidden" }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      )) as typeof fetch;
+    const originalExitCode = process.exitCode;
+    const { lines, restore } = captureLogs();
+
+    try {
+      await buildProgram().parseAsync(
+        ["bookings", "list", "--email", "@example.com"],
+        { from: "user" },
+      );
+    } finally {
+      restore();
+      const failed = process.exitCode === 1;
+      process.exitCode = originalExitCode;
+      assert.ok(failed, "a refused request must exit non-zero");
+    }
+
+    const output = lines.join("\n");
+    assert.match(output, /400/);
+    assert.ok(output.includes(message));
+    assert.match(output, /booking\.guest_filter_forbidden/);
+  });
+});
+
 function capturingFetch(sent: { body: unknown }[]): typeof fetch {
   return (async (_input: string, init?: { body?: string }) => {
     sent.push({ body: init?.body ? JSON.parse(init.body) : undefined });
@@ -197,4 +231,113 @@ describe("bookings email", () => {
     assert.equal(process.exitCode, 1);
     process.exitCode = 0;
   });
+});
+
+describe("bookings messages in Spanish", () => {
+  async function run(args: string[], isTTY?: boolean): Promise<string[]> {
+    const { lines, restore } = captureLogs();
+    const originalIsTTY = process.stdin.isTTY;
+    if (isTTY !== undefined) process.stdin.isTTY = isTTY;
+    try {
+      await withLang("es", () =>
+        buildProgram().parseAsync(args, { from: "user" }),
+      );
+    } finally {
+      restore();
+      process.stdin.isTTY = originalIsTTY;
+    }
+    return lines;
+  }
+
+  test("cancel, restore and purge (--yes) confirm in Spanish", async () => {
+    globalThis.fetch = (async () =>
+      new Response(null, { status: 204 })) as typeof fetch;
+
+    assert.deepEqual(await run(["bookings", "cancel", "7"]), [
+      "Reserva 7 cancelada.",
+    ]);
+    assert.deepEqual(await run(["bookings", "restore", "7"]), [
+      "Reserva 7 restaurada.",
+    ]);
+    assert.deepEqual(await run(["bookings", "purge", "7", "--yes"]), [
+      "Reserva 7 eliminada de forma permanente.",
+    ]);
+  });
+
+  test("purge without --yes outside a terminal refuses in Spanish and deletes nothing", async () => {
+    const methods: string[] = [];
+    globalThis.fetch = (async (_url: string, init?: { method?: string }) => {
+      methods.push(init?.method ?? "GET");
+      return new Response(null, { status: 204 });
+    }) as unknown as typeof fetch;
+    process.exitCode = undefined;
+
+    const lines = await run(["bookings", "purge", "7"], false);
+
+    assert.deepEqual(methods, []);
+    assert.equal(process.exitCode, 1);
+    assert.deepEqual(lines, [
+      "Error: Se eliminará de forma permanente la reserva 7. Vuelve a ejecutar el comando con --yes para confirmar (es obligatorio cuando no se usa una terminal).",
+    ]);
+    process.exitCode = 0;
+  });
+
+  test("an empty body and a missing body are reported in Spanish", async () => {
+    const path = join(
+      mkdtempSync(join(tmpdir(), "openresto-cli-")),
+      "empty.txt",
+    );
+    writeFileSync(path, "  \n");
+    globalThis.fetch = capturingFetch([]);
+
+    const empty = await run([
+      "bookings",
+      "email",
+      "7",
+      "--subject",
+      "S",
+      "--body-file",
+      path,
+    ]);
+    const missing = await run(
+      ["bookings", "email", "7", "--subject", "S"],
+      true,
+    );
+
+    assert.deepEqual(empty, ["Error: El cuerpo del correo está vacío."]);
+    assert.deepEqual(missing, [
+      "Error: Falta el cuerpo del mensaje. Indica --body-file <ruta> o envía el texto por la entrada estándar.",
+    ]);
+    process.exitCode = 0;
+  });
+
+  test("the server's own error text stays untranslated", async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ message: "Booking not found." }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      })) as typeof fetch;
+
+    const lines = await run(["bookings", "cancel", "99"]);
+
+    assert.deepEqual(lines, ["Error (404): Booking not found."]);
+    process.exitCode = 0;
+  });
+});
+
+describe("bookings --date help", () => {
+  for (const name of ["create", "update"]) {
+    test(`${name} says a zone-less date is the location's local time`, () => {
+      const bookings = buildProgram().commands.find(
+        (c) => c.name() === "bookings",
+      )!;
+      const option = bookings.commands
+        .find((c) => c.name() === name)!
+        .options.find((o) => o.long === "--date")!;
+
+      assert.match(option.description, /location's local time/);
+      assert.match(option.description, /Z or an offset/);
+      assert.doesNotMatch(option.description, /UTC\)/);
+    });
+  }
 });

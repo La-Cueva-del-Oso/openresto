@@ -4,6 +4,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { readJsonInput, omitUndefined } from "./io.js";
+import { withLang } from "./withLang.test.js";
+
+process.env.OPENRESTO_LANG = "en";
 
 describe("omitUndefined", () => {
   test("drops keys whose value is undefined", () => {
@@ -47,6 +50,24 @@ describe("readJsonInput", () => {
       writeFileSync(file, "{not json");
 
       await assert.rejects(() => readJsonInput(file), /Could not parse JSON/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("the same malformed-JSON error is in Spanish under OPENRESTO_LANG=es", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "openresto-cli-io-test-"));
+    try {
+      const file = path.join(dir, "bad.json");
+      writeFileSync(file, "{not json");
+
+      await withLang("es", () =>
+        assert.rejects(
+          () => readJsonInput(file),
+          (err: Error) =>
+            err.message.startsWith(`No se pudo leer el JSON de ${file}: `),
+        ),
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

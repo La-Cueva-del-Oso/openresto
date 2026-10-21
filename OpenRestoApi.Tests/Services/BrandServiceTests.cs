@@ -621,6 +621,7 @@ public class BrandServiceTests
     [InlineData("v1.9.0")]
     [InlineData("1.9.0-beta")]
     [InlineData("latest")]
+    [InlineData("١.٢.٣")]
     public async Task SaveAsync_Throws_WhenMinimumAppVersionIsNotMajorMinorPatch(string version)
     {
         using AppDbContext db = TestDbFactory.Create(

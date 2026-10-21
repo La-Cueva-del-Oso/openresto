@@ -301,6 +301,52 @@ public class RepositoryTests : IDisposable
         Assert.False(isBooked);
     }
 
+    // A booking with no EndTime holds its unit for the restaurant's own default, not for however
+    // long the party asking happens to want.
+    private async Task<(BookingRepository repo, Table table, DateTime legacyStart)> SeedLegacyNinetyMinuteBookingAsync(AppDbContext db)
+    {
+        (Restaurant? restaurant, Section? section, Table? table) = SeedRestaurantData(db);
+        restaurant.DefaultBookingDurationMinutes = 90;
+        var repo = new BookingRepository(db);
+        DateTime legacyStart = DateTime.UtcNow.Date.AddDays(11).AddHours(12).ToUniversalTime();
+
+        await repo.AddAsync(new Booking
+        {
+            TableId = table.Id,
+            SectionId = section.Id,
+            RestaurantId = restaurant.Id,
+            Date = legacyStart,
+            EndTime = null,
+            CustomerEmail = "legacy-unit@test.com",
+            Seats = 2,
+            BookingRef = "LEGACYU1"
+        });
+        return (repo, table, legacyStart);
+    }
+
+    [Fact]
+    public async Task BookingRepository_IsUnitBookedOnDateAsync_HoldsALegacyBookingForTheRestaurantsDefault_NotTheRequestersLength()
+    {
+        using AppDbContext db = CreateContext();
+        (BookingRepository repo, Table table, DateTime legacyStart) = await SeedLegacyNinetyMinuteBookingAsync(db);
+
+        // 12:00 + 90 = 13:30: a 30-minute request at 13:00 lands inside the legacy sitting.
+        bool insideLegacySitting = await repo.IsUnitBookedOnDateAsync(table.Id, null, legacyStart.AddMinutes(60), durationMinutes: 30);
+
+        Assert.True(insideLegacySitting);
+    }
+
+    [Fact]
+    public async Task BookingRepository_IsUnitBookedOnDateAsync_AllowsARequestStartingWhenTheLegacyDefaultEnds()
+    {
+        using AppDbContext db = CreateContext();
+        (BookingRepository repo, Table table, DateTime legacyStart) = await SeedLegacyNinetyMinuteBookingAsync(db);
+
+        bool atTheEnd = await repo.IsUnitBookedOnDateAsync(table.Id, null, legacyStart.AddMinutes(90), durationMinutes: 30);
+
+        Assert.False(atTheEnd);
+    }
+
     // ── Configurable booking duration (#135) ────────────────────────────────
 
     [Fact]

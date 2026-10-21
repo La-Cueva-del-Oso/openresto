@@ -7,13 +7,13 @@
  */
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { run } from "./lib/native-init.mjs";
+import { neutralizeControl, run } from "./lib/native-init.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 run({ argv: process.argv.slice(2), root, fetch: globalThis.fetch, log: console.log }).catch(
   (err) => {
-    console.error(err.message);
+    console.error(neutralizeControl(String(err?.message ?? err), true));
     process.exit(1);
   }
 );

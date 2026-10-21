@@ -64,7 +64,7 @@ public class WaitlistReadyNotifierTests
     public async Task NotifyAsync_PushesToTheTicketsDevice()
     {
         using AppDbContext db = TestDbFactory.Create(nameof(NotifyAsync_PushesToTheTicketsDevice));
-        _push.Setup(p => p.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>())).ReturnsAsync(GuestPushResult.Delivered);
+        _push.Setup(p => p.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>(), It.IsAny<CancellationToken>())).ReturnsAsync(GuestPushResult.Delivered);
 
         // No mail configured: the push goes out on its own.
         await CreateNotifier(db, null).NotifyAsync(EntryWithDevice(), _restaurant);
@@ -75,7 +75,8 @@ public class WaitlistReadyNotifierTests
                 m.Title == "Ihr Tisch im Door ist bereit" &&
                 m.Body.StartsWith("Nummer 4: ") &&
                 m.Url.EndsWith("/waitlist/abc") &&
-                m.Tag == "waitlist-3")),
+                m.Tag == "waitlist-3"),
+            It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -83,7 +84,7 @@ public class WaitlistReadyNotifierTests
     public async Task NotifyAsync_ClearsAStaleDevice()
     {
         using AppDbContext db = TestDbFactory.Create(nameof(NotifyAsync_ClearsAStaleDevice));
-        _push.Setup(p => p.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>())).ReturnsAsync(GuestPushResult.Stale);
+        _push.Setup(p => p.SendAsync(It.IsAny<GuestPushAddress>(), It.IsAny<GuestPushMessage>(), It.IsAny<CancellationToken>())).ReturnsAsync(GuestPushResult.Stale);
         WaitlistEntry entry = EntryWithDevice();
 
         await CreateNotifier(db, null).NotifyAsync(entry, _restaurant);

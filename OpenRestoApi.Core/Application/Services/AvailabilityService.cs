@@ -20,8 +20,6 @@ public sealed class AvailabilityService(
         Restaurant? restaurant = await _restaurantRepository.GetByIdAsync(restaurantId)
             ?? throw new NotFoundException("Restaurant not found.") { Code = ErrorCodes.RestaurantNotFound };
 
-        TimeZoneInfo tz = TimeZoneHelper.Resolve(restaurant.Timezone);
-
         IEnumerable<Booking> activeBookings = await _bookingRepository.GetActiveBookingsForDateAsync(restaurantId, bookingDate);
 
         // bookingDate arrives as YYYY-MM-DD, already the local date in the restaurant's
@@ -44,7 +42,7 @@ public sealed class AvailabilityService(
         var slots = new List<TimeSlotDto>();
         for (DateTime current = localStart; current < localEnd; current = current.AddMinutes(SlotInterval(restaurant)))
         {
-            DateTime slotUtc = TimeZoneInfo.ConvertTimeToUtc(current, tz);
+            DateTime slotUtc = TimeZoneHelper.ConvertLocalToUtc(current, restaurant.Timezone);
 
             // A pause closes the slots inside its window only; later sittings — including
             // later today — stay bookable. A slot this party would push over the cover cap is

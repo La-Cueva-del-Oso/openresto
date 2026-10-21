@@ -5,7 +5,7 @@ import { ThemedText } from "@/components/themed-text";
 import Button from "@/components/common/Button";
 import { theme } from "@/theme/theme";
 import { hexToRgba } from "@/utils/colors";
-import { getVapidPublicKey, subscribePush } from "@/api/notifications";
+import { getVapidPublicKey, PushSubscribeRejected, subscribePush } from "@/api/notifications";
 import { arrayBufferToBase64, urlBase64ToUint8Array } from "@/utils/notifications";
 import { styles } from "@/components/admin/notifications/notifications.styles";
 import { Icon } from "@/components/common/Icon";
@@ -77,6 +77,7 @@ export function PushBanner({ primaryColor, isDark }: PushBannerProps) {
     if (!vapidKey) return;
     setWorking(true);
     setErrorMsg(null);
+    let sub: PushSubscription | null = null;
     try {
       const permission = await Notification.requestPermission();
       if (permission === "denied") {
@@ -90,7 +91,7 @@ export function PushBanner({ primaryColor, isDark }: PushBannerProps) {
         return;
       }
       const sw = await navigator.serviceWorker.ready;
-      const sub = await sw.pushManager.subscribe({
+      sub = await sw.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidKey),
       });
@@ -104,8 +105,13 @@ export function PushBanner({ primaryColor, isDark }: PushBannerProps) {
       });
       setPushStatus("active");
     } catch (err) {
-      console.error("Push subscribe error:", err);
-      setErrorMsg(t("admin.notifications.pushBanner.enableFailed"));
+      // No row on the server means the banner would read "active" from the browser's own subscription.
+      await sub?.unsubscribe().catch(() => false);
+      setErrorMsg(
+        err instanceof PushSubscribeRejected && err.message
+          ? err.message
+          : t("admin.notifications.pushBanner.enableFailed")
+      );
     }
     setWorking(false);
   };

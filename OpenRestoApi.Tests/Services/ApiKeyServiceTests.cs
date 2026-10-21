@@ -13,10 +13,10 @@ public class ApiKeyServiceTests
 {
     private static readonly DateTime BaseTime = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
 
-    private static ApiKeyService CreateService(AppDbContext db, int callerId, FakeClock? clock = null)
+    private static ApiKeyService CreateService(AppDbContext db, int callerId, FakeClock? clock = null, int sessionVersion = 0)
         => new(
             new AdminApiKeyRepository(db),
-            new FakeCurrentUser { UserId = callerId },
+            new FakeCurrentUser { UserId = callerId, SessionVersion = sessionVersion },
             clock ?? new FakeClock(BaseTime));
 
     private static ApiKeyService CreateApiKeySessionService(AppDbContext db, int? keyId, string email, string role, FakeClock? clock = null)
@@ -57,7 +57,7 @@ public class ApiKeyServiceTests
         AdminCredential owner = SeedUser(db, "owner@example.com");
         ApiKeyService svc = CreateService(db, owner.Id);
 
-        ApiKeyCreatedDto created = await svc.CreateAsync(ValidRequest());
+        ApiKeyCreatedDto created = (await svc.CreateAsync(ValidRequest()))!;
 
         Assert.True(ApiKeyCrypto.TryParseId(created.Secret, out int parsedId));
         Assert.Equal(created.Id, parsedId);
@@ -74,11 +74,55 @@ public class ApiKeyServiceTests
         AdminCredential owner = SeedUser(db, "owner@example.com");
         ApiKeyService svc = CreateService(db, owner.Id);
 
-        ApiKeyCreatedDto created = await svc.CreateAsync(ValidRequest());
+        ApiKeyCreatedDto created = (await svc.CreateAsync(ValidRequest()))!;
 
         ApiKeyScopeDto scope = Assert.Single(created.Scopes);
         Assert.Equal(ApiKeyScopes.Bookings, scope.Resource);
         Assert.Equal(ApiKeyScopes.Read, scope.Access);
+    }
+
+    [Fact]
+    public async Task CreateAsync_MintsTheKey_WhenTheSessionIsStillTheAccountsCurrentOne()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(CreateAsync_MintsTheKey_WhenTheSessionIsStillTheAccountsCurrentOne));
+        AdminCredential owner = SeedUser(db, "owner@example.com");
+        owner.SessionVersion = 3;
+        db.SaveChanges();
+
+        ApiKeyCreatedDto? created = await CreateService(db, owner.Id, sessionVersion: 3).CreateAsync(ValidRequest());
+
+        Assert.NotNull(created);
+        Assert.Null(db.AdminApiKeys.Single().RevokedAt);
+    }
+
+    [Fact]
+    public async Task CreateAsync_IsRefusedAndLeavesNoKey_WhenTheSessionWasRevokedMeanwhile()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(CreateAsync_IsRefusedAndLeavesNoKey_WhenTheSessionWasRevokedMeanwhile));
+        AdminCredential owner = SeedUser(db, "owner@example.com");
+        ApiKeyService svc = CreateService(db, owner.Id, sessionVersion: owner.SessionVersion);
+        owner.SessionVersion++;
+        db.SaveChanges();
+
+        ApiKeyCreatedDto? created = await svc.CreateAsync(ValidRequest());
+
+        Assert.Null(created);
+        Assert.Empty(db.AdminApiKeys);
+    }
+
+    [Fact]
+    public async Task CreateAsync_IsRefusedAndLeavesNoKey_WhenTheAccountWasDeactivatedMeanwhile()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(CreateAsync_IsRefusedAndLeavesNoKey_WhenTheAccountWasDeactivatedMeanwhile));
+        AdminCredential owner = SeedUser(db, "owner@example.com");
+        ApiKeyService svc = CreateService(db, owner.Id);
+        owner.IsActive = false;
+        db.SaveChanges();
+
+        ApiKeyCreatedDto? created = await svc.CreateAsync(ValidRequest());
+
+        Assert.Null(created);
+        Assert.Empty(db.AdminApiKeys);
     }
 
     [Fact]
@@ -89,7 +133,7 @@ public class ApiKeyServiceTests
         ApiKeyService svc = CreateService(db, owner.Id);
         var req = new CreateApiKeyRequest { Name = "dup", Scopes = [.. BookingsRead(), .. BookingsRead()] };
 
-        ApiKeyCreatedDto created = await svc.CreateAsync(req);
+        ApiKeyCreatedDto created = (await svc.CreateAsync(req))!;
 
         Assert.Single(created.Scopes);
     }
@@ -170,7 +214,7 @@ public class ApiKeyServiceTests
         CreateApiKeyRequest req = ValidRequest();
         req.ExpiresAt = BaseTime.AddDays(30);
 
-        ApiKeyCreatedDto created = await svc.CreateAsync(req);
+        ApiKeyCreatedDto created = (await svc.CreateAsync(req))!;
 
         Assert.Equal(BaseTime.AddDays(30), created.ExpiresAt);
     }
@@ -183,7 +227,7 @@ public class ApiKeyServiceTests
         var clock = new FakeClock(BaseTime);
         ApiKeyService svc = CreateService(db, owner.Id, clock);
 
-        ApiKeyCreatedDto created = await svc.CreateAsync(ValidRequest());
+        ApiKeyCreatedDto created = (await svc.CreateAsync(ValidRequest()))!;
 
         Assert.Equal(BaseTime.AddYears(1), created.ExpiresAt);
     }
@@ -197,7 +241,7 @@ public class ApiKeyServiceTests
         CreateApiKeyRequest req = ValidRequest();
         req.NeverExpires = true;
 
-        ApiKeyCreatedDto created = await svc.CreateAsync(req);
+        ApiKeyCreatedDto created = (await svc.CreateAsync(req))!;
 
         Assert.Null(created.ExpiresAt);
     }
@@ -254,7 +298,7 @@ public class ApiKeyServiceTests
         AdminCredential owner = SeedUser(db, "owner@example.com");
         var clock = new FakeClock(BaseTime);
         ApiKeyService svc = CreateService(db, owner.Id, clock);
-        ApiKeyCreatedDto created = await svc.CreateAsync(ValidRequest());
+        ApiKeyCreatedDto created = (await svc.CreateAsync(ValidRequest()))!;
 
         ApiKeyDto revoked = await svc.RevokeAsync(created.Id);
 
@@ -268,7 +312,7 @@ public class ApiKeyServiceTests
         AdminCredential owner = SeedUser(db, "owner@example.com");
         var clock = new FakeClock(BaseTime);
         ApiKeyService svc = CreateService(db, owner.Id, clock);
-        ApiKeyCreatedDto created = await svc.CreateAsync(ValidRequest());
+        ApiKeyCreatedDto created = (await svc.CreateAsync(ValidRequest()))!;
         await svc.RevokeAsync(created.Id);
 
         clock.Advance(TimeSpan.FromHours(1));
@@ -283,7 +327,7 @@ public class ApiKeyServiceTests
         using AppDbContext db = TestDbFactory.Create(nameof(RevokeAsync_ThrowsNotFound_ForAKeyOwnedBySomeoneElse));
         AdminCredential ownerA = SeedUser(db, "a@example.com");
         AdminCredential ownerB = SeedUser(db, "b@example.com");
-        ApiKeyCreatedDto created = await CreateService(db, ownerA.Id).CreateAsync(ValidRequest());
+        ApiKeyCreatedDto created = (await CreateService(db, ownerA.Id).CreateAsync(ValidRequest()))!;
         ApiKeyService svcB = CreateService(db, ownerB.Id);
 
         NotFoundException ex = await Assert.ThrowsAsync<NotFoundException>(() => svcB.RevokeAsync(created.Id));
@@ -320,7 +364,7 @@ public class ApiKeyServiceTests
     {
         using AppDbContext db = TestDbFactory.Create(nameof(GetSelfAsync_ReturnsTheCallingKeyAndItsOwner_ForAnApiKeyCaller));
         AdminCredential owner = SeedUser(db, "owner@example.com");
-        ApiKeyCreatedDto created = await CreateService(db, owner.Id).CreateAsync(ValidRequest("CLI key"));
+        ApiKeyCreatedDto created = (await CreateService(db, owner.Id).CreateAsync(ValidRequest("CLI key")))!;
         ApiKeyService keySvc = CreateApiKeySessionService(db, created.Id, owner.Email, owner.Role);
 
         ApiKeySelfResult result = await keySvc.GetSelfAsync();

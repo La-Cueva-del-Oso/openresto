@@ -40,8 +40,11 @@ public class AdminService(
     BrandService? brandService = null,
     INotificationQueue? notificationQueue = null,
     IAuditScope? audit = null,
-    ICurrentUserService? currentUser = null)
+    ICurrentUserService? currentUser = null,
+    BookingWriteGate? writeGate = null)
 {
+    private readonly BookingWriteGate _writeGate = writeGate ?? new BookingWriteGate();
+
     /// <summary>
     /// Castle's generated proxy constructors drop default values, so a Moq class mock reaches only
     /// a constructor of exactly matching arity. This is that constructor.
@@ -136,6 +139,9 @@ public class AdminService(
         };
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
     /// <seealso>AdminServiceTests.GetOverviewAsync_ReportsTodaysCoversPerSlot_ForACappedLocation</seealso>
     private static LocationPacingDto PacingFor(Restaurant restaurant, int cap, IEnumerable<Booking> todayBookings) => new()
     {
@@ -194,6 +200,8 @@ public class AdminService(
 
     public virtual async Task<List<BookingDetailDto>> GetBookingsAsync(int? restaurantId, DateTime? bookingDate, string status, string? email = null, string? bookingRef = null, string? query = null)
     {
+        BookingGuestVisibility.RequireGuestAccessToFilterByEmail(email, _currentUser);
+
         List<Booking> bookings = await _bookingFilterRepository.QueryAsync(new BookingFilter
         {
             RestaurantId = restaurantId,
@@ -202,6 +210,7 @@ public class AdminService(
             Email = email,
             BookingRef = bookingRef,
             Query = query,
+            QueryMatchesGuestIdentity = !BookingGuestVisibility.IsRedactedFor(_currentUser),
         });
 
         return await WithNoShowHistoryAsync(bookings);
@@ -244,28 +253,40 @@ public class AdminService(
             return (await WithNoShowHistoryAsync([booking]))[0];
         }
 
-        if (booking.UndoStatus(nowUtc) == target)
+        // Undoing a finish gives the table back to this sitting, which someone else may have taken
+        // since, so the check and the write sit under the same gate as every other table writer.
+        using (await _writeGate.EnterAsync())
         {
-            booking.UndoStatusChange();
-        }
-        else if (booking.NextStatuses(nowUtc).Contains(target))
-        {
-            booking.Advance(target, nowUtc, booking.Restaurant?.DefaultBookingDurationMinutes ?? BookingDuration.FallbackMinutes);
-        }
-        else if (target == BookingStatus.NoShow && from == BookingStatus.Booked)
-        {
-            throw new BusinessRuleException("A booking can only be marked as a no-show once its sitting has started.") { Code = ErrorCodes.BookingNoShowBeforeStart };
-        }
-        else
-        {
-            throw new BusinessRuleException($"A booking that is {from} cannot be marked {target}.")
+            if (booking.UndoStatus(nowUtc) == target)
             {
-                Code = ErrorCodes.BookingStatusTransitionInvalid,
-                Args = new Dictionary<string, object> { ["from"] = from.ToString(), ["to"] = target.ToString() },
-            };
-        }
+                if (booking.OriginalEndTime is DateTime restoredEnd && restoredEnd > (booking.EndTime ?? booking.Date))
+                {
+                    await RejectIfTimeTakenAsync(booking, booking.EndTime ?? booking.Date, restoredEnd,
+                        "Another booking has taken the table since this sitting ended, so the change cannot be undone.",
+                        ErrorCodes.BookingUndoConflict);
+                }
 
-        await _bookingRepository.UpdateAsync(booking);
+                booking.UndoStatusChange();
+            }
+            else if (booking.NextStatuses(nowUtc).Contains(target))
+            {
+                booking.Advance(target, nowUtc, booking.Restaurant?.DefaultBookingDurationMinutes ?? BookingDuration.FallbackMinutes);
+            }
+            else if (target == BookingStatus.NoShow && from == BookingStatus.Booked)
+            {
+                throw new BusinessRuleException("A booking can only be marked as a no-show once its sitting has started.") { Code = ErrorCodes.BookingNoShowBeforeStart };
+            }
+            else
+            {
+                throw new BusinessRuleException($"A booking that is {from} cannot be marked {target}.")
+                {
+                    Code = ErrorCodes.BookingStatusTransitionInvalid,
+                    Args = new Dictionary<string, object> { ["from"] = from.ToString(), ["to"] = target.ToString() },
+                };
+            }
+
+            await _bookingRepository.UpdateAsync(booking);
+        }
 
         _audit.RecordChange("status", from.ToString(), booking.Status.ToString());
         _audit.RecordChange("endTime", endBefore, booking.EndTime);
@@ -321,8 +342,17 @@ public class AdminService(
         }).ToList();
     }
 
+    /// <summary>
+    /// Records a walk-in on one table. The conflict check is the group-aware one every booking path
+    /// uses, so a table whose combinable group is seated is refused, while a sibling member booked
+    /// on its own is not.
+    /// </summary>
+    /// <seealso>AdminServiceTests.CreateBookingAsync_Rejects_ATableWhoseGroupIsBookedThen</seealso>
+    /// <seealso>AdminServiceTests.CreateBookingAsync_Creates_OnASiblingMember_WhenOnlyTheOtherMemberIsBooked</seealso>
     public virtual async Task<BookingDetailDto> CreateBookingAsync(AdminCreateBookingRequest req)
     {
+        GuestText.RejectControlCharacters(req.CustomerName, specialRequests: null);
+
         Table table = await _tableRepository.GetWithSectionRestaurantAsync(req.TableId, req.SectionId)
             ?? throw new ValidationException("Table not found in the specified section.") { Code = ErrorCodes.BookingTableNotInSection };
 
@@ -334,20 +364,6 @@ public class AdminService(
         DateTime newStart = TimeZoneHelper.ConvertLocalToUtc(req.Date, table.Section.Restaurant!.Timezone);
 
         int durationMinutes = BookingDuration.For(table.Section.Restaurant, req.Seats);
-        DateTime newEnd = newStart.AddMinutes(durationMinutes);
-
-        bool conflict = await _bookingRepository.HasConflictAsync(req.TableId, newStart, newEnd, durationMinutes);
-
-        if (conflict)
-        {
-            throw new ConflictException("This table already has a booking that overlaps with the requested time.") { Code = ErrorCodes.BookingTableConflict };
-        }
-
-        if (req.Seats > table.Seats)
-        {
-            throw new ConflictException($"This table only has {table.Seats} seats, but {req.Seats} guests were requested.") { Code = ErrorCodes.TableSeatsExceeded, Args = new Dictionary<string, object> { ["seats"] = table.Seats, ["requested"] = req.Seats } };
-        }
-
         var booking = new Booking
         {
             RestaurantId = req.RestaurantId,
@@ -361,7 +377,23 @@ public class AdminService(
             BookingRef = BookingRefFactory.GenerateFor(table.Section.Restaurant),
         };
 
-        await _bookingRepository.AddAsync(booking);
+        using (await _writeGate.EnterAsync())
+        {
+            bool conflict = await _bookingRepository.IsUnitBookedOnDateAsync(
+                req.TableId, tableGroupId: null, newStart, durationMinutes);
+
+            if (conflict)
+            {
+                throw new ConflictException("This table already has a booking that overlaps with the requested time.") { Code = ErrorCodes.BookingTableConflict };
+            }
+
+            if (req.Seats > table.Seats)
+            {
+                throw new ConflictException($"This table only has {table.Seats} seats, but {req.Seats} guests were requested.") { Code = ErrorCodes.TableSeatsExceeded, Args = new Dictionary<string, object> { ["seats"] = table.Seats, ["requested"] = req.Seats } };
+            }
+
+            await _bookingRepository.AddAsync(booking);
+        }
 
         Booking? reloaded = await _bookingRepository.GetByIdAsync(booking.Id);
         if (reloaded != null)
@@ -395,8 +427,20 @@ public class AdminService(
             booking.Date, booking.EndTime, restaurant?.DefaultBookingDurationMinutes);
 
         DateTime? previousEnd = booking.EndTime;
-        booking.EndTime = from.AddMinutes(minutes);
-        await _bookingRepository.UpdateAsync(booking);
+        DateTime newEnd = from.AddMinutes(minutes);
+
+        using (await _writeGate.EnterAsync())
+        {
+            if (minutes > 0)
+            {
+                await RejectIfTimeTakenAsync(booking, from, newEnd,
+                    "Another booking starts before the sitting would end, so it cannot be extended that long.",
+                    ErrorCodes.BookingExtendConflict);
+            }
+
+            booking.EndTime = newEnd;
+            await _bookingRepository.UpdateAsync(booking);
+        }
 
         _audit.RecordChange("endTime", previousEnd, booking.EndTime);
         DescribeBooking(AuditActions.BookingExtend, booking,
@@ -460,17 +504,29 @@ public class AdminService(
             throw new BusinessRuleException("Booking is already active.") { Code = ErrorCodes.BookingAlreadyActive };
         }
 
-        booking.IsCancelled = false;
-        booking.CancelledAt = null;
-        await _bookingRepository.UpdateAsync(booking);
+        using (await _writeGate.EnterAsync())
+        {
+            await RejectIfUnitTakenSinceAsync(booking);
+
+            booking.IsCancelled = false;
+            booking.CancelledAt = null;
+            await _bookingRepository.UpdateAsync(booking);
+        }
 
         DescribeBooking(AuditActions.BookingRestore, booking,
             $"Restored cancelled booking {booking.BookingRef}");
         return ToDetailDto(booking);
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <seealso>AdminServiceTests.AdminUpdateBookingAsync_ReadsAnUnspecifiedDate_AsTheRestaurantsWallClock</seealso>
+    /// <seealso>AdminServiceTests.AdminUpdateBookingAsync_KeepsAnExplicitUtcDate_AsThatInstant</seealso>
     public virtual async Task<BookingDetailDto?> AdminUpdateBookingAsync(int id, AdminUpdateBookingRequest req)
     {
+        GuestText.RejectControlCharacters(req.CustomerName, req.SpecialRequests);
+
         Booking? booking = await _bookingRepository.GetByIdAsync(id);
 
         if (booking == null)
@@ -512,9 +568,15 @@ public class AdminService(
             throw new ValidationException("Provide tableId when reassigning to a different section.") { Code = ErrorCodes.BookingTableIdRequiredForSectionChange };
         }
 
-        if (req.Date.HasValue && req.Date.Value != booking.Date)
+        if (req.Date.HasValue)
         {
-            RescheduleKeepingDuration(booking, req.Date.Value, durationMinutes);
+            // An Unspecified date is the restaurant's wall clock, as on create; the (possibly new)
+            // restaurant decides the zone.
+            DateTime newDate = TimeZoneHelper.ConvertLocalToUtc(req.Date.Value, restaurant?.Timezone ?? "UTC");
+            if (newDate != booking.Date)
+            {
+                RescheduleKeepingDuration(booking, newDate, durationMinutes);
+            }
         }
 
         if (booking.EndTime.HasValue && booking.EndTime.Value < booking.Date)
@@ -522,35 +584,38 @@ public class AdminService(
             booking.EndTime = booking.Date.AddMinutes(durationMinutes);
         }
 
-        await RejectIfMovedOntoATakenUnitAsync(booking, before, id, durationMinutes);
-
-        if (req.Seats.HasValue)
+        using (await _writeGate.EnterAsync())
         {
-            int? resolvedTableId = req.TableId ?? booking.TableId;
-            if (resolvedTableId.HasValue)
+            await RejectIfMovedOntoATakenUnitAsync(booking, before, id, durationMinutes);
+
+            if (req.Seats.HasValue)
             {
-                Table? currentTable = await _tableRepository.FindByIdAsync(resolvedTableId.Value);
-                if (currentTable != null && req.Seats.Value > currentTable.Seats)
+                int? resolvedTableId = req.TableId ?? booking.TableId;
+                if (resolvedTableId.HasValue)
                 {
-                    throw new BusinessRuleException($"This table only has {currentTable.Seats} seats, but {req.Seats.Value} guests were requested.") { Code = ErrorCodes.TableSeatsExceeded, Args = new Dictionary<string, object> { ["seats"] = currentTable.Seats, ["requested"] = req.Seats.Value } };
+                    Table? currentTable = await _tableRepository.FindByIdAsync(resolvedTableId.Value);
+                    if (currentTable != null && req.Seats.Value > currentTable.Seats)
+                    {
+                        throw new BusinessRuleException($"This table only has {currentTable.Seats} seats, but {req.Seats.Value} guests were requested.") { Code = ErrorCodes.TableSeatsExceeded, Args = new Dictionary<string, object> { ["seats"] = currentTable.Seats, ["requested"] = req.Seats.Value } };
+                    }
                 }
+                booking.Seats = req.Seats.Value;
             }
-            booking.Seats = req.Seats.Value;
-        }
-        if (req.CustomerEmail != null)
-        {
-            booking.CustomerEmail = req.CustomerEmail;
-        }
-        if (req.CustomerName != null)
-        {
-            booking.CustomerName = string.IsNullOrWhiteSpace(req.CustomerName) ? null : req.CustomerName.Trim();
-        }
-        if (req.SpecialRequests != null)
-        {
-            booking.SpecialRequests = req.SpecialRequests;
-        }
+            if (req.CustomerEmail != null)
+            {
+                booking.CustomerEmail = req.CustomerEmail;
+            }
+            if (req.CustomerName != null)
+            {
+                booking.CustomerName = string.IsNullOrWhiteSpace(req.CustomerName) ? null : req.CustomerName.Trim();
+            }
+            if (req.SpecialRequests != null)
+            {
+                booking.SpecialRequests = req.SpecialRequests;
+            }
 
-        await _bookingRepository.UpdateAsync(booking);
+            await _bookingRepository.UpdateAsync(booking);
+        }
 
         RecordBookingChanges(before, BookingFields.From(booking));
         DescribeBooking(AuditActions.BookingUpdate, booking, $"Updated booking {booking.BookingRef}");
@@ -664,6 +729,62 @@ public class AdminService(
         }
     }
 
+    /// <summary>
+    /// A cancelled booking no longer holds its table, so someone else may have taken it since;
+    /// bringing the booking back must not seat the same unit twice.
+    /// </summary>
+    /// <seealso>AdminServiceTests.RestoreBookingAsync_RejectsWhenTheTableWasTakenSinceTheCancellation</seealso>
+    /// <seealso>AdminServiceTests.RestoreBookingAsync_ReactivatesWhenTheTableIsStillFree</seealso>
+    private async Task RejectIfUnitTakenSinceAsync(Booking booking)
+    {
+        bool taken = await _bookingRepository.IsUnitBookedOnDateAsync(
+            booking.TableId,
+            booking.TableGroupId,
+            AsUtc(booking.Date),
+            OccupancyMinutes(booking, BookingDuration.FallbackMinutes),
+            excludeBookingId: booking.Id);
+
+        if (taken)
+        {
+            throw new BusinessRuleException("Another booking has taken this table since it was cancelled.")
+            {
+                Code = booking.TableGroupId.HasValue ? ErrorCodes.TableGroupBookingConflict : ErrorCodes.BookingTableConflict
+            };
+        }
+    }
+
+    /// <summary>
+    /// Refuses to lengthen a sitting over time another booking holds on its unit (its table, or its
+    /// group and every member). Only the time being added is checked, so a sitting that already
+    /// overlaps something can still be shortened or left alone. Shortening never reaches this.
+    /// <para>
+    /// The repository measures a window in whole minutes, so it is anchored at <paramref name="to"/>
+    /// and rounded up on the <paramref name="from"/> side: a booking that starts exactly when the
+    /// sitting would end is not a conflict.
+    /// </para>
+    /// </summary>
+    /// <seealso>AdminServiceTests.ExtendBookingAsync_Rejects_OneMinutePastTheMomentTheNextBookingStarts</seealso>
+    /// <seealso>AdminServiceTests.ExtendBookingAsync_Extends_UpToTheMomentTheNextBookingStarts</seealso>
+    /// <seealso>AdminServiceTests.SetBookingStatusAsync_Undo_Rejects_WhenAnotherBookingTookTheFreedTime</seealso>
+    private async Task RejectIfTimeTakenAsync(Booking booking, DateTime from, DateTime to, string message, string code)
+    {
+        if (await IsTimeTakenAsync(booking, from, to))
+        {
+            throw new ConflictException(message) { Code = code };
+        }
+    }
+
+    private async Task<bool> IsTimeTakenAsync(Booking booking, DateTime from, DateTime to)
+    {
+        int minutes = (int)Math.Ceiling((to - from).TotalMinutes);
+        return await _bookingRepository.IsUnitBookedOnDateAsync(
+            booking.TableId,
+            booking.TableGroupId,
+            AsUtc(to).AddMinutes(-minutes),
+            minutes,
+            excludeBookingId: booking.Id);
+    }
+
     /// <summary>How long the booking holds its unit: its own span when it has one, else the default.</summary>
     private static int OccupancyMinutes(Booking booking, int fallbackMinutes)
     {
@@ -758,7 +879,15 @@ public class AdminService(
         return true;
     }
 
-    public virtual async Task<List<BookingDetailDto>?> ExtendAllActiveBookingsAsync(int restaurantId, int extensionMinutes)
+    /// <summary>
+    /// Lengthens every in-progress sitting that has nothing following it on its table or group, and
+    /// reports the rest as skipped rather than double-booking them. Sittings are taken in start
+    /// order and each extension is written before the next is checked, so a sitting that grew into
+    /// a neighbour's time is seen by that neighbour and the outcome does not depend on row order.
+    /// </summary>
+    /// <seealso>AdminServiceTests.ExtendAllActiveBookingsAsync_Skips_ASittingWhoseAddedTimeIsTaken</seealso>
+    /// <seealso>AdminServiceTests.ExtendAllActiveBookingsAsync_Extends_UpToTheMomentTheNextBookingStarts</seealso>
+    public virtual async Task<ExtendRestaurantBookingsResponse?> ExtendAllActiveBookingsAsync(int restaurantId, int extensionMinutes)
     {
         Restaurant? restaurant = await _restaurantRepository.FindByIdAsync(restaurantId);
         if (restaurant == null)
@@ -766,24 +895,51 @@ public class AdminService(
             return null;
         }
 
-        DateTime nowUtc = DateTime.UtcNow;
+        var extended = new List<Booking>();
+        var skipped = new List<Booking>();
 
-        List<Booking> activeBookings = await _bookingRepository.GetInProgressForRestaurantAsync(restaurantId, nowUtc, restaurant.DefaultBookingDurationMinutes);
-
-        foreach (Booking? booking in activeBookings)
+        using (await _writeGate.EnterAsync())
         {
-            DateTime currentEndTime = booking.EndTime ?? booking.Date.AddMinutes(restaurant.DefaultBookingDurationMinutes);
-            booking.EndTime = currentEndTime.AddMinutes(extensionMinutes);
+            List<Booking> inProgress = await _bookingRepository.GetInProgressForRestaurantAsync(
+                restaurantId, DateTime.UtcNow, restaurant.DefaultBookingDurationMinutes);
+
+            foreach (Booking booking in inProgress.OrderBy(b => b.Date).ThenBy(b => b.Id))
+            {
+                DateTime from = BookingDuration.ResolveEnd(
+                    booking.Date, booking.EndTime, restaurant.DefaultBookingDurationMinutes);
+                DateTime newEnd = from.AddMinutes(extensionMinutes);
+
+                if (await IsTimeTakenAsync(booking, from, newEnd))
+                {
+                    skipped.Add(booking);
+                    continue;
+                }
+
+                booking.EndTime = newEnd;
+                await _bookingRepository.UpdateAsync(booking);
+                extended.Add(booking);
+            }
         }
 
-        // Single SaveChanges flushes every mutated EndTime — same DB round-trip count as the
-        // original implementation. The entities are already tracked on the shared DI-scoped DbContext.
-        await _bookingRepository.SaveChangesAsync();
-
         DescribeRestaurant(AuditActions.RestaurantExtendBookings, restaurant,
-            $"Extended {activeBookings.Count} in-progress bookings at {restaurant.Name} by {extensionMinutes} minutes");
-        return activeBookings.Select(ToDetailDto).ToList();
+            $"Extended {extended.Count} in-progress bookings at {restaurant.Name} by {extensionMinutes} minutes" +
+            (skipped.Count > 0 ? $", {skipped.Count} left as they were because another booking follows" : string.Empty));
+
+        return new ExtendRestaurantBookingsResponse
+        {
+            ExtendedBookings = extended.Select(ToDetailDto).ToList(),
+            SkippedBookings = skipped.Select(ToSkippedExtension).ToList(),
+        };
     }
+
+    private static SkippedExtensionDto ToSkippedExtension(Booking b) => new()
+    {
+        Id = b.Id,
+        BookingRef = b.BookingRef,
+        TableId = b.TableId,
+        TableGroupId = b.TableGroupId,
+        TableName = b.Table?.Name ?? (b.TableGroup is null ? null : BookingMapper.GroupLabel(b.TableGroup)),
+    };
 
     public virtual async Task<RestaurantDto> CreateRestaurantAsync(string name, string? address)
     {

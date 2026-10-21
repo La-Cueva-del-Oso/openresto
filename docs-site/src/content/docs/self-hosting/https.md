@@ -22,9 +22,12 @@ Check these three things:
 
 1. **`CORS_ORIGINS` is the public HTTPS address**, e.g. `https://bookings.example.com`. Browsers
    calling the API from any other address are turned away.
-2. **The proxy forwards `X-Forwarded-For` and `X-Forwarded-Proto`.** The API reads one
-   hop of these headers to learn the visitor's address and whether they used HTTPS, and rate
-   limits depend on that address. Most proxies do this by default.
+2. **`OPENRESTO_TRUSTED_PROXIES` names your proxy, and the proxy forwards `X-Forwarded-For`.**
+   Rate limits, table holds and the audit log all key on the visitor's address. Without this
+   setting the stack sees every visitor as your proxy, so they share one limit (10 sign-in
+   attempts a minute in total) and one person can lock everyone else out. See
+   [Keep visitors' real addresses](#keep-visitors-real-addresses) below. Most proxies send
+   `X-Forwarded-For` by default.
 3. **Large uploads can pass through.** Menu PDFs can be 10 MB. If your proxy has an upload size
    limit, set it to 12 MB or more.
 
@@ -38,6 +41,38 @@ bookings.example.com {
 
 If the proxy runs on the same host, set `HOST_PORT=8080` (or similar) in `.env` so it can own
 port 80, and point `reverse_proxy` at that port.
+
+### Keep visitors' real addresses
+
+Set `OPENRESTO_TRUSTED_PROXIES` in `.env` to the address your proxy connects from: one or more
+IPs or CIDR ranges (a network written like `172.18.0.0/16`), separated by commas. Then apply it:
+
+```dotenv
+OPENRESTO_TRUSTED_PROXIES=172.18.0.1
+```
+
+```bash
+docker compose up -d
+```
+
+The stack then reads the visitor's address from `X-Forwarded-For`, but only on requests that
+arrive from a listed address. Anyone else connecting directly cannot choose their own address by
+sending that header. Left empty (the default), nothing is trusted, which is right when visitors
+reach the stack directly with no proxy in front.
+
+Which address to list depends on where the proxy runs:
+
+- **Another machine:** that machine's address, for example `203.0.113.10`.
+- **The same host, outside Docker** (a host Caddy or nginx): Docker shows the connection as coming
+  from the bridge network's gateway, usually `172.x.0.1`, not `127.0.0.1`. Open your site through
+  the proxy, then run `docker compose logs reverse-proxy`: the address that starts the log line
+  is the one to list.
+- **Another container** (Traefik, Nginx Proxy Manager, `cloudflared`): the Docker network the two
+  share, for example `172.18.0.0/16` (`docker network inspect` shows the range).
+
+List only proxies you control, since anything on the list can claim to be any visitor. To trust
+a chain of proxies, list each of them. If you enter something that is not an address, the proxy
+container refuses to start and says which value it did not understand.
 
 ## Option 2: the bundled VPS nginx
 

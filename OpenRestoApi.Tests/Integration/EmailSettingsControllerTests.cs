@@ -104,12 +104,12 @@ public class EmailSettingsControllerTests(TestWebAppFactory factory) : IClassFix
         // Now save again with the masked password (simulating the UI sending back "••••••••")
         await client.PatchAsJsonAsync("/api/admin/email-settings", new
         {
-            host = "smtp.updated.com",
+            host = "smtp.preserve.com",
             port = 587,
             username = "preserve@example.com",
             password = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
             enableSsl = true,
-            fromName = "Preserve Test",
+            fromName = "Renamed Sender",
             fromEmail = "preserve@example.com"
         });
 
@@ -120,8 +120,65 @@ public class EmailSettingsControllerTests(TestWebAppFactory factory) : IClassFix
             .FirstAsync();
 
         Assert.Equal(encryptedBefore, settingsAfter.EncryptedPassword);
-        // But the host should have been updated
-        Assert.Equal("smtp.updated.com", settingsAfter.Host);
+        // But the rest of the record should have been updated
+        Assert.Equal("Renamed Sender", settingsAfter.FromName);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022")]
+    public async Task Save_WithNewHostAndNoNewPassword_Returns400AndKeepsStoredSettings(string? password)
+    {
+        HttpClient client = _factory.CreateAuthenticatedClient();
+        await client.PatchAsJsonAsync("/api/admin/email-settings", new
+        {
+            host = "smtp.guarded.com",
+            port = 587,
+            username = "guarded@example.com",
+            password = "pw-stored",
+            enableSsl = true,
+        });
+
+        HttpResponseMessage response = await client.PatchAsJsonAsync("/api/admin/email-settings", new
+        {
+            host = "attacker.example",
+            port = 465,
+            username = "guarded@example.com",
+            password,
+            enableSsl = true,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        JsonElement body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("email.password_required", body.GetProperty("code").GetString());
+
+        using IServiceScope scope = _factory.Services.CreateScope();
+        AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        EmailSettings stored = await db.Set<EmailSettings>().FirstAsync();
+        Assert.Equal("smtp.guarded.com", stored.Host);
+        Assert.Equal(587, stored.Port);
+    }
+
+    [Theory]
+    [InlineData("", 587, "user@example.com", "email.host_required")]
+    [InlineData("smtp.example.com", 587, "", "email.username_required")]
+    [InlineData("smtp.example.com", 70000, "user@example.com", "email.port_invalid")]
+    public async Task Save_WithABlankHostOrUsernameOrAnInvalidPort_Returns400WithItsCode(string host, int port, string username, string code)
+    {
+        HttpClient client = _factory.CreateAuthenticatedClient();
+
+        HttpResponseMessage response = await client.PatchAsJsonAsync("/api/admin/email-settings", new
+        {
+            host,
+            port,
+            username,
+            password = "pw-new",
+            enableSsl = true,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        JsonElement body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(code, body.GetProperty("code").GetString());
     }
 
     [Fact]

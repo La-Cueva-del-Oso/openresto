@@ -1,3 +1,5 @@
+import { t } from "./i18n.js";
+import { neutralizeControl } from "./output.js";
 import { ApiError, type Client } from "./transport.js";
 
 /**
@@ -33,8 +35,7 @@ export async function warnOnServerVersionMismatch(
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
       console.error(
-        `warning: server version is unknown (older than ${VERSION_ENDPOINT_INTRODUCED_IN}, ` +
-          `/api/version not found) — commands may not match the server's API`,
+        t("version.unknown", { introducedIn: VERSION_ENDPOINT_INTRODUCED_IN }),
       );
     }
     return;
@@ -47,9 +48,13 @@ export async function warnOnServerVersionMismatch(
   }
 
   if (server.major !== cli.major || server.minor !== cli.minor) {
+    // A version is one token: unlike an error message, its line breaks are escaped, not kept, so
+    // a hostile server cannot forge a second stderr line.
     console.error(
-      `warning: server is ${response.version}, CLI is ${cliVersion} — commands may not match ` +
-        "the server's API",
+      t("version.mismatch", {
+        server: neutralizeControl(response.version),
+        cli: cliVersion,
+      }),
     );
   }
 }

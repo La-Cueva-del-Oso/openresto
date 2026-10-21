@@ -58,10 +58,26 @@ public class BookingNotificationServiceTests : IDisposable
             NullLogger<BookingNotificationService>.Instance);
     }
 
-    private async Task<AdminPushSubscription> SeedPushSubscriptionAsync(string endpoint = "https://push.example/sub1")
+    private async Task<AdminCredential> SeedUserAsync(string email = "owner@example.com", bool isActive = true)
     {
+        var user = new AdminCredential
+        {
+            Email = email,
+            PasswordHash = "h",
+            PasswordSalt = "s",
+            IsActive = isActive,
+        };
+        _db.AdminCredentials.Add(user);
+        await _db.SaveChangesAsync();
+        return user;
+    }
+
+    private async Task<AdminPushSubscription> SeedPushSubscriptionAsync(string endpoint = "https://push.example/sub1", int? userId = null)
+    {
+        userId ??= (await _db.AdminCredentials.FirstOrDefaultAsync())?.Id ?? (await SeedUserAsync()).Id;
         var sub = new AdminPushSubscription
         {
+            UserId = userId.Value,
             Endpoint = endpoint,
             P256dh = "p256dh-key",
             Auth = "auth-secret",
@@ -351,6 +367,8 @@ public class BookingNotificationServiceTests : IDisposable
         Assert.Null(notification.PushSentAt);
         Assert.NotNull(notification.PushError);
         Assert.Contains("500", notification.PushError);
+        // The notifications API lists PushError, so the library's text stays in the log.
+        Assert.DoesNotContain("push failed", notification.PushError);
     }
 
     [Fact]
@@ -376,6 +394,61 @@ public class BookingNotificationServiceTests : IDisposable
             Times.Once);
         AdminNotification notification = await _db.AdminNotifications.SingleAsync();
         Assert.NotNull(notification.PushSentAt);
+    }
+
+    [Fact]
+    public async Task SendPushAsync_DeliversToAnActiveUsersSubscription()
+    {
+        await SeedRestaurantAsync();
+        AdminCredential active = await SeedUserAsync("active@example.com");
+        await SeedPushSubscriptionAsync("https://push.example/active", active.Id);
+        Booking booking = MakeBooking();
+        _db.Bookings.Add(booking);
+        await _db.SaveChangesAsync();
+
+        _webPushClientMock
+            .Setup(c => c.SendNotificationAsync(It.IsAny<PushSubscription>(), It.IsAny<string>(), It.IsAny<VapidDetails>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        await CreateService(ConfiguredVapid()).NotifyBookingCreatedAsync(booking, "Resto");
+
+        _webPushClientMock.Verify(
+            c => c.SendNotificationAsync(
+                It.Is<PushSubscription>(ps => ps.Endpoint == "https://push.example/active"),
+                It.IsAny<string>(), It.IsAny<VapidDetails>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task SendPushAsync_SkipsADeactivatedUsersSubscription()
+    {
+        await SeedRestaurantAsync();
+        AdminCredential active = await SeedUserAsync("active@example.com");
+        AdminCredential deactivated = await SeedUserAsync("gone@example.com", isActive: false);
+        await SeedPushSubscriptionAsync("https://push.example/active", active.Id);
+        await SeedPushSubscriptionAsync("https://push.example/deactivated", deactivated.Id);
+        Booking booking = MakeBooking();
+        _db.Bookings.Add(booking);
+        await _db.SaveChangesAsync();
+
+        _webPushClientMock
+            .Setup(c => c.SendNotificationAsync(It.IsAny<PushSubscription>(), It.IsAny<string>(), It.IsAny<VapidDetails>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        await CreateService(ConfiguredVapid()).NotifyBookingCreatedAsync(booking, "Resto");
+
+        _webPushClientMock.Verify(
+            c => c.SendNotificationAsync(
+                It.Is<PushSubscription>(ps => ps.Endpoint == "https://push.example/deactivated"),
+                It.IsAny<string>(), It.IsAny<VapidDetails>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _webPushClientMock.Verify(
+            c => c.SendNotificationAsync(
+                It.Is<PushSubscription>(ps => ps.Endpoint == "https://push.example/active"),
+                It.IsAny<string>(), It.IsAny<VapidDetails>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        // Skipped, not deleted: reactivating the account brings its browsers back.
+        Assert.Equal(2, await _db.AdminPushSubscriptions.CountAsync());
     }
 
     [Fact]
@@ -416,6 +489,7 @@ public class BookingNotificationServiceTests : IDisposable
         Assert.NotNull(notification.PushSentAt);
         Assert.NotNull(notification.PushError);
         Assert.Contains(nameof(InvalidEncryptionDetailsException), notification.PushError);
+        Assert.DoesNotContain("Unable to encrypt", notification.PushError);
         // A bad key is not a dead endpoint, so the row stays for the browser to refresh.
         Assert.Equal(2, await _db.AdminPushSubscriptions.CountAsync());
     }

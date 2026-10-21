@@ -77,6 +77,7 @@ export function fetchBrand(
   serverUrl: string,
   fetchImpl: (url: string) => Promise<Response>
 ): Promise<BrandSummary>;
+export function neutralizeControl(text: string, keepLineBreaks?: boolean): string;
 export function nextSteps(config: NativeInitConfig, written: Written): string;
 export function run(args: {
   argv: string[];

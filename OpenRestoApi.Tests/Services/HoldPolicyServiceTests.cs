@@ -23,13 +23,77 @@ public class HoldPolicyServiceTests
     private static HoldPolicyService NewService(AppDbContext db)
         => new(new RestaurantRepository(db), new BookingRepository(db));
 
+    /// <summary>Section 1 with table 1 in restaurant 1: the table every explicit-table request below names.</summary>
+    private static void SeedTable(AppDbContext db)
+    {
+        db.Sections.Add(new Section { Id = 1, Name = "Main", RestaurantId = 1 });
+        db.Tables.Add(new Table { Id = 1, Name = "T1", Seats = 4, SectionId = 1 });
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task ValidateAsync_ReturnsEligible_ForATableOfTheRestaurantInItsSection()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(ValidateAsync_ReturnsEligible_ForATableOfTheRestaurantInItsSection));
+        SeedRestaurant(db);
+        SeedTable(db);
+
+        HoldPolicyResult result = await NewService(db).ValidateAsync(1, 1, 1, DateTime.UtcNow.AddDays(1), seats: 2);
+
+        Assert.Equal(HoldPolicyStatus.Eligible, result.Status);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_ReturnsRejected_ForATableOfAnotherRestaurant()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(ValidateAsync_ReturnsRejected_ForATableOfAnotherRestaurant));
+        SeedRestaurant(db);
+        db.Restaurants.Add(new Restaurant { Id = 2, Name = "Other", OpenTime = "00:00", CloseTime = "23:59", Timezone = "UTC" });
+        db.Sections.Add(new Section { Id = 5, Name = "Theirs", RestaurantId = 2 });
+        db.Tables.Add(new Table { Id = 9, Name = "T9", Seats = 4, SectionId = 5 });
+        db.SaveChanges();
+
+        HoldPolicyResult result = await NewService(db).ValidateAsync(1, 9, 5, DateTime.UtcNow.AddDays(1), seats: 2);
+
+        Assert.Equal(HoldPolicyStatus.Rejected, result.Status);
+        Assert.Equal(ErrorCodes.BookingInvalidTableForRestaurant, result.Code);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_ReturnsRejected_ForATableInAnotherSection()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(ValidateAsync_ReturnsRejected_ForATableInAnotherSection));
+        SeedRestaurant(db);
+        SeedTable(db);
+        db.Sections.Add(new Section { Id = 2, Name = "Patio", RestaurantId = 1 });
+        db.SaveChanges();
+
+        HoldPolicyResult result = await NewService(db).ValidateAsync(1, 1, 2, DateTime.UtcNow.AddDays(1), seats: 2);
+
+        Assert.Equal(HoldPolicyStatus.Rejected, result.Status);
+        Assert.Equal(ErrorCodes.BookingInvalidTableForRestaurant, result.Code);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_ReturnsRejected_ForATableThatDoesNotExist()
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(ValidateAsync_ReturnsRejected_ForATableThatDoesNotExist));
+        SeedRestaurant(db);
+        SeedTable(db);
+
+        HoldPolicyResult result = await NewService(db).ValidateAsync(1, 404, 1, DateTime.UtcNow.AddDays(1), seats: 2);
+
+        Assert.Equal(HoldPolicyStatus.Rejected, result.Status);
+        Assert.Equal(ErrorCodes.BookingInvalidTableForRestaurant, result.Code);
+    }
+
     [Fact]
     public async Task ValidateAsync_ReturnsNotFound_WhenRestaurantMissing()
     {
         using AppDbContext db = TestDbFactory.Create(nameof(ValidateAsync_ReturnsNotFound_WhenRestaurantMissing));
         HoldPolicyService svc = NewService(db);
 
-        HoldPolicyResult result = await svc.ValidateAsync(999, 1, DateTime.UtcNow.AddDays(1), seats: 2);
+        HoldPolicyResult result = await svc.ValidateAsync(999, 1, 1, DateTime.UtcNow.AddDays(1), seats: 2);
 
         Assert.Equal(HoldPolicyStatus.NotFound, result.Status);
         Assert.Null(result.Restaurant);
@@ -42,7 +106,7 @@ public class HoldPolicyServiceTests
         SeedRestaurant(db);
         HoldPolicyService svc = NewService(db);
 
-        HoldPolicyResult result = await svc.ValidateAsync(1, 1, DateTime.UtcNow.AddDays(-1), seats: 2);
+        HoldPolicyResult result = await svc.ValidateAsync(1, 1, 1, DateTime.UtcNow.AddDays(-1), seats: 2);
 
         Assert.Equal(HoldPolicyStatus.Rejected, result.Status);
         Assert.Equal("Cannot hold a table for a past time.", result.FailureMessage);
@@ -61,7 +125,7 @@ public class HoldPolicyServiceTests
         HoldPolicyService svc = NewService(db);
 
         DateTime testDate = DateTime.UtcNow.Date.AddDays(1).AddHours(12);
-        HoldPolicyResult result = await svc.ValidateAsync(1, 1, testDate, seats: 2);
+        HoldPolicyResult result = await svc.ValidateAsync(1, 1, 1, testDate, seats: 2);
 
         Assert.Equal(HoldPolicyStatus.Rejected, result.Status);
         Assert.Contains("paused until", result.FailureMessage);
@@ -77,9 +141,10 @@ public class HoldPolicyServiceTests
         Restaurant restaurant = db.Restaurants.First();
         restaurant.BookingsPausedUntil = DateTime.UtcNow.AddHours(1);
         db.SaveChanges();
+        SeedTable(db);
         HoldPolicyService svc = NewService(db);
 
-        HoldPolicyResult result = await svc.ValidateAsync(1, 1, DateTime.UtcNow.Date.AddDays(1).AddHours(12), seats: 2);
+        HoldPolicyResult result = await svc.ValidateAsync(1, 1, 1, DateTime.UtcNow.Date.AddDays(1).AddHours(12), seats: 2);
 
         Assert.Equal(HoldPolicyStatus.Eligible, result.Status);
     }
@@ -97,7 +162,7 @@ public class HoldPolicyServiceTests
         HoldPolicyService svc = NewService(db);
 
         DateTime testDate = DateTime.UtcNow.Date.AddDays(1).AddHours(12);
-        HoldPolicyResult result = await svc.ValidateAsync(1, 1, testDate, seats: 2);
+        HoldPolicyResult result = await svc.ValidateAsync(1, 1, 1, testDate, seats: 2);
 
         Assert.Equal(HoldPolicyStatus.Rejected, result.Status);
         Assert.Contains("walk-ins only", result.FailureMessage);
@@ -118,7 +183,7 @@ public class HoldPolicyServiceTests
         db.SaveChanges();
         HoldPolicyService svc = NewService(db);
 
-        HoldPolicyResult result = await svc.ValidateAsync(1, 1, testDate, seats: 2);
+        HoldPolicyResult result = await svc.ValidateAsync(1, 1, 1, testDate, seats: 2);
 
         Assert.Equal(HoldPolicyStatus.Rejected, result.Status);
         Assert.Contains("walk-ins only on the selected day", result.FailureMessage);
@@ -138,7 +203,7 @@ public class HoldPolicyServiceTests
 
         // 10:00 is inside the uniform 09:00–17:00 but outside the per-day 12:00–14:00
         DateTime testDate = DateTime.UtcNow.Date.AddDays(1).AddHours(10);
-        HoldPolicyResult result = await svc.ValidateAsync(1, 1, testDate, seats: 2);
+        HoldPolicyResult result = await svc.ValidateAsync(1, 1, 1, testDate, seats: 2);
 
         Assert.Equal(HoldPolicyStatus.Rejected, result.Status);
         Assert.Equal("The restaurant is closed at the requested time.", result.FailureMessage);
@@ -154,10 +219,11 @@ public class HoldPolicyServiceTests
             OpenHoursJson = """{"1":{"open":"12:00","close":"14:00"},"2":{"open":"12:00","close":"14:00"},"3":{"open":"12:00","close":"14:00"},"4":{"open":"12:00","close":"14:00"},"5":{"open":"12:00","close":"14:00"},"6":{"open":"12:00","close":"14:00"},"7":{"open":"12:00","close":"14:00"}}"""
         });
         db.SaveChanges();
+        SeedTable(db);
         HoldPolicyService svc = NewService(db);
 
         DateTime testDate = DateTime.UtcNow.Date.AddDays(1).AddHours(12).AddMinutes(30);
-        HoldPolicyResult result = await svc.ValidateAsync(1, 1, testDate, seats: 2);
+        HoldPolicyResult result = await svc.ValidateAsync(1, 1, 1, testDate, seats: 2);
 
         Assert.Equal(HoldPolicyStatus.Eligible, result.Status);
         Assert.NotNull(result.Restaurant);
@@ -179,7 +245,7 @@ public class HoldPolicyServiceTests
         db.SaveChanges();
         HoldPolicyService svc = NewService(db);
 
-        HoldPolicyResult result = await svc.ValidateAsync(1, 1, testDate, seats: 2);
+        HoldPolicyResult result = await svc.ValidateAsync(1, 1, 1, testDate, seats: 2);
 
         Assert.Equal(HoldPolicyStatus.Rejected, result.Status);
     }
@@ -193,11 +259,12 @@ public class HoldPolicyServiceTests
             Id = 1, Name = "T", Timezone = "UTC", OpenTime = "", CloseTime = ""
         });
         db.SaveChanges();
+        SeedTable(db);
         HoldPolicyService svc = NewService(db);
 
         // Falls back to the default 09:00-22:00 window, so noon is within hours.
         DateTime testDate = DateTime.UtcNow.Date.AddDays(1).AddHours(12);
-        HoldPolicyResult result = await svc.ValidateAsync(1, 1, testDate, seats: 2);
+        HoldPolicyResult result = await svc.ValidateAsync(1, 1, 1, testDate, seats: 2);
 
         Assert.Equal(HoldPolicyStatus.Eligible, result.Status);
     }
@@ -212,10 +279,11 @@ public class HoldPolicyServiceTests
             Id = 1, Name = "T", Timezone = "UTC", OpenTime = "18:00", CloseTime = "02:00"
         });
         db.SaveChanges();
+        SeedTable(db);
         HoldPolicyService svc = NewService(db);
 
         DateTime testDate = DateTime.UtcNow.Date.AddDays(1).AddHours(23);
-        HoldPolicyResult result = await svc.ValidateAsync(1, 1, testDate, seats: 2);
+        HoldPolicyResult result = await svc.ValidateAsync(1, 1, 1, testDate, seats: 2);
 
         Assert.Equal(HoldPolicyStatus.Eligible, result.Status);
     }
@@ -233,7 +301,7 @@ public class HoldPolicyServiceTests
         HoldPolicyService svc = NewService(db);
 
         DateTime testDate = DateTime.UtcNow.Date.AddDays(1).AddHours(12);
-        HoldPolicyResult result = await svc.ValidateAsync(1, 1, testDate, seats: 2);
+        HoldPolicyResult result = await svc.ValidateAsync(1, 1, 1, testDate, seats: 2);
 
         Assert.Equal(HoldPolicyStatus.Rejected, result.Status);
     }
@@ -247,10 +315,11 @@ public class HoldPolicyServiceTests
             Id = 1, Name = "T", Timezone = "UTC", OpenTime = "00:00", CloseTime = "00:00"
         });
         db.SaveChanges();
+        SeedTable(db);
         HoldPolicyService svc = NewService(db);
 
         DateTime testDate = DateTime.UtcNow.Date.AddDays(1).AddHours(3);
-        HoldPolicyResult result = await svc.ValidateAsync(1, 1, testDate, seats: 2);
+        HoldPolicyResult result = await svc.ValidateAsync(1, 1, 1, testDate, seats: 2);
 
         Assert.Equal(HoldPolicyStatus.Eligible, result.Status);
     }
@@ -264,11 +333,12 @@ public class HoldPolicyServiceTests
             Id = 1, Name = "T", Timezone = "Not/A/Real/Timezone", OpenTime = "00:00", CloseTime = "23:59"
         });
         db.SaveChanges();
+        SeedTable(db);
         HoldPolicyService svc = NewService(db);
 
         // Unspecified-kind date forces the timezone-conversion branch.
         var testDate = DateTime.SpecifyKind(DateTime.UtcNow.Date.AddDays(1).AddHours(12), DateTimeKind.Unspecified);
-        HoldPolicyResult result = await svc.ValidateAsync(1, 1, testDate, seats: 2);
+        HoldPolicyResult result = await svc.ValidateAsync(1, 1, 1, testDate, seats: 2);
 
         Assert.Equal(HoldPolicyStatus.Eligible, result.Status);
     }
@@ -284,9 +354,10 @@ public class HoldPolicyServiceTests
             Id = 1, RestaurantId = 1, TableId = 1, SectionId = 1, Date = date, BookingRef = "B1"
         });
         db.SaveChanges();
+        SeedTable(db);
         HoldPolicyService svc = NewService(db);
 
-        HoldPolicyResult result = await svc.ValidateAsync(1, 1, date, seats: 2);
+        HoldPolicyResult result = await svc.ValidateAsync(1, 1, 1, date, seats: 2);
 
         Assert.Equal(HoldPolicyStatus.Booked, result.Status);
         Assert.Equal("This table is already booked for that time.", result.FailureMessage);
@@ -302,7 +373,7 @@ public class HoldPolicyServiceTests
         db.SaveChanges();
         HoldPolicyService svc = NewService(db);
 
-        HoldPolicyResult result = await svc.ValidateAsync(1, 1, DateTime.UtcNow.AddDays(1), seats: 2);
+        HoldPolicyResult result = await svc.ValidateAsync(1, 1, 1, DateTime.UtcNow.AddDays(1), seats: 2);
 
         Assert.Equal(HoldPolicyStatus.Booked, result.Status);
         Assert.Equal(ErrorCodes.TableWalkInOnly, result.Code);
@@ -323,10 +394,11 @@ public class HoldPolicyServiceTests
         mockBookingRepo
             .Setup(b => b.IsTableBookedOnDateAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<int>()))
             .ReturnsAsync(false);
+        SeedTable(db);
         var svc = new HoldPolicyService(new RestaurantRepository(db), mockBookingRepo.Object);
 
         var testDate = DateTime.UtcNow.Date.AddDays(1).AddHours(12);
-        await svc.ValidateAsync(1, 1, testDate, seats: 2);
+        await svc.ValidateAsync(1, 1, 1, testDate, seats: 2);
 
         mockBookingRepo.Verify(
             b => b.IsTableBookedOnDateAsync(It.IsAny<int>(), It.IsAny<DateTime>(), 90), Times.Once);

@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from "@testing-library/react-
 import { Platform } from "react-native";
 import { PushNotificationsCard } from "@/components/admin/settings/PushNotificationsCard";
 import * as notificationsApi from "@/api/notifications";
+import { PushSubscribeRejected } from "@/api/notifications";
 
 jest.mock("@expo/vector-icons", () => ({
   Ionicons: () => null,
@@ -27,6 +28,7 @@ jest.mock("@/api/notifications", () => ({
   getVapidPublicKey: jest.fn(),
   subscribePush: jest.fn(),
   unsubscribePush: jest.fn(),
+  PushSubscribeRejected: jest.requireActual("@/api/notifications").PushSubscribeRejected,
 }));
 
 // Typed shortcuts
@@ -315,6 +317,57 @@ describe("PushNotificationsCard", () => {
       await waitFor(() => {
         expect(screen.getByText("Failed to enable push notifications.")).toBeTruthy();
       });
+    });
+
+    it("stays inactive, says why and takes the browser subscription back when the server refuses", async () => {
+      const sw = await renderInactive();
+      const sub = makeSub();
+      (sw.pushManager.subscribe as jest.Mock).mockResolvedValue(sub);
+      mockSubscribePush.mockRejectedValue(new PushSubscribeRejected("Session ended"));
+
+      await act(async () => {
+        fireEvent.press(screen.getByText("Enable push notifications"));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("Session ended")).toBeTruthy();
+      });
+      expect(screen.getByText("Enable push notifications")).toBeTruthy();
+      expect(screen.queryByText("Push notifications active for all locations")).toBeNull();
+      expect(sub.unsubscribe).toHaveBeenCalledTimes(1);
+      expect(console.error).not.toHaveBeenCalled();
+    });
+
+    it("falls back to the generic error when the refusal carries no reason", async () => {
+      const sw = await renderInactive();
+      (sw.pushManager.subscribe as jest.Mock).mockResolvedValue(makeSub());
+      mockSubscribePush.mockRejectedValue(new PushSubscribeRejected(""));
+
+      await act(async () => {
+        fireEvent.press(screen.getByText("Enable push notifications"));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("Failed to enable push notifications.")).toBeTruthy();
+      });
+      expect(screen.queryByText("Push notifications active for all locations")).toBeNull();
+    });
+
+    it("stays inactive with the generic error when the network is down", async () => {
+      const sw = await renderInactive();
+      const sub = makeSub();
+      (sw.pushManager.subscribe as jest.Mock).mockResolvedValue(sub);
+      mockSubscribePush.mockRejectedValue(new TypeError("Failed to fetch"));
+
+      await act(async () => {
+        fireEvent.press(screen.getByText("Enable push notifications"));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("Failed to enable push notifications.")).toBeTruthy();
+      });
+      expect(screen.queryByText("Push notifications active for all locations")).toBeNull();
+      expect(sub.unsubscribe).toHaveBeenCalledTimes(1);
     });
   });
 

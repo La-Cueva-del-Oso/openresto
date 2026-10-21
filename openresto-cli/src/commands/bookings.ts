@@ -1,9 +1,19 @@
 import { Command } from "commander";
-import { clientFor, getGlobalOptions, handle } from "../context.js";
+import {
+  clientFor,
+  getGlobalOptions,
+  handle,
+  printMessage,
+} from "../context.js";
+import { t } from "../i18n.js";
 import { printResult } from "../output.js";
 import { confirmOrExit } from "../confirm.js";
 import { omitUndefined, readTextInput } from "../io.js";
 import { readAllStdin } from "../prompt.js";
+
+const BOOKING_DATE_HELP =
+  "Booking date/time (ISO 8601). Without a time zone it is the location's local time; " +
+  "with Z or an offset it is that exact instant";
 
 const LIST_COLUMNS = [
   "id",
@@ -98,7 +108,7 @@ export function registerBookingsCommands(program: Command): void {
     .requiredOption("--location <id>", "Restaurant/location id", Number)
     .requiredOption("--section <id>", "Section id", Number)
     .requiredOption("--table <id>", "Table id", Number)
-    .requiredOption("--date <date>", "Booking date/time (ISO 8601, UTC)")
+    .requiredOption("--date <date>", BOOKING_DATE_HELP)
     .requiredOption("--seats <n>", "Party size", Number)
     .requiredOption("--email <email>", "Customer email")
     .option("--name <name>", "Customer name")
@@ -140,7 +150,7 @@ export function registerBookingsCommands(program: Command): void {
     .option("--location <id>", "Restaurant/location id", Number)
     .option("--section <id>", "Section id", Number)
     .option("--table <id>", "Table id", Number)
-    .option("--date <date>", "Booking date/time (ISO 8601, UTC)")
+    .option("--date <date>", BOOKING_DATE_HELP)
     .option("--seats <n>", "Party size", Number)
     .option("--email <email>", "Customer email")
     .option("--name <name>", "Customer name")
@@ -193,7 +203,7 @@ export function registerBookingsCommands(program: Command): void {
         await client.post(
           `/api/admin/bookings/${encodeURIComponent(id)}/cancel`,
         );
-        console.log(`Booking ${id} cancelled.`);
+        printMessage(command, "booking.cancelled", { id });
       }),
     );
 
@@ -206,7 +216,7 @@ export function registerBookingsCommands(program: Command): void {
         await client.post(
           `/api/admin/bookings/${encodeURIComponent(id)}/restore`,
         );
-        console.log(`Booking ${id} restored.`);
+        printMessage(command, "booking.restored", { id });
       }),
     );
 
@@ -248,7 +258,7 @@ export function registerBookingsCommands(program: Command): void {
         ) => {
           const body = await readEmailBody(options.bodyFile);
           if (!body.trim()) {
-            throw new Error("The email body is empty.");
+            throw new Error(t("booking.emailEmpty"));
           }
           const { client } = clientFor(command);
           const globals = getGlobalOptions(command);
@@ -270,12 +280,12 @@ export function registerBookingsCommands(program: Command): void {
         async (id: string, options: { yes?: boolean }, command: Command) => {
           const globals = getGlobalOptions(command);
           await confirmOrExit(
-            `This will permanently delete booking ${id}.`,
+            t("booking.purgeConfirm", { id }),
             Boolean(options.yes ?? globals.yes),
           );
           const { client } = clientFor(command);
           await client.delete(`/api/admin/bookings/${encodeURIComponent(id)}`);
-          console.log(`Booking ${id} purged.`);
+          printMessage(command, "booking.purged", { id });
         },
       ),
     );
@@ -290,9 +300,7 @@ async function readEmailBody(bodyFile: string | undefined): Promise<string> {
     return readTextInput(bodyFile);
   }
   if (process.stdin.isTTY) {
-    throw new Error(
-      "No message body. Pass --body-file <path>, or pipe the body into stdin.",
-    );
+    throw new Error(t("booking.emailNoBody"));
   }
   return readAllStdin();
 }

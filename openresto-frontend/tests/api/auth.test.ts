@@ -251,13 +251,30 @@ describe("auth api", () => {
         ok: true,
         json: async () => ({ message: "Done" }),
       });
-      const res = await setupPvq("q", "a");
+      const res = await setupPvq("pw", "q", "a");
       expect(res).toEqual({ ok: true, message: "Done" });
+    });
+
+    it("sends the current password with the question and answer", async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ message: "Done" }) });
+      await setupPvq("pw", "q", "a");
+      const [url, init] = mockFetch.mock.calls[0];
+      expect(String(url)).toContain("/admin/auth/pvq/setup");
+      expect(JSON.parse(init.body)).toEqual({ currentPassword: "pw", question: "q", answer: "a" });
+    });
+
+    it("surfaces the server's wrong-password message", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ message: "Current password is incorrect." }),
+      });
+      const res = await setupPvq("nope", "q", "a");
+      expect(res).toEqual({ ok: false, message: "Current password is incorrect." });
     });
 
     it("returns error on network fail", async () => {
       mockFetch.mockRejectedValueOnce(new Error("fail"));
-      const res = await setupPvq("q", "a");
+      const res = await setupPvq("pw", "q", "a");
       expect(res.ok).toBe(false);
     });
 
@@ -266,7 +283,7 @@ describe("auth api", () => {
         ok: false,
         json: () => Promise.reject(new Error("bad json")),
       });
-      const res = await setupPvq("q", "a");
+      const res = await setupPvq("pw", "q", "a");
       expect(res).toEqual({ ok: false, message: "Failed." });
     });
 
@@ -275,7 +292,7 @@ describe("auth api", () => {
         ok: true,
         json: () => Promise.reject(new Error("bad json")),
       });
-      const res = await setupPvq("q", "a");
+      const res = await setupPvq("pw", "q", "a");
       expect(res).toEqual({ ok: true, message: "Done." });
     });
   });

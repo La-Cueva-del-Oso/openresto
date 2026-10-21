@@ -1,4 +1,5 @@
 using OpenRestoApi.Core.Application.DTOs;
+using OpenRestoApi.Core.Application.Exceptions;
 using OpenRestoApi.Core.Application.Services;
 using OpenRestoApi.Core.Application.Utilities;
 using OpenRestoApi.Core.Domain;
@@ -100,22 +101,99 @@ public partial class AdminServiceTests
     }
 
     [Fact]
-    public async Task GetBookingsAsync_EmailSearch_StillFiltersCorrectly_ButRedactsTheMatchedRow()
+    public async Task GetBookingsAsync_RejectsTheEmailFilter_ForAnApiKeyWithoutGuestsRead()
     {
-        // A search by an email the caller already supplied still has to find the right booking —
-        // redaction only hides the *display* fields on the result, it must never make the filter
-        // itself silently wrong (see the task's "sane, not silently wrong" requirement).
+        SeedBase();
+        SeedOneBooking(1, "Alice Smith", "alice@example.com");
+        AdminService svc = CreateService(FakeCurrentUser.ApiKey((ApiKeyScopes.Bookings, ApiKeyScopes.Read)));
+
+        ValidationException ex = await Assert.ThrowsAsync<ValidationException>(
+            () => svc.GetBookingsAsync(1, null, "all", email: "@example.com"));
+
+        Assert.Equal(ErrorCodes.BookingGuestFilterForbidden, ex.Code);
+    }
+
+    [Fact]
+    public async Task GetBookingsAsync_EmailFilter_FindsTheBooking_ForAnApiKeyWithGuestsRead()
+    {
+        SeedBase();
+        SeedOneBooking(1, "Alice Smith", "alice@example.com");
+        SeedOneBooking(2, "Bob Jones", "bob@example.com");
+        AdminService svc = CreateService(FakeCurrentUser.ApiKey(
+            (ApiKeyScopes.Bookings, ApiKeyScopes.Read),
+            (ApiKeyScopes.Guests, ApiKeyScopes.Read)));
+
+        List<BookingDetailDto> results = await svc.GetBookingsAsync(1, null, "all", email: "alice");
+
+        Assert.Equal(1, Assert.Single(results).Id);
+    }
+
+    [Fact]
+    public async Task GetBookingsAsync_EmailFilter_FindsTheBooking_ForAJwtSession()
+    {
+        SeedBase();
+        SeedOneBooking(1, "Alice Smith", "alice@example.com");
+        SeedOneBooking(2, "Bob Jones", "bob@example.com");
+        AdminService svc = CreateService(FakeCurrentUser.Anonymous());
+
+        List<BookingDetailDto> results = await svc.GetBookingsAsync(1, null, "all", email: "alice");
+
+        Assert.Equal(1, Assert.Single(results).Id);
+    }
+
+    [Fact]
+    public async Task GetBookingsAsync_IgnoresABlankEmailFilter_ForAnApiKeyWithoutGuestsRead()
+    {
+        SeedBase();
+        SeedOneBooking();
+        AdminService svc = CreateService(FakeCurrentUser.ApiKey((ApiKeyScopes.Bookings, ApiKeyScopes.Read)));
+
+        List<BookingDetailDto> results = await svc.GetBookingsAsync(1, null, "all", email: "  ");
+
+        Assert.Single(results);
+    }
+
+    [Theory]
+    [InlineData("alice")]
+    [InlineData("example.com")]
+    public async Task GetBookingsAsync_QueryDoesNotMatchGuestIdentity_ForAnApiKeyWithoutGuestsRead(string query)
+    {
+        SeedBase();
+        SeedOneBooking(1, "Alice Smith", "alice@example.com");
+        AdminService svc = CreateService(FakeCurrentUser.ApiKey((ApiKeyScopes.Bookings, ApiKeyScopes.Read)));
+
+        List<BookingDetailDto> results = await svc.GetBookingsAsync(1, null, "all", query: query);
+
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task GetBookingsAsync_QueryStillMatchesTheBookingRef_ForAnApiKeyWithoutGuestsRead()
+    {
         SeedBase();
         SeedOneBooking(1, "Alice Smith", "alice@example.com");
         SeedOneBooking(2, "Bob Jones", "bob@example.com");
         AdminService svc = CreateService(FakeCurrentUser.ApiKey((ApiKeyScopes.Bookings, ApiKeyScopes.Read)));
 
-        List<BookingDetailDto> results = await svc.GetBookingsAsync(1, null, "all", email: "alice");
+        List<BookingDetailDto> results = await svc.GetBookingsAsync(1, null, "all", query: "ref2");
 
-        BookingDetailDto match = Assert.Single(results);
-        Assert.Equal(1, match.Id);
-        Assert.Null(match.CustomerName);
-        Assert.Null(match.CustomerEmail);
+        Assert.Equal(2, Assert.Single(results).Id);
+    }
+
+    [Theory]
+    [InlineData("alice")]
+    [InlineData("example.com")]
+    public async Task GetBookingsAsync_QueryMatchesGuestIdentity_ForAnApiKeyWithGuestsRead(string query)
+    {
+        SeedBase();
+        SeedOneBooking(1, "Alice Smith", "alice@example.com");
+        AdminService svc = CreateService(FakeCurrentUser.ApiKey(
+            (ApiKeyScopes.Bookings, ApiKeyScopes.Read),
+            (ApiKeyScopes.Guests, ApiKeyScopes.Read)));
+
+        List<BookingDetailDto> results = await svc.GetBookingsAsync(1, null, "all", query: query);
+
+        Assert.Single(results);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   getEmailSettings,
   saveEmailSettings,
@@ -19,6 +20,7 @@ export type EmailTestState = "idle" | "testing" | "ok" | "fail";
  * API stores them as a single record, so the toggle stays in the card that owns that save.
  */
 export function useEmailSettings() {
+  const { t } = useTranslation();
   const [host, setHost] = useState("");
   const [port, setPort] = useState("587");
   const [username, setUsername] = useState("");
@@ -34,9 +36,15 @@ export function useEmailSettings() {
   const [sendConfirmations, setSendConfirmations] = useState(false);
   const [activeProviderId, setActiveProviderId] = useState<string | null>(null);
   const [failures, setFailures] = useState<EmailFailureDto[]>([]);
+  const [stored, setStored] = useState<StoredDestination | null>(null);
+  const [loadedPassword, setLoadedPassword] = useState("");
 
   useEffect(() => {
     getEmailSettings().then((s) => {
+      if (s.isConfigured) {
+        setStored({ host: s.host, port: s.port, username: s.username, enableSsl: s.enableSsl });
+      }
+      setLoadedPassword(s.password);
       setHost(s.host);
       setPort(String(s.port));
       setUsername(s.username);
@@ -71,24 +79,43 @@ export function useEmailSettings() {
     sendBookingConfirmations: sendConfirmations,
   });
 
+  /** The server only reuses the stored password for the destination it was saved with. */
+  const passwordRequired =
+    stored !== null &&
+    (password === "" || password === loadedPassword) &&
+    !isSameDestination(stored, buildPayload());
+
   const handleSave = async () => {
     setSaving(true);
     setSaveMsg(null);
-    const result = await saveEmailSettings(buildPayload());
+    const payload = buildPayload();
+    const result = await saveEmailSettings(payload);
     setSaving(false);
-    if (result) {
-      setSaveMsg({ text: result.message, ok: true });
+    if (result?.ok) {
+      setSaveMsg({ text: result.data.message, ok: true });
       setIsConfigured(true);
+      setStored(destinationOf(payload));
     } else {
-      setSaveMsg({ text: "Failed to save.", ok: false });
+      setSaveMsg({
+        text: result?.message ?? t("admin.settings.saveStatus.saveFailed"),
+        ok: false,
+      });
     }
   };
 
   const handleTest = async () => {
     setTestState("testing");
     setTestMsg("");
-    await saveEmailSettings(buildPayload());
+    const payload = buildPayload();
+    const saved = await saveEmailSettings(payload);
+    // Testing after a refused save would report on the old server, not on what is in the fields.
+    if (!saved?.ok) {
+      setTestState("fail");
+      setTestMsg(saved?.message ?? t("admin.settings.saveStatus.saveFailed"));
+      return;
+    }
     setIsConfigured(true);
+    setStored(destinationOf(payload));
     const result = await testEmailConnection();
     setTestState(result.ok ? "ok" : "fail");
     setTestMsg(result.message);
@@ -134,7 +161,32 @@ export function useEmailSettings() {
     toggleConfirmations,
     /** Confirmations can only be enabled once the connection has actually been proven. */
     confirmDisabled: !isConfigured && testState !== "ok",
+    passwordRequired,
   };
+}
+
+interface StoredDestination {
+  host: string;
+  port: number;
+  username: string;
+  enableSsl: boolean;
+}
+
+const destinationOf = ({ host, port, username, enableSsl }: StoredDestination) => ({
+  host,
+  port,
+  username,
+  enableSsl,
+});
+
+/** Mirrors `EmailSettingsService.SameDestination`: host ignores case and padding, the rest is exact. */
+function isSameDestination(stored: StoredDestination, next: StoredDestination) {
+  return (
+    stored.host.trim().toLowerCase() === next.host.trim().toLowerCase() &&
+    stored.port === next.port &&
+    stored.username === next.username &&
+    stored.enableSsl === next.enableSsl
+  );
 }
 
 export type EmailSettingsState = ReturnType<typeof useEmailSettings>;

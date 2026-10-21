@@ -30,6 +30,7 @@ public partial class BookingServiceTests
         // interprets as "all candidates held"). Tests that don't exercise auto-assign can pass
         // their own mock.
         holdService ??= new OpenRestoApi.Infrastructure.Holds.HoldService(new UtcClock());
+        TestSeed.OpenAllDay(db);
         return new BookingService(
             new BookingRepository(db),
             new TableRepository(db),
@@ -822,6 +823,7 @@ public partial class BookingServiceTests
             .Returns(new AutoAssignResult("hold-fresh", DateTime.UtcNow.AddMinutes(5), 1, 1));
         holdMock.Setup(h => h.ReleaseHold(It.IsAny<string>()));
 
+        TestSeed.OpenAllDay(db);
         BookingService svc = new BookingService(
             new BookingRepository(db),
             new TableRepository(db),
@@ -863,6 +865,7 @@ public partial class BookingServiceTests
             .Returns(new AutoAssignResult("hold-fresh", DateTime.UtcNow.AddMinutes(5), 1, 1));
         holdMock.Setup(h => h.ReleaseHold(It.IsAny<string>()));
 
+        TestSeed.OpenAllDay(db);
         BookingService svc = new BookingService(
             new BookingRepository(db),
             new TableRepository(db),
@@ -889,6 +892,8 @@ public partial class BookingServiceTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("not-an-email")]
+    [InlineData("guest\u001b[2J@example.com")]
+    [InlineData("guest@exa\u0000mple.com")]
     public async Task CreateBookingAsync_Rejects_A_Missing_Or_Malformed_Email(string? email)
     {
         using AppDbContext db = TestDbFactory.Create(nameof(CreateBookingAsync_Rejects_A_Missing_Or_Malformed_Email) + (email ?? "null"));
@@ -1164,6 +1169,7 @@ public partial class BookingServiceTests
 
         var notificationQueue = new Mock<INotificationQueue>();
         var holdSvc = new OpenRestoApi.Infrastructure.Holds.HoldService(new UtcClock());
+        TestSeed.OpenAllDay(db);
         BookingService svc = new BookingService(
             new BookingRepository(db),
             new TableRepository(db),
@@ -1203,6 +1209,7 @@ public partial class BookingServiceTests
 
         var notificationQueue = new Mock<INotificationQueue>();
         var holdSvc = new OpenRestoApi.Infrastructure.Holds.HoldService(new UtcClock());
+        TestSeed.OpenAllDay(db);
         BookingService svc = new BookingService(
             new BookingRepository(db),
             new TableRepository(db),
@@ -1701,6 +1708,7 @@ public partial class BookingServiceTests
             .Returns(new HoldEntry("hold-T2", TableId: 2, SectionId: 1, RestaurantId: 1, Date: date, ExpiresAt: DateTime.UtcNow.AddMinutes(5)));
         holdMock.Setup(h => h.IsTableHeld(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<string?>(), It.IsAny<int>())).Returns(false);
         holdMock.Setup(h => h.ReleaseHold(It.IsAny<string>()));
+        TestSeed.OpenAllDay(db);
         BookingService svc = new BookingService(
             new BookingRepository(db),
             new TableRepository(db),

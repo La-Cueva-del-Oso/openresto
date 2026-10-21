@@ -8,6 +8,7 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories;
 [OnlyAccessibleBy("OpenRestoApi.Extensions.ServiceCollectionExtensions")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.NotificationServiceTests")]
 [OnlyAccessibleBy("OpenRestoApi.Tests.Services.BookingNotificationServiceTests")]
+[OnlyAccessibleBy("OpenRestoApi.Tests.Services.GuestDataRetentionServiceTests")]
 [ExternalAccessAllowed]
 internal class AdminNotificationRepository(AppDbContext db) : IAdminNotificationRepository
 {
@@ -122,6 +123,9 @@ internal class AdminNotificationRepository(AppDbContext db) : IAdminNotification
 
         return await q.ExecuteDeleteAsync();
     }
+
+    public async Task<int> DeleteOlderThanAsync(DateTime cutoffUtc)
+        => await _db.AdminNotifications.Where(n => n.CreatedAt < cutoffUtc).ExecuteDeleteAsync();
 
     public async Task<bool> ExistsNearlyFullForDayAsync(int restaurantId, DateTime dayStartUtc, DateTime dayEndUtc)
     {

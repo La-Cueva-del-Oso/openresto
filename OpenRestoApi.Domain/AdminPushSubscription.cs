@@ -8,10 +8,16 @@ namespace OpenRestoApi.Core.Domain;
 /// at the others. Rows used to be per (endpoint, restaurant), which meant the fan-out for
 /// a location nobody happened to be viewing when they subscribed found no subscribers at
 /// all.
+///
+/// Owned by the account that registered it: the browser is the same one the next person may
+/// sign in on, and a deactivated or password-reset account must stop receiving bookings.
 /// </summary>
 public class AdminPushSubscription
 {
     public int Id { get; set; }
+
+    public int UserId { get; set; }
+    public AdminCredential? User { get; set; }
 
     // Web Push subscription fields from the browser's PushSubscription object
     public string Endpoint { get; set; } = string.Empty;

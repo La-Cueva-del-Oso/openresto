@@ -35,4 +35,24 @@ public class GuestPushSettingsTests
     {
         Assert.Equal([24, 2], new GuestPushSettings().ReminderLeads());
     }
+
+    [Theory]
+    [InlineData("00:00:00")]
+    [InlineData("-00:00:05")]
+    [InlineData("-00:00:00.001")]
+    [InlineData("100.00:00:00")]
+    public void SendTimeout_ReplacesAValueTheTimerCannotTakeWithTheDefault(string value)
+    {
+        var settings = new GuestPushSettings { SendTimeout = TimeSpan.Parse(value, System.Globalization.CultureInfo.InvariantCulture) };
+
+        Assert.Equal(GuestPushSettings.DefaultSendTimeout, settings.SendTimeout);
+    }
+
+    [Fact]
+    public void SendTimeout_KeepsAPositiveValue()
+    {
+        var settings = new GuestPushSettings { SendTimeout = TimeSpan.FromMilliseconds(50) };
+
+        Assert.Equal(TimeSpan.FromMilliseconds(50), settings.SendTimeout);
+    }
 }

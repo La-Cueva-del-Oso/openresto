@@ -44,6 +44,27 @@ public class PublicOnlyConnectorTests
     }
 
     [Fact]
+    public async Task Send_ResolvesTheHostOncePerConnection()
+    {
+        int lookups = 0;
+        var connector = new PublicOnlyConnector((_, _) => { lookups++; return ResolvesTo("10.0.0.12"); });
+
+        await SendThrough(connector, "https://push.example.com/sub");
+
+        Assert.Equal(1, lookups);
+    }
+
+    [Fact]
+    public void CreateHandler_UsesNoProxyAndFollowsNoRedirect()
+    {
+        SocketsHttpHandler handler = new PublicOnlyConnector().CreateHandler();
+
+        Assert.False(handler.UseProxy);
+        Assert.False(handler.AllowAutoRedirect);
+        Assert.NotNull(handler.ConnectCallback);
+    }
+
+    [Fact]
     public async Task Send_RefusesAPrivateLiteralWithoutResolving()
     {
         bool resolved = false;

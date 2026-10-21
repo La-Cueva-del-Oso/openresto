@@ -11,11 +11,18 @@ public interface IAdminPushSubscriptionRepository
     /// <summary>Finds the subscription for this endpoint, if any.</summary>
     Task<AdminPushSubscription?> GetByEndpointAsync(string endpoint);
 
-    /// <summary>Every subscription (used by the push fan-out — subscriptions are not per-restaurant).</summary>
-    Task<List<AdminPushSubscription>> GetAllAsync();
+    /// <summary>
+    /// Every subscription whose owner is an active account (the push fan-out — subscriptions
+    /// are not per-restaurant, but they are per-owner).
+    /// </summary>
+    Task<List<AdminPushSubscription>> GetForActiveUsersAsync();
 
-    /// <summary>Adds and saves a subscription.</summary>
-    Task<AdminPushSubscription> AddAsync(AdminPushSubscription subscription);
+    /// <summary>
+    /// Registers the endpoint for <c>subscription.UserId</c>, taking it over (and refreshing its keys)
+    /// from whoever held it. False, with nothing written, when that account is no longer active at
+    /// <paramref name="sessionVersion"/> — its sessions ended while the request was in flight.
+    /// </summary>
+    Task<bool> TryRegisterAsync(AdminPushSubscription subscription, int sessionVersion);
 
     /// <summary>Removes the given subscriptions (caller is responsible for SaveChanges — used by SendPushAsync stale cleanup).</summary>
     void RemoveRange(IEnumerable<AdminPushSubscription> subscriptions);

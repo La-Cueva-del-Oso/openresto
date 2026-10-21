@@ -84,7 +84,7 @@ jobs:
         run: npm test -- --ci --coverage --forceExit
 
       - name: Upload Frontend Coverage to Coveralls
-        uses: coverallsapp/github-action@v2
+        uses: coverallsapp/github-action@8d6379e14d29928660c4ba802d8e85393440b329 # v2.3.8
         continue-on-error: true
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -343,7 +343,7 @@ jobs:
         run: reportgenerator -reports:"TestResults/**/coverage.cobertura.xml" -targetdir:"CoverageReport" -reporttypes:"Html;Cobertura;lcov"
 
       - name: Upload Backend Coverage to Coveralls
-        uses: coverallsapp/github-action@v2
+        uses: coverallsapp/github-action@8d6379e14d29928660c4ba802d8e85393440b329 # v2.3.8
         continue-on-error: true
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -368,7 +368,7 @@ jobs:
 
       - name: Backend Coverage Summary
         if: always()
-        uses: irongut/CodeCoverageSummary@v1.3.0
+        uses: irongut/CodeCoverageSummary@51cc3a756ddcd398d447c044c02cb6aa83fdae95 # v1.3.0
         with:
           filename: "CoverageReport/Cobertura.xml"
           badge: true
@@ -377,7 +377,7 @@ jobs:
 
       - name: Add Coverage to PR
         if: github.event_name == 'pull_request'
-        uses: marocchino/sticky-pull-request-comment@v3
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
         with:
           path: code-coverage-results.md
 
@@ -389,7 +389,7 @@ jobs:
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     steps:
       - name: Finish Coveralls
-        uses: coverallsapp/github-action@v2
+        uses: coverallsapp/github-action@8d6379e14d29928660c4ba802d8e85393440b329 # v2.3.8
         continue-on-error: true
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -472,7 +472,7 @@ jobs:
           [ "$STATUS" = "200" ] || exit 1
 
       - name: OWASP ZAP API Scan
-        uses: zaproxy/action-api-scan@v0.10.0
+        uses: zaproxy/action-api-scan@5158fe4d9d8fcc75ea204db81317cce7f9e5453d # v0.10.0
         with:
           target: http://localhost:5062/openapi/v1.json
           rules_file_name: .github/.zap-rules.tsv
@@ -691,9 +691,16 @@ jobs:
         if: failure()
         run: docker compose logs --tail=100
 
+  # The PR-time path-filtered workflow, called here on a push to main so deploy can wait on it.
+  migration-check:
+    name: Migration Safety Check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/migration-check.yml
+
   deploy:
     name: Deploy to VPS
-    needs: [frontend, frontend-android, routes, backend, docker, e2e-smoke, e2e-extensive]
+    needs:
+      [frontend, frontend-android, routes, backend, docker, e2e-smoke, e2e-extensive, migration-check]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: ./.github/workflows/deploy.yml
     secrets: inherit

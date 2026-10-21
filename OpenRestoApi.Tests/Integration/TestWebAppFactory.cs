@@ -93,12 +93,11 @@ public class TestWebAppFactory : WebApplicationFactory<Program>
     }
 
     /// <summary>
-    /// A token in the shape a pre-multi-user build minted: no <c>sub</c> claim and the retired
-    /// <c>Admin</c> role. Backward compatibility for these is why services fall back to the email
-    /// claim and why both policies accept <see cref="UserRoles.LegacyAdmin"/>.
+    /// A validly signed token that names an email and a role but no account id (<c>sub</c>) —
+    /// the shape a pre-multi-user build minted. It must not authenticate.
     /// </summary>
-    public static string GenerateLegacyJwt(string email = AdminEmail)
-        => BuildToken([new Claim(ClaimTypes.Email, email), new Claim(ClaimTypes.Role, UserRoles.LegacyAdmin)]);
+    public static string GenerateJwtWithoutUserId(string email = AdminEmail)
+        => BuildToken([new Claim(ClaimTypes.Email, email), new Claim(ClaimTypes.Role, UserRoles.Owner)]);
 
     public static string GenerateJwt(int userId, string email, string role, int sessionVersion = 0)
         => BuildToken(

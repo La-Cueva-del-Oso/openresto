@@ -61,6 +61,15 @@ public class AuthService(
         return cred == null ? null : UserMapper.ToCurrentUserDto(cred);
     }
 
+    /// <summary>
+    /// A changed password drops the account's push subscriptions along with its sessions and API
+    /// keys: all are credentials a person who knew the old password may still hold. Null when the
+    /// current password is wrong or the account changed under the request (a reset, a deactivation).
+    /// </summary>
+    /// <seealso>AuthServiceTests.ChangePasswordAsync_Invalidates_A_Pending_Reset_Token</seealso>
+    /// <seealso>AuthServiceTests.ChangePasswordAsync_Keeps_The_Security_Question</seealso>
+    /// <seealso>AuthServiceTests.ChangePasswordAsync_Deletes_The_Callers_Push_Subscriptions_Only</seealso>
+    /// <seealso>AuthServiceTests.ChangePasswordAsync_Keeps_Push_Subscriptions_When_The_Current_Password_Is_Wrong</seealso>
     public virtual async Task<string?> ChangePasswordAsync(string currentPassword, string newPassword)
     {
         UserFields.ValidatePassword(newPassword);
@@ -68,9 +77,10 @@ public class AuthService(
         if (cred == null || !CredentialHelper.VerifyPassword(cred, currentPassword, _passwordService))
             return null;
         string previousHash = cred.PasswordHash;
-        (cred.PasswordHash, cred.PasswordSalt) = _passwordService.Hash(newPassword);
-        cred.RevokeSessions();
-        await _credentialRepository.SaveChangesAsync();
+        (string hash, string salt) = _passwordService.Hash(newPassword);
+        // Refused when a reset, a deactivation or another change landed since the account was read.
+        if (!await _credentialRepository.TryChangePasswordAsync(cred, hash, salt))
+            return null;
 
         _audit.RecordChange("passwordHash", previousHash, cred.PasswordHash);
         Describe(AuditActions.AuthPasswordChange, cred, $"Changed the password for {cred.Email}");
@@ -92,8 +102,14 @@ public class AuthService(
             throw new BusinessRuleException("That email address is already in use.") { Code = ErrorCodes.AuthEmailAlreadyInUse };
 
         string previousEmail = cred.Email;
-        cred.Email = normalizedEmail;
-        await _credentialRepository.SaveChangesAsync();
+        if (!await _credentialRepository.TryChangeEmailAsync(cred, normalizedEmail))
+        {
+            // The lookup above is not a lock: another account may have taken the address since.
+            existing = await _credentialRepository.GetByEmailAsync(normalizedEmail);
+            if (existing != null && existing.Id != cred.Id)
+                throw new BusinessRuleException("That email address is already in use.") { Code = ErrorCodes.AuthEmailAlreadyInUse };
+            return null;
+        }
 
         _audit.RecordChange("email", previousEmail, normalizedEmail);
         Describe(AuditActions.AuthEmailChange, cred,
@@ -102,18 +118,23 @@ public class AuthService(
         return Mint(cred);
     }
 
+    /// <seealso>AuthServiceTests.ResetPasswordAsync_Rejects_A_Missing_Token_Without_Touching_Any_Account</seealso>
+    /// <seealso>AuthServiceTests.ResetPasswordAsync_Deletes_The_Resetting_Accounts_Push_Subscriptions_Only</seealso>
+    /// <seealso>AuthServiceTests.ResetPasswordAsync_Keeps_Push_Subscriptions_For_An_Unknown_Token</seealso>
     public virtual async Task<bool> ResetPasswordAsync(string resetToken, string newPassword)
     {
         UserFields.ValidatePassword(newPassword);
+        // An absent token must never reach the lookup: a null would match every account with no
+        // reset pending.
+        if (string.IsNullOrEmpty(resetToken))
+            return false;
         AdminCredential? cred = await _credentialRepository.GetByResetTokenAsync(resetToken);
-        if (cred == null || cred.ResetTokenExpiry < DateTime.UtcNow)
+        if (cred == null)
             return false;
         string previousHash = cred.PasswordHash;
-        (cred.PasswordHash, cred.PasswordSalt) = _passwordService.Hash(newPassword);
-        cred.ResetToken = null;
-        cred.ResetTokenExpiry = null;
-        cred.RevokeSessions();
-        await _credentialRepository.SaveChangesAsync();
+        (string hash, string salt) = _passwordService.Hash(newPassword);
+        if (!await _credentialRepository.TryResetPasswordAsync(cred, resetToken, DateTime.UtcNow, hash, salt))
+            return false;
 
         // The reset arrives with a token rather than a session, so the actor is whoever the token
         // resolved to — the request's claims would name nobody.
@@ -123,6 +144,11 @@ public class AuthService(
         return true;
     }
 
+    /// <summary>
+    /// Signs the caller out everywhere. Not account recovery, so the account's API keys stay valid.
+    /// </summary>
+    /// <seealso>AdminApiKeyRevocationTests.Signing_Out_Leaves_The_Accounts_Api_Keys_Alone</seealso>
+    /// <seealso>AuthServiceTests.LogoutAsync_Keeps_The_Callers_Push_Subscriptions</seealso>
     public virtual async Task LogoutAsync()
     {
         if (_currentUser.IsApiKeyAuthenticated)
@@ -130,8 +156,7 @@ public class AuthService(
         AdminCredential? cred = await ResolveCurrentUserAsync();
         if (cred == null)
             return;
-        cred.RevokeSessions();
-        await _credentialRepository.SaveChangesAsync();
+        await _credentialRepository.RevokeSessionsAsync(cred);
     }
 
     private string Mint(AdminCredential cred)

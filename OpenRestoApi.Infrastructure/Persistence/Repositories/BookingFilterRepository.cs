@@ -129,10 +129,12 @@ internal class BookingFilterRepository(AppDbContext db) : IBookingFilterReposito
         {
             string normalizedQuery = filter.Query.Trim().ToLowerInvariant();
 #pragma warning disable CA1862, CA1311, CA1304
-            q = q.Where(b =>
-                (b.CustomerName != null && b.CustomerName.ToLower().Contains(normalizedQuery))
-                || (b.CustomerEmail != null && b.CustomerEmail.ToLower().Contains(normalizedQuery))
-                || (b.BookingRef != null && b.BookingRef.ToLower().Contains(normalizedQuery)));
+            q = filter.QueryMatchesGuestIdentity
+                ? q.Where(b =>
+                    (b.CustomerName != null && b.CustomerName.ToLower().Contains(normalizedQuery))
+                    || (b.CustomerEmail != null && b.CustomerEmail.ToLower().Contains(normalizedQuery))
+                    || (b.BookingRef != null && b.BookingRef.ToLower().Contains(normalizedQuery)))
+                : q.Where(b => b.BookingRef != null && b.BookingRef.ToLower().Contains(normalizedQuery));
 #pragma warning restore CA1862, CA1311, CA1304
         }
 

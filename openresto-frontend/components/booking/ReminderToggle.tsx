@@ -28,7 +28,7 @@ interface ReminderToggleProps {
 export default function ReminderToggle({ bookingRef, email, separator }: ReminderToggleProps) {
   const { colors } = useAppTheme();
   const { t } = useTranslation();
-  const { status, enable, disable } = useBookingReminder(bookingRef, email);
+  const { status, errorMessage, enable, disable } = useBookingReminder(bookingRef, email);
 
   if (status === "unsupported") return null;
 
@@ -37,7 +37,7 @@ export default function ReminderToggle({ bookingRef, email, separator }: Reminde
     status === "denied"
       ? t("booking.reminders.denied")
       : status === "error"
-        ? t("booking.reminders.failed")
+        ? (errorMessage ?? t("booking.reminders.failed"))
         : on
           ? t("booking.reminders.onHint")
           : t("booking.reminders.offHint");

@@ -6,11 +6,9 @@ on:
     paths:
       - "OpenRestoApi.Infrastructure/Migrations/**.cs"
       - "OpenRestoApi.Infrastructure/Persistence/AppDbContext.cs"
-  push:
-    branches: [main]
-    paths:
-      - "OpenRestoApi.Infrastructure/Migrations/**.cs"
-      - "OpenRestoApi.Infrastructure/Persistence/AppDbContext.cs"
+  # A push to main runs this through ci.yml, so deploy can list it in `needs`
+  # (a `needs` entry cannot point at a job in another workflow run).
+  workflow_call:
 
 permissions:
   contents: read
@@ -191,8 +189,15 @@ jobs:
               # A dropped table is fine if the migration meant it; flag it rather than fail.
               echo "    NOTE: table no longer exists after upgrade"
             elif [ "$after" -lt "$before" ]; then
-              echo "    ROW LOSS: $t went from $before to $after"
-              LOST=1
+              # A migration that says `DELETE FROM <table>` in its own Up() meant to empty it
+              # (rows that cannot be migrated, e.g. ones that have no owner to attribute them to).
+              # Only that explicit statement is waived; a table rebuild that drops rows still fails.
+              if grep -qiE "^DELETE FROM \"?$t\"?[[:space:]]*;" /tmp/upgrade-only.sql; then
+                echo "    NOTE: $t emptied by an explicit DELETE in the new migrations"
+              else
+                echo "    ROW LOSS: $t went from $before to $after"
+                LOST=1
+              fi
             fi
           done < /tmp/pre-upgrade-counts.txt
 

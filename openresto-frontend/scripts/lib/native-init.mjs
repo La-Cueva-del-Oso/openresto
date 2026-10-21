@@ -41,6 +41,29 @@ export const GUEST_LINK_PATHS = [
   "/search",
 ];
 
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
+
+/**
+ * Makes text that came from the instance safe to write to a terminal: the brand name and the
+ * body of a failed response are set by whoever runs the server, and a raw ESC/OSC/BEL in them
+ * can clear the screen or write to the clipboard of the person running this script. C0, DEL and
+ * C1 become visible `\xNN` escapes; `\n`/`\t` survive when `keepLineBreaks` is set.
+ *
+ * Same behaviour as `neutralizeControl` in openresto-cli/src/output.ts, restated here because
+ * this file may import node builtins only (the root `npm test` runs it with no frontend install).
+ * @see [native-init.test.ts](../../tests/scripts/native-init.test.ts) — pins the equivalence and
+ * that no raw control byte reaches stdout or stderr.
+ */
+export function neutralizeControl(text, keepLineBreaks = false) {
+  return text.replace(CONTROL_CHARS, (c) => {
+    if (c === "\n" || c === "\t") {
+      if (keepLineBreaks) return c;
+      return c === "\n" ? "\\n" : "\\t";
+    }
+    return "\\x" + c.charCodeAt(0).toString(16).padStart(2, "0");
+  });
+}
+
 export const IOS_ICON_ENDPOINT = "/api/brand/app-icon-ios.png";
 export const ANDROID_FOREGROUND_ENDPOINT = "/api/brand/app-icon-android-foreground.png";
 
@@ -281,7 +304,8 @@ function readExisting(file) {
  * Runs the whole generation. `root` is the frontend project directory; `fetch` and `log`
  * are injected so the tests never touch the network.
  */
-export async function run({ argv, root, fetch: fetchImpl, log }) {
+export async function run({ argv, root, fetch: fetchImpl, log: rawLog }) {
+  const log = (line) => rawLog(neutralizeControl(String(line), true));
   const options = parseArgs(argv);
   if (options.help) {
     log(USAGE);

@@ -16,8 +16,15 @@ public interface INotificationService
     Task MarkReadAsync(int notificationId);
     Task MarkAllReadAsync(int restaurantId);
 
-    Task SubscribeAsync(PushSubscribeRequest request);
-    Task UnsubscribeAsync(string endpoint);
+    /// <summary>
+    /// Registers the endpoint for <paramref name="userId"/>, taking it over from whoever held it.
+    /// False when the caller's session (<paramref name="sessionVersion"/>) ended while the request
+    /// was in flight; nothing is registered then.
+    /// </summary>
+    Task<bool> SubscribeAsync(int userId, int sessionVersion, PushSubscribeRequest request);
+
+    /// <summary>Removes the endpoint only when <paramref name="userId"/> owns it; otherwise a no-op.</summary>
+    Task UnsubscribeAsync(int userId, string endpoint);
     Task DeleteByIdAsync(int notificationId);
     Task DeleteByIdsAsync(List<int> notificationIds);
     Task DeleteAllAsync(int? restaurantId, string? type, bool? unreadOnly);

@@ -11,10 +11,11 @@ namespace OpenRestoApi.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Policy = AuthPolicies.RequireAdmin)]
-public class AdminController(AdminService adminService) : ControllerBase
+public class AdminController(AdminService adminService, ILogger<AdminController>? logger = null) : ControllerBase
 {
     public enum bookingStatus { active, cancelled, all, past, upcoming, noshow }
     private readonly AdminService _adminService = adminService;
+    private readonly ILogger<AdminController>? _logger = logger;
 
     // Aggregates counts/lists across restaurants and bookings; gated on the dominant resource
     // (bookings — TodayBookingsList and the booking counts/occupancy chart are the bulk of the
@@ -150,10 +151,16 @@ public class AdminController(AdminService adminService) : ControllerBase
     [RequiresScope(ApiKeyScopes.Locations, ApiKeyScopes.Write)]
     public async Task<IActionResult> ExtendBookings(int id, [FromBody] ExtendRestaurantRequest req)
     {
-        List<BookingDetailDto>? extendedBookings = await _adminService.ExtendAllActiveBookingsAsync(id, req.Minutes);
-        return extendedBookings != null
-            ? Ok(new { Message = "Bookings extended successfully.", ExtendedBookings = extendedBookings })
-            : NotFound();
+        ExtendRestaurantBookingsResponse? result = await _adminService.ExtendAllActiveBookingsAsync(id, req.Minutes);
+        if (result == null)
+        {
+            return NotFound();
+        }
+
+        result.Message = result.SkippedBookings.Count == 0
+            ? "Bookings extended successfully."
+            : "Bookings extended, except those with another booking right after them.";
+        return Ok(result);
     }
 
     [HttpGet("restaurants")]
@@ -242,11 +249,12 @@ public class AdminController(AdminService adminService) : ControllerBase
         }
         catch (Exception ex)
         {
+            // What the SMTP stack said can name the host or the user name: it goes to the log only.
+            _logger?.LogError(ex, "Sending an email for booking {BookingId} failed.", id);
             return BadRequest(new MessageResponse
             {
-                Message = $"Failed to send: {ex.Message}",
+                Message = "The email could not be sent.",
                 Code = ErrorCodes.BookingEmailSendFailed,
-                Args = new Dictionary<string, object> { ["detail"] = ex.Message }
             });
         }
     }

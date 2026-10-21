@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using OpenRestoApi.Controllers;
+using OpenRestoApi.Core.Application.DTOs;
+using OpenRestoApi.Core.Application.Exceptions;
 using OpenRestoApi.Core.Application.Services;
+using OpenRestoApi.Core.Application.Utilities;
 using OpenRestoApi.Core.Domain;
 
 namespace OpenRestoApi.Tests.Controllers;
@@ -33,6 +36,49 @@ public class EmailSettingsControllerUnitTests
         _mockService.Setup(s => s.TestConnectionAsync()).ThrowsAsync(new InvalidOperationException("Fail"));
         var result = await _controller.Test();
         Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    /// <summary>
+    /// What the SMTP stack says can name the host and the account, so the client gets a category
+    /// code and a fixed sentence; a category the service already classified keeps its code.
+    /// </summary>
+    [Theory]
+    [InlineData(ErrorCodes.EmailAuthFailed, ErrorCodes.EmailAuthFailed)]
+    [InlineData(ErrorCodes.EmailConnectionFailed, ErrorCodes.EmailConnectionFailed)]
+    [InlineData(ErrorCodes.EmailSendFailed, ErrorCodes.EmailConnectionFailed)]
+    public async Task Test_ReturnsAStableCode_AndNeverTheExceptionText(string thrownCode, string expectedCode)
+    {
+        const string Sensitive = "535 5.7.8 user bob@corp.example rejected by smtp.internal.example";
+        _mockService.Setup(s => s.TestConnectionAsync())
+            .ThrowsAsync(new InfrastructureException(Sensitive) { Code = thrownCode });
+
+        var result = await _controller.Test();
+
+        var response = Assert.IsType<MessageResponse>(Assert.IsType<BadRequestObjectResult>(result).Value);
+        Assert.Equal(expectedCode, response.Code);
+        Assert.DoesNotContain("smtp.internal.example", response.Message);
+        Assert.Null(response.Args);
+    }
+
+    [Fact]
+    public async Task Test_AnUnclassifiedFailure_IsAConnectionFailure_WithoutItsText()
+    {
+        _mockService.Setup(s => s.TestConnectionAsync())
+            .ThrowsAsync(new InvalidOperationException("secret detail at Foo.cs:42"));
+
+        var result = await _controller.Test();
+
+        var response = Assert.IsType<MessageResponse>(Assert.IsType<BadRequestObjectResult>(result).Value);
+        Assert.Equal(ErrorCodes.EmailConnectionFailed, response.Code);
+        Assert.DoesNotContain("secret", response.Message);
+    }
+
+    [Fact]
+    public async Task Test_WhenTheConnectionWorks_StillSucceeds()
+    {
+        _mockService.Setup(s => s.TestConnectionAsync()).ReturnsAsync(true);
+
+        Assert.IsType<OkObjectResult>(await _controller.Test());
     }
 
     [Fact]

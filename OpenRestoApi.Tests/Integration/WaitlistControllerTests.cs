@@ -122,6 +122,23 @@ public class WaitlistControllerTests(TestWebAppFactory factory) : IClassFixture<
     }
 
     [Fact]
+    public async Task AddByStaff_RefusesANameWithControlCharacters_AndOneOverTheLengthCap()
+    {
+        int id = SeedRestaurant(walkInOnly: false);
+        HttpClient client = _factory.CreateAuthenticatedClient();
+        string url = $"/api/admin/restaurants/{id}/waitlist";
+
+        HttpResponseMessage escape = await client.PostAsJsonAsync(url, new { name = "Ada\u001b[2J", seats = 2 });
+        HttpResponseMessage tooLong = await client.PostAsJsonAsync(url, new { name = new string('x', WaitlistFields.MaxNameLength + 1), seats = 2 });
+        HttpResponseMessage atTheCap = await client.PostAsJsonAsync(url, new { name = new string('x', WaitlistFields.MaxNameLength), seats = 2 });
+
+        Assert.Equal(HttpStatusCode.BadRequest, escape.StatusCode);
+        Assert.Equal(ErrorCodes.BookingNameInvalid, (await escape.Content.ReadFromJsonAsync<MessageResponse>())!.Code);
+        Assert.Equal(HttpStatusCode.BadRequest, tooLong.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, atTheCap.StatusCode);
+    }
+
+    [Fact]
     public async Task Remove_TakesThePartyOffTheBoard()
     {
         int id = SeedRestaurant(walkInOnly: false);

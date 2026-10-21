@@ -64,7 +64,7 @@ public class WaitlistServiceTests
         return restaurant;
     }
 
-    private WaitlistService CreateService(ICurrentUserService? currentUser = null) => new(
+    private WaitlistService CreateService(ICurrentUserService? currentUser = null, BookingWriteGate? gate = null) => new(
         _waitlist,
         _restaurants.Object,
         _bookings.Object,
@@ -73,7 +73,8 @@ public class WaitlistServiceTests
         _notifier.Object,
         _queue.Object,
         currentUser,
-        _audit.Object);
+        _audit.Object,
+        gate);
 
     private static JoinWaitlistRequest Party(int seats = 2, string name = "Ada", string? email = null, string? locale = null)
         => new() { Name = name, Seats = seats, Email = email, Locale = locale };
@@ -150,6 +151,26 @@ public class WaitlistServiceTests
     {
         ValidationException ex = await Assert.ThrowsAsync<ValidationException>(() => CreateService().JoinAsync(1, Party(name: name)));
         Assert.Equal(ErrorCodes.WaitlistNameRequired, ex.Code);
+    }
+
+    [Theory]
+    [InlineData("Ada\u001b[2J")]
+    [InlineData("Ada\u0000")]
+    [InlineData("A\nda")]
+    [InlineData("Ada\u009b")]
+    public async Task JoinAsync_Rejects_ANameWithControlCharacters(string name)
+    {
+        ValidationException ex = await Assert.ThrowsAsync<ValidationException>(() => CreateService().JoinAsync(1, Party(name: name)));
+        Assert.Equal(ErrorCodes.BookingNameInvalid, ex.Code);
+        Assert.Empty(_waitlist.Entries);
+    }
+
+    [Fact]
+    public async Task JoinAsync_Accepts_AnOrdinaryNameWithAccentsAndPunctuation()
+    {
+        await CreateService().JoinAsync(1, Party(name: "María-José O'Neil"));
+
+        Assert.Equal("María-José O'Neil", Assert.Single(_waitlist.Entries).Name);
     }
 
     [Fact]
@@ -454,6 +475,107 @@ public class WaitlistServiceTests
     {
         NotFoundException ex = await Assert.ThrowsAsync<NotFoundException>(() => CreateService().NotifyAsync(42));
         Assert.Equal(ErrorCodes.WaitlistNotFound, ex.Code);
+    }
+
+    // A seat commits inside the write gate, so every other write to a ticket's status has to queue
+    // behind it and read the ticket afterwards. Each test holds the gate as a seat would, lets the
+    // seat "commit" by closing the entry, then releases: the queued write must see the closed entry.
+
+    [Fact]
+    public async Task NotifyAsync_WaitsForTheWriteGate_AndRefusesAPartyThatWasSeatedMeanwhile()
+    {
+        var gate = new BookingWriteGate();
+        WaitlistEntry entry = Seed(2);
+        Task notify;
+        using (await gate.EnterAsync())
+        {
+            notify = CreateService(gate: gate).NotifyAsync(entry.Id);
+            Assert.False(notify.IsCompleted);
+            entry.Status = WaitlistStatus.Seated;
+        }
+
+        ConflictException ex = await Assert.ThrowsAsync<ConflictException>(() => notify);
+        Assert.Equal(ErrorCodes.WaitlistNotActive, ex.Code);
+        Assert.Equal(WaitlistStatus.Seated, entry.Status);
+        Assert.Null(entry.NotifiedAt);
+    }
+
+    [Fact]
+    public async Task NotifyAsync_ReleasesTheWriteGate_BeforeTellingTheGuest()
+    {
+        var gate = new BookingWriteGate();
+        WaitlistEntry entry = Seed(2);
+        bool gateFreeWhileNotifying = false;
+        _notifier.Setup(n => n.NotifyAsync(It.IsAny<WaitlistEntry>(), It.IsAny<Restaurant>()))
+            .Callback(() =>
+            {
+                Task<IDisposable> entering = gate.EnterAsync();
+                gateFreeWhileNotifying = entering.IsCompletedSuccessfully;
+                if (entering.IsCompletedSuccessfully)
+                {
+                    entering.Result.Dispose();
+                }
+            })
+            .Returns(Task.CompletedTask);
+
+        await CreateService(gate: gate).NotifyAsync(entry.Id);
+
+        Assert.True(gateFreeWhileNotifying);
+        Assert.Equal(WaitlistStatus.Notified, entry.Status);
+    }
+
+    [Fact]
+    public async Task LeaveAsync_WaitsForTheWriteGate_AndLeavesAPartyThatWasSeatedMeanwhileSeated()
+    {
+        var gate = new BookingWriteGate();
+        WaitlistEntry entry = Seed(2);
+        Task<bool> leave;
+        using (await gate.EnterAsync())
+        {
+            leave = CreateService(gate: gate).LeaveAsync(entry.Ref);
+            Assert.False(leave.IsCompleted);
+            entry.Status = WaitlistStatus.Seated;
+        }
+
+        Assert.True(await leave);
+        Assert.Equal(WaitlistStatus.Seated, entry.Status);
+        Assert.Null(entry.ClosedAt);
+    }
+
+    [Fact]
+    public async Task RemoveAsync_WaitsForTheWriteGate_AndRefusesAPartyThatWasSeatedMeanwhile()
+    {
+        var gate = new BookingWriteGate();
+        WaitlistEntry entry = Seed(2);
+        Task remove;
+        using (await gate.EnterAsync())
+        {
+            remove = CreateService(gate: gate).RemoveAsync(entry.Id);
+            Assert.False(remove.IsCompleted);
+            entry.Status = WaitlistStatus.Seated;
+        }
+
+        ConflictException ex = await Assert.ThrowsAsync<ConflictException>(() => remove);
+        Assert.Equal(ErrorCodes.WaitlistNotActive, ex.Code);
+        Assert.Equal(WaitlistStatus.Seated, entry.Status);
+    }
+
+    [Fact]
+    public async Task SetPushAsync_WaitsForTheWriteGate_AndStoresNoAddressOnAPartyThatWasSeatedMeanwhile()
+    {
+        var gate = new BookingWriteGate();
+        WaitlistEntry entry = Seed(2);
+        Task<bool> setPush;
+        using (await gate.EnterAsync())
+        {
+            setPush = CreateService(gate: gate).SetPushAsync(entry.Ref, Device());
+            Assert.False(setPush.IsCompleted);
+            entry.Status = WaitlistStatus.Seated;
+        }
+
+        ConflictException ex = await Assert.ThrowsAsync<ConflictException>(() => setPush);
+        Assert.Equal(ErrorCodes.WaitlistNotActive, ex.Code);
+        Assert.Null(entry.PushAddress());
     }
 
     [Fact]

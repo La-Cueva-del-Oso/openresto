@@ -347,6 +347,18 @@
     "admin": {
       "password_not_configured": "Admin:Password debe configurarse antes del primer uso. Defínelo mediante la variable de entorno ADMIN_PASSWORD."
     },
+    "api_key": {
+      "expires_at_in_past": "La fecha de vencimiento debe ser posterior a hoy. Elige otra fecha.",
+      "expires_at_with_never_expires": "Una clave que no vence no puede tener fecha de vencimiento. Quita una de las dos opciones.",
+      "name_required": "Escribe un nombre para la clave de API.",
+      "name_too_long": "El nombre de la clave de API no puede superar los {{max}} caracteres.",
+      "not_a_session": "Esta consulta solo funciona con una clave de API, no con una cuenta que haya iniciado sesión.",
+      "not_allowed": "Esta acción no está disponible con una clave de API. Inicia sesión con tu cuenta para hacerla.",
+      "not_found": "No se encontró esa clave de API. Puede que ya se haya revocado. Actualiza la lista e inténtalo de nuevo.",
+      "scope_invalid": "Uno de los permisos seleccionados no es válido. Revisa la selección e inténtalo de nuevo.",
+      "scope_missing": "Esta clave de API no tiene permiso para hacer esto. Usa una clave con el permiso necesario.",
+      "scopes_required": "Selecciona al menos un permiso."
+    },
     "auth": {
       "email_already_in_use": "Esa dirección de correo electrónico ya está en uso.",
       "email_unchanged": "El nuevo correo electrónico debe ser distinto del actual.",
@@ -363,11 +375,14 @@
       "cancel_email_required": "Se necesita un correo electrónico para cancelar una reserva.",
       "email_fields_required": "El asunto y el mensaje son obligatorios.",
       "email_invalid": "Esa dirección de correo no parece correcta.",
-      "email_send_failed": "Error al enviar: {{detail}}",
+      "email_send_failed": "No se pudo enviar el correo. Revisa la configuración del correo e inténtalo de nuevo.",
+      "extend_conflict": "Otra reserva empieza antes de que termine este turno, así que no se puede alargar tanto.",
+      "guest_filter_forbidden": "Esta clave de API no puede buscar por correo electrónico porque no tiene permiso para ver los datos de los clientes.",
       "invalid_table_for_restaurant": "Mesa no válida para este restaurante.",
       "lookup_email_required": "Se necesita un correo electrónico para buscar una reserva.",
       "lookup_not_found": "No se ha encontrado ninguna reserva con esa referencia y ese correo electrónico.",
       "move_conflict": "Este cambio entraría en conflicto con una reserva existente.",
+      "name_invalid": "El nombre no puede contener caracteres de control. Vuelve a escribirlo.",
       "no_customer_email": "El correo electrónico del cliente no está disponible.",
       "no_show_before_start": "Una reserva solo se puede marcar como no presentada una vez que ha empezado su turno.",
       "no_tables_available": "No hay mesas disponibles para la hora y el número de comensales solicitados.",
@@ -375,7 +390,14 @@
       "past_date": "No se puede crear una reserva en el pasado.",
       "paused": "Las reservas están pausadas hasta las {{until}}. Elige una hora posterior.",
       "paused_indefinitely": "Las reservas de este restaurante están pausadas en este momento. Vuelve a intentarlo más tarde.",
+      "reminder_cancelled": "Esta reserva está cancelada, así que no se pueden activar los recordatorios.",
+      "reminder_channel_invalid": "Este dispositivo no puede recibir recordatorios de este sitio.",
+      "reminder_device_limit": "Ya hay demasiados dispositivos con recordatorios para esta reserva. Desactívalos en uno de ellos para agregar este.",
+      "reminder_endpoint_invalid": "Este dispositivo no puede recibir recordatorios de este sitio.",
+      "reminder_keys_required": "No pudimos activar los recordatorios en este dispositivo. Vuelve a activarlos e inténtalo de nuevo.",
+      "reminder_too_late": "Esta reserva ya comenzó, así que ya no se pueden activar los recordatorios.",
       "section_mismatch": "La sala no pertenece a este restaurante.",
+      "special_requests_invalid": "Las peticiones especiales no pueden contener caracteres de control. Vuelve a escribirlas.",
       "status_cancelled": "Una reserva cancelada no admite cambios de estado.",
       "status_invalid": "El estado debe ser uno de estos valores: {{allowed}}.",
       "status_transition_invalid": "Una reserva en estado {{from}} no se puede marcar como {{to}}.",
@@ -383,9 +405,12 @@
       "table_held": "Otro usuario tiene retenida esta mesa. Elige otra mesa o vuelve a intentarlo en unos instantes.",
       "table_id_required_for_section_change": "Indica tableId al reasignar a otra sala.",
       "table_not_in_section": "No se ha encontrado la mesa en la sala indicada.",
+      "undo_conflict": "Otra reserva ocupó la mesa después de que terminara este turno, así que no se puede deshacer el cambio.",
       "walk_in_only": "Este local solo admite visitas sin reserva y no acepta reservas en línea.",
       "walk_in_only_today": "Este local solo admite visitas sin reserva el día seleccionado. Elige otro día o acércate directamente.",
-      "pacing_full": "Solo pueden llegar {{remaining}} comensales más a las {{time}}. Elige otra hora."
+      "pacing_full": "Solo pueden llegar {{remaining}} comensales más a las {{time}}. Elige otra hora.",
+      "wallet_cancelled": "Esta reserva está cancelada, así que no se puede guardar en tu Wallet.",
+      "wallet_not_configured": "Este sitio aún no ofrece pases de Apple Wallet ni de Google Wallet."
     },
     "brand": {
       "accent_color_invalid": "Código hexadecimal de color de acento no válido.",
@@ -395,8 +420,11 @@
       "header_image_fit_invalid": "HeaderImageFit debe ser uno de estos valores: {{allowed}}.",
       "highlights_heading_too_long": "El título de los destacados no puede superar los 60 caracteres.",
       "highlights_subheading_too_long": "El subtítulo de los destacados no puede superar los 60 caracteres.",
+      "minimum_app_version_invalid": "La versión mínima de la aplicación debe ser tres números separados por puntos, por ejemplo 1.9.0.",
       "primary_color_invalid": "Código hexadecimal de color principal no válido.",
-      "subtitle_too_long": "El subtítulo no puede superar los 160 caracteres."
+      "privacy_policy_url_invalid": "La dirección de la política de privacidad debe comenzar con http:// o https://. Revísala e inténtalo de nuevo.",
+      "subtitle_too_long": "El subtítulo no puede superar los 160 caracteres.",
+      "website_url_invalid": "La dirección del sitio web debe comenzar con http:// o https://. Revísala e inténtalo de nuevo."
     },
     "contact": {
       "email_invalid": "La dirección de correo electrónico debe ser válida.",
@@ -404,8 +432,15 @@
       "phone_too_long": "El número de teléfono no puede superar los {{max}} caracteres."
     },
     "email": {
-      "connection_failed": "Error de conexión: {{detail}}",
-      "not_configured": "El correo electrónico no está configurado."
+      "auth_failed": "El servidor de correo rechazó el usuario o la contraseña. Revísalos e inténtalo de nuevo.",
+      "connection_failed": "No se pudo conectar con el servidor de correo. Revisa el servidor y el puerto.",
+      "host_required": "Escribe la dirección (host) del servidor de correo.",
+      "not_configured": "El correo electrónico no está configurado.",
+      "password_required": "Para cambiar el servidor, el puerto, el usuario o el cifrado, vuelve a escribir la contraseña de correo.",
+      "port_invalid": "El puerto debe ser un número entre 1 y 65535.",
+      "recipient_rejected": "El servidor de correo no aceptó la dirección del destinatario. Revisa que esté bien escrita.",
+      "send_failed": "No se pudo enviar el correo. Inténtalo de nuevo en unos minutos.",
+      "username_required": "Escribe el usuario del servidor de correo."
     },
     "generic": "Ha ocurrido un error",
     "genericMessage": "Se ha producido un error inesperado. Inténtalo de nuevo.",
@@ -431,6 +466,9 @@
       "menu_too_large": "El archivo del menú debe ocupar menos de 10 MB.",
       "unsupported_image_type": "Solo se aceptan imágenes JPEG, PNG y WebP.",
       "unsupported_menu_type": "Solo se aceptan menús en formato PDF."
+    },
+    "notification": {
+      "push_endpoint_invalid": "Este dispositivo no puede recibir notificaciones de este sitio."
     },
     "restaurant": {
       "archive_before_delete": "Archiva este local antes de eliminarlo. Archivarlo lo retira del sitio público y se puede deshacer; eliminarlo no.",
@@ -984,6 +1022,9 @@
         "extendSubtitle": "Selecciona un restaurante para ampliar todas las reservas activas una hora.",
         "extendedSubtitle_one": "Se ha ampliado la siguiente reserva una hora:",
         "extendedSubtitle_other": "Se han ampliado las siguientes {{count}} reservas una hora:",
+        "noneExtendedSubtitle": "No se pudo ampliar ninguna reserva.",
+        "skippedSubtitle_one": "{{count}} reserva se dejó como estaba porque otra reserva la sigue en la misma mesa:",
+        "skippedSubtitle_other": "{{count}} reservas se dejaron como estaban porque otra reserva las sigue en la misma mesa:",
         "loadingRestaurants": "Cargando restaurantes",
         "noRestaurants": "No se encontraron restaurantes.",
         "pausedBadge": "PAUSADO",
@@ -1120,7 +1161,9 @@
         "extend_one": "Ampliar {{count}} reserva activa 60 min",
         "extend_other": "Ampliar {{count}} reservas activas 60 min",
         "extended_one": "{{count}} reserva activa ampliada +60 min",
-        "extended_other": "{{count}} reservas activas ampliadas +60 min"
+        "extended_other": "{{count}} reservas activas ampliadas +60 min",
+        "extendedSkipped_one": "{{extended}} ampliadas; {{count}} sin cambios (otra reserva sigue)",
+        "extendedSkipped_other": "{{extended}} ampliadas; {{count}} sin cambios (otra reserva sigue)"
       },
       "addForm": {
         "namePlaceholder": "Nombre del local (p. ej. Centro, Zona oeste)",
@@ -1747,6 +1790,7 @@
         "fromEmailLabel": "Correo del remitente",
         "footerHintVerified": "Conexión verificada · confirmaciones listas",
         "footerHintUnverified": "Pruebe la conexión antes de activar las confirmaciones",
+        "passwordRequiredNotice": "Para cambiar el servidor, el puerto, el usuario o el cifrado, vuelve a escribir la contraseña de correo.",
         "saveButton": "Guardar configuración SMTP"
       },
       "users": {

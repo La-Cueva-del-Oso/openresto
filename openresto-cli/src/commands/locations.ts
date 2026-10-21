@@ -1,5 +1,11 @@
 import { Command } from "commander";
-import { clientFor, getGlobalOptions, handle } from "../context.js";
+import {
+  clientFor,
+  getGlobalOptions,
+  handle,
+  printMessage,
+} from "../context.js";
+import { t } from "../i18n.js";
 import { printResult } from "../output.js";
 import { confirmOrExit } from "../confirm.js";
 import { ApiError } from "../transport.js";
@@ -11,6 +17,8 @@ const LIST_COLUMNS = [
   "activeBookingsCount",
   "upcomingBookingsCount",
 ];
+
+const SKIPPED_COLUMNS = ["id", "bookingRef", "tableName"];
 
 const CONFLICT_COLUMNS = [
   "bookingId",
@@ -91,9 +99,10 @@ export function registerLocationsCommands(program: Command): void {
               body: { minutes: options.minutes },
             },
           );
-          console.log(
-            `Location ${id} paused for ${options.minutes} minute(s).`,
-          );
+          printMessage(command, "location.paused", {
+            id,
+            minutes: options.minutes,
+          });
         },
       ),
     );
@@ -107,26 +116,46 @@ export function registerLocationsCommands(program: Command): void {
         await client.post(
           `/api/admin/restaurants/${encodeURIComponent(id)}/unpause`,
         );
-        console.log(`Location ${id} unpaused.`);
+        printMessage(command, "location.unpaused", { id });
       }),
     );
 
   locations
     .command("extend <id>")
     .description(
-      'Push every active booking at a location out by N minutes ("we\'re running late tonight")',
+      'Push every active booking at a location out by N minutes ("we\'re running late tonight"). ' +
+        "A booking with another booking right after it on its table is left as it was and listed.",
     )
-    .requiredOption("--minutes <n>", "Minutes to add to each end time", Number)
+    .requiredOption(
+      "--minutes <n>",
+      "Minutes to add to each end time (1 to 480)",
+      Number,
+    )
     .action(
       handle(
         async (id: string, options: { minutes: number }, command: Command) => {
           const { client } = clientFor(command);
           const globals = getGlobalOptions(command);
-          const result = await client.post(
+          const result = (await client.post(
             `/api/admin/restaurants/${encodeURIComponent(id)}/extend`,
             { body: { minutes: options.minutes } },
-          );
-          printResult(result, Boolean(globals.json));
+          )) as { extendedBookings?: unknown[]; skippedBookings?: unknown[] };
+          if (globals.json) {
+            printResult(result, true);
+            return;
+          }
+          const skipped = result?.skippedBookings ?? [];
+          printMessage(command, "location.extended", {
+            count: result?.extendedBookings?.length ?? 0,
+            id,
+            minutes: options.minutes,
+          });
+          if (skipped.length > 0) {
+            printMessage(command, "location.extendSkipped", {
+              count: skipped.length,
+            });
+            printResult(skipped, false, SKIPPED_COLUMNS);
+          }
         },
       ),
     );
@@ -157,7 +186,7 @@ export function registerLocationsCommands(program: Command): void {
         await client.patch(`/api/admin/restaurants/${encodeURIComponent(id)}`, {
           body: { isArchived: true },
         });
-        console.log(`Location ${id} archived.`);
+        printMessage(command, "location.archived", { id });
       }),
     );
 
@@ -172,7 +201,7 @@ export function registerLocationsCommands(program: Command): void {
         await client.patch(`/api/admin/restaurants/${encodeURIComponent(id)}`, {
           body: { isArchived: false },
         });
-        console.log(`Location ${id} restored.`);
+        printMessage(command, "location.restored", { id });
       }),
     );
 
@@ -189,7 +218,7 @@ export function registerLocationsCommands(program: Command): void {
           const { client } = clientFor(command);
           const globals = getGlobalOptions(command);
 
-          let confirmMessage = `This will permanently delete location ${id} and everything under it.`;
+          let confirmMessage = t("location.deleteConfirmGeneric", { id });
           try {
             const preview = await client.get<{
               name: string;
@@ -199,9 +228,12 @@ export function registerLocationsCommands(program: Command): void {
             }>(
               `/api/admin/restaurants/${encodeURIComponent(id)}/delete-preview`,
             );
-            confirmMessage =
-              `This will permanently delete "${preview.name}" (${preview.sectionCount} section(s), ` +
-              `${preview.tableCount} table(s), ${preview.bookingCount} booking(s)).`;
+            confirmMessage = t("location.deleteConfirm", {
+              name: preview.name,
+              sections: preview.sectionCount,
+              tables: preview.tableCount,
+              bookings: preview.bookingCount,
+            });
           } catch {
             // Preview is best-effort — fall back to the generic message rather than blocking delete.
           }
@@ -218,12 +250,12 @@ export function registerLocationsCommands(program: Command): void {
           } catch (err) {
             if (err instanceof ApiError && err.status === 400) {
               throw new Error(
-                `${err.message} Archive the location first with "locations archive ${id}".`,
+                t("location.archiveFirst", { message: err.message, id }),
               );
             }
             throw err;
           }
-          console.log(`Location ${id} deleted.`);
+          printMessage(command, "location.deleted", { id });
         },
       ),
     );

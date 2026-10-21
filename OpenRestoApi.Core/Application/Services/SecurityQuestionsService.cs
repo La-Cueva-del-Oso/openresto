@@ -16,10 +16,12 @@ public sealed class SecurityQuestionsService(
     ICurrentUserService currentUser,
     IAuditScope? audit = null) : ISecurityQuestionsService
 {
+    /// <summary>Wrong answers an account takes before it is locked for <see cref="LockoutDuration"/>.</summary>
     /// <seealso>SecurityQuestionsServiceTests.VerifyAsync_Allows_Attempts_Up_To_The_Limit</seealso>
     /// <seealso>SecurityQuestionsServiceTests.VerifyAsync_Locks_The_Account_After_Too_Many_Wrong_Answers</seealso>
     public const int MaxFailedAttempts = 5;
 
+    /// <summary>How long an account that hit <see cref="MaxFailedAttempts"/> refuses further answers.</summary>
     /// <seealso>SecurityQuestionsServiceTests.VerifyAsync_Accepts_Answers_Again_Once_The_Lockout_Expires</seealso>
     public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
 
@@ -44,18 +46,28 @@ public sealed class SecurityQuestionsService(
         return ToStatus(await ResolveCurrentUserAsync());
     }
 
-    public async Task SetupAsync(string question, string answer)
+    /// <summary>
+    /// Stores the caller's security question. The account's current password is required, since
+    /// the question is a recovery credential a stolen session could otherwise plant.
+    /// </summary>
+    /// <seealso>SecurityQuestionsServiceTests.SetupAsync_Saves_The_Question_When_The_Current_Password_Is_Right</seealso>
+    /// <seealso>SecurityQuestionsServiceTests.SetupAsync_Refuses_And_Keeps_The_Existing_Question_When_The_Current_Password_Is_Wrong</seealso>
+    /// <seealso>SecurityQuestionsServiceTests.SetupAsync_Refuses_A_Missing_Current_Password</seealso>
+    public async Task<bool> SetupAsync(string currentPassword, string question, string answer)
     {
         AdminCredential cred = await ResolveCurrentUserAsync()
             ?? throw new NotFoundException("No account matches the signed-in session.") { Code = ErrorCodes.AuthNoAccountForSession };
-        (cred.PvqAnswerHash, cred.PvqAnswerSalt) = _passwordService.Hash(NormaliseAnswer(answer));
-        cred.PvqQuestion = question.Trim();
-        await _credentialRepository.SaveChangesAsync();
+        if (string.IsNullOrEmpty(currentPassword) || !CredentialHelper.VerifyPassword(cred, currentPassword, _passwordService))
+            return false;
+        (string answerHash, string answerSalt) = _passwordService.Hash(NormaliseAnswer(answer));
+        if (!await _credentialRepository.TrySetSecurityQuestionAsync(cred, question.Trim(), answerHash, answerSalt))
+            return false;
 
         // Neither the question nor the answer is recorded: together they are a credential, and the
         // question alone narrows a guess at the answer.
         _audit.Describe(AuditActions.AuthPvqSetup, AuditTargets.User, AuditTargets.IdOf(cred.Id),
             UserFields.PersonLabel(cred.DisplayName, cred.Email), summary: "Configured a security question");
+        return true;
     }
 
     public async Task<PvqVerifyOutcome> VerifyAsync(string email, string answer)
@@ -67,33 +79,16 @@ public sealed class SecurityQuestionsService(
             return new PvqVerifyOutcome(PvqVerifyStatus.NotConfigured);
 
         DateTime now = DateTime.UtcNow;
-        if (cred.PvqLockedUntil > now)
+        if (!await _credentialRepository.TryCountPvqAttemptAsync(cred.Id, now, MaxFailedAttempts, now + LockoutDuration))
             return new PvqVerifyOutcome(PvqVerifyStatus.LockedOut);
 
         if (!_passwordService.Verify(NormaliseAnswer(answer), cred.PvqAnswerHash, cred.PvqAnswerSalt))
-        {
-            await RecordFailedAttemptAsync(cred, now);
             return new PvqVerifyOutcome(PvqVerifyStatus.WrongAnswer);
-        }
 
-        cred.PvqFailedAttempts = 0;
-        cred.PvqLockedUntil = null;
         string token = Guid.NewGuid().ToString("N");
-        cred.ResetToken = token;
-        cred.ResetTokenExpiry = DateTime.UtcNow.AddMinutes(15);
-        await _credentialRepository.SaveChangesAsync();
+        if (!await _credentialRepository.TryCompletePvqVerificationAsync(cred, token, DateTime.UtcNow.AddMinutes(15)))
+            return new PvqVerifyOutcome(PvqVerifyStatus.WrongAnswer);
         return new PvqVerifyOutcome(PvqVerifyStatus.Success, token);
-    }
-
-    private async Task RecordFailedAttemptAsync(AdminCredential cred, DateTime now)
-    {
-        cred.PvqFailedAttempts++;
-        if (cred.PvqFailedAttempts >= MaxFailedAttempts)
-        {
-            cred.PvqFailedAttempts = 0;
-            cred.PvqLockedUntil = now + LockoutDuration;
-        }
-        await _credentialRepository.SaveChangesAsync();
     }
 
     private static PvqStatusDto ToStatus(AdminCredential? cred) => new()

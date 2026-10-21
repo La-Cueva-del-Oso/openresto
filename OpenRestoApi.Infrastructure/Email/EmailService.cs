@@ -1,3 +1,5 @@
+using System.Net.Sockets;
+using MailKit;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.EntityFrameworkCore;
@@ -29,15 +31,22 @@ public class EmailService(AppDbContext db, ICredentialProtector protector, Func<
             return false;
         }
 
-        using ISmtpClient client = _clientFactory();
-        SecureSocketOptions options = settings.Port == 587
-            ? SecureSocketOptions.StartTls
-            : settings.EnableSsl ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.None;
+        try
+        {
+            using ISmtpClient client = _clientFactory();
+            SecureSocketOptions options = settings.Port == 587
+                ? SecureSocketOptions.StartTls
+                : settings.EnableSsl ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.None;
 
-        await client.ConnectAsync(settings.Host, settings.Port, options);
-        await client.AuthenticateAsync(settings.Username, _protector.Decrypt(settings.EncryptedPassword));
-        await client.DisconnectAsync(true);
-        return true;
+            await client.ConnectAsync(settings.Host, settings.Port, options);
+            await client.AuthenticateAsync(settings.Username, _protector.Decrypt(settings.EncryptedPassword));
+            await client.DisconnectAsync(true);
+            return true;
+        }
+        catch (Exception ex) when (ex is not (OperationCanceledException or OpenRestoException))
+        {
+            throw Classify(ex);
+        }
     }
 
     public async Task SendEmailAsync(string recipient, string subject, string htmlBody)
@@ -45,22 +54,48 @@ public class EmailService(AppDbContext db, ICredentialProtector protector, Func<
         EmailSettings settings = await GetSettingsAsync()
             ?? throw new InfrastructureException("Email is not configured.") { Code = ErrorCodes.EmailNotConfigured };
 
-        var message = new MimeMessage();
-        message.From.Add(new MailboxAddress(
-            settings.FromName ?? "OpenResto",
-            settings.FromEmail ?? settings.Username));
-        message.To.Add(MailboxAddress.Parse(recipient));
-        message.Subject = subject;
-        message.Body = new TextPart("html") { Text = htmlBody };
+        try
+        {
+            var message = new MimeMessage();
+            message.From.Add(new MailboxAddress(
+                settings.FromName ?? "OpenResto",
+                settings.FromEmail ?? settings.Username));
+            message.To.Add(MailboxAddress.Parse(recipient));
+            message.Subject = subject;
+            message.Body = new TextPart("html") { Text = htmlBody };
 
-        using ISmtpClient client = _clientFactory();
-        SecureSocketOptions options = settings.Port == 587
-            ? SecureSocketOptions.StartTls
-            : settings.EnableSsl ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.None;
+            using ISmtpClient client = _clientFactory();
+            SecureSocketOptions options = settings.Port == 587
+                ? SecureSocketOptions.StartTls
+                : settings.EnableSsl ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.None;
 
-        await client.ConnectAsync(settings.Host, settings.Port, options);
-        await client.AuthenticateAsync(settings.Username, _protector.Decrypt(settings.EncryptedPassword));
-        await client.SendAsync(message);
-        await client.DisconnectAsync(true);
+            await client.ConnectAsync(settings.Host, settings.Port, options);
+            await client.AuthenticateAsync(settings.Username, _protector.Decrypt(settings.EncryptedPassword));
+            await client.SendAsync(message);
+            await client.DisconnectAsync(true);
+        }
+        catch (Exception ex) when (ex is not (OperationCanceledException or OpenRestoException))
+        {
+            throw Classify(ex);
+        }
+    }
+
+    /// <summary>
+    /// Turns whatever the SMTP stack threw into a category with a fixed message. The original rides
+    /// along as the inner exception for the server log; its text must never be copied into the
+    /// message, since it can name the host, the user name or the provider's internals.
+    /// <seealso>EmailServiceTests.TestConnectionAsync_WrapsAnAuthenticationFailure_WithoutItsText</seealso>
+    /// </summary>
+    private static InfrastructureException Classify(Exception ex)
+    {
+        string code = ex switch
+        {
+            AuthenticationException => ErrorCodes.EmailAuthFailed,
+            ParseException or SmtpCommandException { ErrorCode: SmtpErrorCode.RecipientNotAccepted } => ErrorCodes.EmailRecipientRejected,
+            SocketException or SslHandshakeException or ServiceNotConnectedException or ProtocolException
+                or IOException or TimeoutException => ErrorCodes.EmailConnectionFailed,
+            _ => ErrorCodes.EmailSendFailed,
+        };
+        return new InfrastructureException(EmailFailureReason.Describe(code).Message, ex) { Code = code };
     }
 }

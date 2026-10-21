@@ -30,12 +30,15 @@ public static class ErrorCodes
     public const string BookingAlreadyPast = "booking.already_past";
     public const string BookingAlreadyActive = "booking.already_active";
     public const string BookingMoveConflict = "booking.move_conflict";
+    public const string BookingExtendConflict = "booking.extend_conflict";
+    public const string BookingUndoConflict = "booking.undo_conflict";
     public const string BookingTableNotInSection = "booking.table_not_in_section";
     public const string BookingInvalidTableForRestaurant = "booking.invalid_table_for_restaurant";
     public const string BookingSectionMismatch = "booking.section_mismatch";
     public const string BookingTableIdRequiredForSectionChange = "booking.table_id_required_for_section_change";
     public const string BookingEmailFieldsRequired = "booking.email_fields_required";
     public const string BookingReminderChannelInvalid = "booking.reminder_channel_invalid";
+    public const string BookingReminderDeviceLimit = "booking.reminder_device_limit";
     public const string BookingReminderKeysRequired = "booking.reminder_keys_required";
     public const string BookingReminderEndpointInvalid = "booking.reminder_endpoint_invalid";
     public const string BookingReminderTooLate = "booking.reminder_too_late";
@@ -53,6 +56,9 @@ public static class ErrorCodes
     public const string BookingNoShowBeforeStart = "booking.no_show_before_start";
     public const string BookingPacingFull = "booking.pacing_full";
     public const string BookingEmailInvalid = "booking.email_invalid";
+    public const string BookingNameInvalid = "booking.name_invalid";
+    public const string BookingSpecialRequestsInvalid = "booking.special_requests_invalid";
+    public const string BookingGuestFilterForbidden = "booking.guest_filter_forbidden";
 
     public const string TableSeatsExceeded = "table.seats_exceeded";
     public const string TableOversizeCap = "table.oversize_cap";
@@ -184,6 +190,13 @@ public static class ErrorCodes
     // ── Infrastructure ───────────────────────────────────────────────────────
     public const string EmailNotConfigured = "email.not_configured";
     public const string EmailConnectionFailed = "email.connection_failed";
+    public const string EmailAuthFailed = "email.auth_failed";
+    public const string EmailRecipientRejected = "email.recipient_rejected";
+    public const string EmailSendFailed = "email.send_failed";
+    public const string EmailPasswordRequired = "email.password_required";
+    public const string EmailHostRequired = "email.host_required";
+    public const string EmailUsernameRequired = "email.username_required";
+    public const string EmailPortInvalid = "email.port_invalid";
     public const string AdminPasswordNotConfigured = "admin.password_not_configured";
     public const string NotificationPushEndpointInvalid = "notification.push_endpoint_invalid";
 }

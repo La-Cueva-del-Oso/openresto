@@ -37,8 +37,12 @@ public class GuestPushSenderTests
         PrivateKey = "PRIVATEKEY",
     };
 
-    private GuestPushSender CreateSender(VapidSettings? vapid = null) =>
-        new(_webPush.Object, _expo.Object, Options.Create(vapid ?? new VapidSettings()));
+    private GuestPushSender CreateSender(VapidSettings? vapid = null, TimeSpan? sendTimeout = null) =>
+        new(
+            _webPush.Object,
+            _expo.Object,
+            Options.Create(vapid ?? new VapidSettings()),
+            Options.Create(new GuestPushSettings { SendTimeout = sendTimeout ?? TimeSpan.FromSeconds(10) }));
 
     private static GuestPushAddress WebPushSubscription() =>
         new(GuestPushChannels.WebPush, Endpoint, "p256dh-key", "auth-secret");
@@ -157,6 +161,71 @@ public class GuestPushSenderTests
         _webPush.Verify(
             c => c.SendNotificationAsync(It.IsAny<PushSubscription>(), It.IsAny<string>(), It.IsAny<VapidDetails>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-5)]
+    public async Task SendAsync_WithAnUnusableSendTimeout_StillSendsUnderTheDefault(int milliseconds)
+    {
+        // A real client stops on a cancelled token; a timeout of zero cancels it before the send starts.
+        _webPush
+            .Setup(c => c.SendNotificationAsync(It.IsAny<PushSubscription>(), It.IsAny<string>(), It.IsAny<VapidDetails>(), It.IsAny<CancellationToken>()))
+            .Returns<PushSubscription, string, VapidDetails, CancellationToken>((_, _, _, ct) => Task.Delay(1, ct));
+        GuestPushSender sender = CreateSender(ConfiguredVapid(), TimeSpan.FromMilliseconds(milliseconds));
+
+        GuestPushResult result = await sender.SendAsync(WebPushSubscription(), Message);
+
+        Assert.Equal(GuestPushOutcome.Delivered, result.Outcome);
+    }
+
+    /// <summary>
+    /// A push service that never answers is that subscription's failure, after the send timeout,
+    /// so one stuck address cannot stall the reminder pass for every guest after it.
+    /// </summary>
+    [Fact]
+    public async Task SendAsync_WebPush_ReportsAClientThatNeverAnswersAsAFailure()
+    {
+        _webPush
+            .Setup(c => c.SendNotificationAsync(It.IsAny<PushSubscription>(), It.IsAny<string>(), It.IsAny<VapidDetails>(), It.IsAny<CancellationToken>()))
+            .Returns<PushSubscription, string, VapidDetails, CancellationToken>((_, _, _, ct) => Task.Delay(Timeout.Infinite, ct));
+
+        GuestPushResult result = await CreateSender(ConfiguredVapid(), TimeSpan.FromMilliseconds(50)).SendAsync(WebPushSubscription(), Message);
+
+        Assert.Equal(GuestPushOutcome.Failed, result.Outcome);
+        Assert.Contains("in time", result.Error);
+    }
+
+    [Fact]
+    public async Task SendAsync_Expo_ReportsAClientThatNeverAnswersAsAFailure()
+    {
+        _expo
+            .Setup(e => e.SendAsync(ExpoToken, Message, It.IsAny<CancellationToken>()))
+            .Returns<string, GuestPushMessage, CancellationToken>(async (_, _, ct) =>
+            {
+                await Task.Delay(Timeout.Infinite, ct);
+                return GuestPushResult.Delivered;
+            });
+        var subscription = new GuestPushAddress(GuestPushChannels.Expo, ExpoToken, null, null);
+
+        GuestPushResult result = await CreateSender(sendTimeout: TimeSpan.FromMilliseconds(50)).SendAsync(subscription, Message);
+
+        Assert.Equal(GuestPushOutcome.Failed, result.Outcome);
+        Assert.Contains("in time", result.Error);
+    }
+
+    [Fact]
+    public async Task SendAsync_WebPush_LetsTheCallersOwnCancellationThrough()
+    {
+        _webPush
+            .Setup(c => c.SendNotificationAsync(It.IsAny<PushSubscription>(), It.IsAny<string>(), It.IsAny<VapidDetails>(), It.IsAny<CancellationToken>()))
+            .Returns<PushSubscription, string, VapidDetails, CancellationToken>((_, _, _, ct) => Task.Delay(Timeout.Infinite, ct));
+        using var caller = new CancellationTokenSource();
+        await caller.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => CreateSender(ConfiguredVapid()).SendAsync(WebPushSubscription(), Message, caller.Token));
     }
 
     [Fact]

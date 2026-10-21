@@ -15,6 +15,12 @@ public interface ICurrentUserService
     /// </summary>
     int? UserId { get; }
 
+    /// <summary>
+    /// The <c>AdminCredential.SessionVersion</c> the caller's token was minted at; 0 when it
+    /// carries none (an API key, a token from before versions existed, no caller).
+    /// </summary>
+    int SessionVersion { get; }
+
     /// <summary>The caller's email claim, or null when unauthenticated.</summary>
     string? Email { get; }
 

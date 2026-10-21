@@ -76,14 +76,6 @@ public interface IBookingRepository
     /// </summary>
     Task<List<Booking>> GetForRestaurantInUtcRangeAsync(int restaurantId, DateTime startUtc, DateTime endUtc);
 
-    /// <summary>
-    /// True if any other booking on the same table overlaps the window
-    /// [<paramref name="newStart"/>, <paramref name="newEnd"/>). Existing bookings without an
-    /// explicit <see cref="Booking.EndTime"/> use <c>Booking.Date + <paramref name="fallbackDurationMinutes"/></c>
-    /// as their end. Pass <paramref name="excludeBookingId"/> to skip a booking being updated.
-    /// </summary>
-    Task<bool> HasConflictAsync(int? tableId, DateTime newStart, DateTime newEnd, int fallbackDurationMinutes, int? excludeBookingId = null);
-
     /// <summary>Distinct count of tables with at least one non-cancelled booking in the UTC window — used by the capacity notification.</summary>
     Task<int> CountDistinctBookedTablesAsync(int restaurantId, DateTime startUtc, DateTime endUtc);
 

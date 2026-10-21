@@ -74,10 +74,11 @@ public class UserService(
                 throw new BusinessRuleException("You cannot change your own role.") { Code = ErrorCodes.UserCannotChangeOwnRole };
             }
 
-            await EnsureAnotherActiveOwnerRemainsAsync(user, "demote", ErrorCodes.UserLastActiveOwnerDemote);
             string previousRole = user.Role;
-            user.Role = role;
-            await _credentialRepository.SaveChangesAsync();
+            if (!await _credentialRepository.TrySetRoleAsync(user, role))
+            {
+                throw LastActiveOwner("demote", ErrorCodes.UserLastActiveOwnerDemote);
+            }
 
             _audit.RecordChange("role", previousRole, role);
             Describe(AuditActions.UserRoleChange, user,
@@ -87,24 +88,31 @@ public class UserService(
         return UserMapper.ToDto(user);
     }
 
+    /// <seealso>UserServiceTests.SetActiveAsync_Deactivating_Ends_The_Accounts_Sessions</seealso>
+    /// <seealso>UserServiceTests.SetActiveAsync_Reactivating_Leaves_The_Session_Version_Alone</seealso>
     public async Task<UserDto> SetActiveAsync(int id, SetUserActiveRequest req)
     {
         AdminCredential user = await RequireUserAsync(id);
 
         if (user.IsActive != req.IsActive)
         {
-            if (!req.IsActive)
+            if (req.IsActive)
+            {
+                user.IsActive = true;
+                await _credentialRepository.SaveChangesAsync();
+            }
+            else
             {
                 if (IsSelf(user))
                 {
                     throw new BusinessRuleException("You cannot deactivate your own account.") { Code = ErrorCodes.UserCannotDeactivateSelf };
                 }
 
-                await EnsureAnotherActiveOwnerRemainsAsync(user, "deactivate", ErrorCodes.UserLastActiveOwnerDeactivate);
+                if (!await _credentialRepository.TryDeactivateAsync(user))
+                {
+                    throw LastActiveOwner("deactivate", ErrorCodes.UserLastActiveOwnerDeactivate);
+                }
             }
-
-            user.IsActive = req.IsActive;
-            await _credentialRepository.SaveChangesAsync();
 
             _audit.RecordChange("isActive", !req.IsActive, req.IsActive);
             Describe(
@@ -120,9 +128,13 @@ public class UserService(
 
     /// <summary>
     /// Sets a new password on another account — the out-of-band recovery path for a user who
-    /// never configured a security question. Any outstanding self-service reset token is
-    /// dropped so the old one can't be replayed afterwards.
+    /// never configured a security question, and the recovery for a compromised one. Besides
+    /// ending its sessions and API keys and dropping any outstanding reset token and push subscriptions, it
+    /// clears the account's security question: whoever had the account may have set their own,
+    /// and it would otherwise let them take it back.
     /// </summary>
+    /// <seealso>UserServiceTests.ResetPasswordAsync_Clears_The_Accounts_Security_Question</seealso>
+    /// <seealso>UserServiceTests.ResetPasswordAsync_Deletes_The_Accounts_Push_Subscriptions_Only</seealso>
     public async Task<UserDto> ResetPasswordAsync(int id, ResetUserPasswordRequest req)
     {
         UserFields.ValidatePassword(req.NewPassword);
@@ -130,10 +142,12 @@ public class UserService(
 
         string previousHash = user.PasswordHash;
         (user.PasswordHash, user.PasswordSalt) = _passwordService.Hash(req.NewPassword);
-        user.ResetToken = null;
-        user.ResetTokenExpiry = null;
-        user.RevokeSessions();
-        await _credentialRepository.SaveChangesAsync();
+        user.PvqQuestion = null;
+        user.PvqAnswerHash = null;
+        user.PvqAnswerSalt = null;
+        user.PvqFailedAttempts = 0;
+        user.PvqLockedUntil = null;
+        await _credentialRepository.RevokeSessionsAndApiKeysAsync(user);
 
         _audit.RecordChange("passwordHash", previousHash, user.PasswordHash);
         Describe(AuditActions.UserPasswordReset, user,
@@ -153,28 +167,12 @@ public class UserService(
             ?? throw new NotFoundException($"User {id} not found.") { Code = ErrorCodes.UserNotFound, Args = new Dictionary<string, object> { ["id"] = id } };
 
     private bool IsSelf(AdminCredential user)
-        => _currentUser.UserId == user.Id
-            || string.Equals(_currentUser.Email, user.Email, StringComparison.OrdinalIgnoreCase);
+        => _currentUser.UserId == user.Id;
 
     // Losing the last active Owner would leave the instance with nobody able to manage users —
-    // unrecoverable through the UI. Only an active Owner counts, so deactivating one and then
-    // demoting it isn't a way around the rule either.
-    // The action is part of the rule rather than a value inside it: a client renders its own
-    // wording per code, and both the verb and the role name are words it would have to translate
-    // out of an English sentence it cannot parse.
-    private async Task EnsureAnotherActiveOwnerRemainsAsync(AdminCredential user, string action, string code)
-    {
-        if (user.Role != UserRoles.Owner || !user.IsActive)
-        {
-            return;
-        }
-
-        int activeOwners = await _credentialRepository.CountActiveByRoleAsync(UserRoles.Owner);
-        if (activeOwners <= 1)
-        {
-            throw new BusinessRuleException(
-                $"Cannot {action} the last active {UserRoles.Owner}. Promote another user first.")
-            { Code = code };
-        }
-    }
+    // unrecoverable through the UI. The action is part of the rule rather than a value inside it:
+    // a client renders its own wording per code, and both the verb and the role name are words it
+    // would have to translate out of an English sentence it cannot parse.
+    private static BusinessRuleException LastActiveOwner(string action, string code)
+        => new($"Cannot {action} the last active {UserRoles.Owner}. Promote another user first.") { Code = code };
 }

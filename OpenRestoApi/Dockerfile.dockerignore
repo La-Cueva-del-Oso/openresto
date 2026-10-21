@@ -10,3 +10,6 @@
 **/*.db
 **/*.db-shm
 **/*.db-wal
+# Local overrides (Program.cs loads this file in every environment but Testing) can hold
+# credentials; the COPY . . would otherwise bake them into the image.
+**/appsettings.Local.json
