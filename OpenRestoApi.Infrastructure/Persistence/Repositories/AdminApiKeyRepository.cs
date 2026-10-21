@@ -27,11 +27,22 @@ internal class AdminApiKeyRepository(AppDbContext db) : IAdminApiKeyRepository
             .ToListAsync();
     }
 
-    public async Task<AdminApiKey> AddAsync(AdminApiKey key)
+    // The account is checked after the insert has committed: a revocation commits either before the
+    // row exists (the check sees it and the row goes) or after (the revocation sweeps the row).
+    public async Task<bool> TryAddAsync(AdminApiKey key, int sessionVersion)
     {
         _db.AdminApiKeys.Add(key);
         await _db.SaveChangesAsync();
-        return key;
+
+        bool accountStillAsRead = await _db.AdminCredentials
+            .AnyAsync(c => c.Id == key.UserId && c.SessionVersion == sessionVersion && c.IsActive);
+        if (!accountStillAsRead)
+        {
+            _db.AdminApiKeys.Remove(key);
+            await _db.SaveChangesAsync();
+        }
+
+        return accountStillAsRead;
     }
 
     public async Task SaveChangesAsync()

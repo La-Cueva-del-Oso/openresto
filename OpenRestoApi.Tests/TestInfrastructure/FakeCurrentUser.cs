@@ -11,6 +11,7 @@ namespace OpenRestoApi.Tests.TestInfrastructure;
 internal sealed class FakeCurrentUser : ICurrentUserService
 {
     public int? UserId { get; set; }
+    public int SessionVersion { get; set; }
     public string? Email { get; set; }
     public string? Role { get; set; }
     public bool IsApiKeyAuthenticated { get; set; }
@@ -26,6 +27,7 @@ internal sealed class FakeCurrentUser : ICurrentUserService
     public static FakeCurrentUser For(AdminCredential user) => new()
     {
         UserId = user.Id,
+        SessionVersion = user.SessionVersion,
         Email = user.Email,
         Role = user.Role,
     };

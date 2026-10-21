@@ -16,6 +16,7 @@ public sealed class NullCurrentUserService : ICurrentUserService
     private NullCurrentUserService() { }
 
     public int? UserId => null;
+    public int SessionVersion => 0;
     public string? Email => null;
     public string? Role => null;
     public bool IsApiKeyAuthenticated => false;

@@ -37,7 +37,12 @@ public class ApiKeysController(ApiKeyService apiKeys) : ControllerBase
     {
         // ValidationException (missing name/scopes, invalid scope pair, past expiry, or an
         // expiry combined with neverExpires) → 400, mapped by GlobalExceptionHandler.
-        ApiKeyCreatedDto created = await _apiKeys.CreateAsync(req);
+        ApiKeyCreatedDto? created = await _apiKeys.CreateAsync(req);
+        if (created is null)
+        {
+            return Unauthorized(new { message = "Your session has ended. Sign in again to create the key." });
+        }
+
         return CreatedAtAction(nameof(GetAll), new { }, created);
     }
 

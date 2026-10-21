@@ -34,9 +34,11 @@ public class ApiKeyService(
     /// id (so a lookup can narrow to one row before hashing anything), which does not exist until
     /// the first insert assigns it. The transient row between the two writes carries a random
     /// placeholder hash — never a fixed sentinel — so two concurrent creates can't collide on the
-    /// unique index before either gets its real value.
+    /// unique index before either gets its real value. Null when the caller's session was ended
+    /// (password change or reset, deactivation, sign-out) while the request was in flight: no key
+    /// is left behind, since recovery revokes an account's keys and a late one would outlive it.
     /// </summary>
-    public async Task<ApiKeyCreatedDto> CreateAsync(CreateApiKeyRequest req)
+    public async Task<ApiKeyCreatedDto?> CreateAsync(CreateApiKeyRequest req)
     {
         int userId = RequireCallerId();
         string name = NormalizeName(req.Name);
@@ -53,7 +55,10 @@ public class ApiKeyService(
             KeyHash = Guid.NewGuid().ToString("N"),
             Prefix = "pending",
         };
-        await _apiKeyRepository.AddAsync(entity);
+        if (!await _apiKeyRepository.TryAddAsync(entity, _currentUser.SessionVersion))
+        {
+            return null;
+        }
 
         string rawKey = ApiKeyCrypto.GenerateRawKey(entity.Id);
         entity.KeyHash = ApiKeyCrypto.Hash(rawKey);

@@ -43,6 +43,7 @@ How each feature behaves, its API fields and its error codes are in
 - Recovering an account now also revokes its API keys: changing the password, resetting it (with a reset link or by an Owner) and deactivating the account each revoke the account's live keys in the same step that ends its sessions. Before, a key minted while an account was compromised kept working after the recovery. Signing out does not revoke keys, and reactivating an account does not bring revoked ones back. `scripts/reset-admin.sh` revokes the account's keys in the same transaction as the password reset.
 - Changing a password or a sign-in email is now refused when the account's sessions were ended in the meantime (a reset by an Owner, a deactivation, a sign-out elsewhere) instead of overwriting that change; the request answers as if the current password were wrong. Two accounts changing to the same email at once now get the usual "already in use" answer for the loser.
 - Resetting a password with a security-question reset link now requires the account to be active, as sign-in does. Before, a deactivated account holding a link issued earlier could still set a password.
+- Creating an API key while the account's password was being changed or reset, or the account deactivated, could leave a working key behind that the recovery was meant to revoke. The key is now refused (the request answers that the session has ended) and no key is left.
 
 ### Changed
 
