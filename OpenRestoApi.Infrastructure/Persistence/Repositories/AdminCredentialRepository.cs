@@ -55,13 +55,38 @@ internal class AdminCredentialRepository(AppDbContext db) : IAdminCredentialRepo
         return rows > 0;
     }
 
-    public async Task CompletePvqVerificationAsync(int id, string resetToken, DateTime resetTokenExpiryUtc)
+    public async Task<bool> TryCompletePvqVerificationAsync(AdminCredential verified, string resetToken, DateTime resetTokenExpiryUtc)
     {
-        await _db.AdminCredentials.Where(c => c.Id == id).ExecuteUpdateAsync(s => s
-            .SetProperty(c => c.PvqFailedAttempts, 0)
-            .SetProperty(c => c.PvqLockedUntil, (DateTime?)null)
-            .SetProperty(c => c.ResetToken, resetToken)
-            .SetProperty(c => c.ResetTokenExpiry, resetTokenExpiryUtc));
+        int rows = await StillAsRead(verified)
+            .Where(c => c.PvqAnswerHash == verified.PvqAnswerHash)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.PvqFailedAttempts, 0)
+                .SetProperty(c => c.PvqLockedUntil, (DateTime?)null)
+                .SetProperty(c => c.ResetToken, resetToken)
+                .SetProperty(c => c.ResetTokenExpiry, resetTokenExpiryUtc));
+        return rows > 0;
+    }
+
+    public async Task<bool> TryResetPasswordAsync(AdminCredential credential, string resetToken, DateTime nowUtc, string passwordHash, string passwordSalt)
+    {
+        int rows = await StillAsRead(credential)
+            .Where(c => c.ResetToken == resetToken && c.ResetTokenExpiry >= nowUtc)
+            .ExecuteUpdateAsync(s =>
+            {
+                s.SetProperty(c => c.PasswordHash, passwordHash);
+                s.SetProperty(c => c.PasswordSalt, passwordSalt);
+                RevokeSessions(s);
+            });
+        return await RefreshAsync(credential, rows);
+    }
+
+    public async Task<bool> TrySetSecurityQuestionAsync(AdminCredential credential, string question, string answerHash, string answerSalt)
+    {
+        int rows = await StillAsRead(credential).ExecuteUpdateAsync(s => s
+            .SetProperty(c => c.PvqQuestion, question)
+            .SetProperty(c => c.PvqAnswerHash, answerHash)
+            .SetProperty(c => c.PvqAnswerSalt, answerSalt));
+        return await RefreshAsync(credential, rows);
     }
 
     public async Task RevokeSessionsAsync(AdminCredential credential)
@@ -84,6 +109,11 @@ internal class AdminCredentialRepository(AppDbContext db) : IAdminCredentialRepo
             && (c.Role != UserRoles.Owner
                 || !c.IsActive
                 || _db.AdminCredentials.Any(o => o.Id != id && o.IsActive && o.Role == UserRoles.Owner)));
+
+    // Every revocation (password change or reset, deactivation, sign-out) raises SessionVersion, so
+    // a write held to the version it read is refused once any of them has landed in between.
+    private IQueryable<AdminCredential> StillAsRead(AdminCredential read)
+        => _db.AdminCredentials.Where(c => c.Id == read.Id && c.SessionVersion == read.SessionVersion && c.IsActive);
 
     private static void RevokeSessions(UpdateSettersBuilder<AdminCredential> s)
     {

@@ -112,6 +112,9 @@ public class AuthService(
         return Mint(cred);
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
     /// <seealso>AuthServiceTests.ResetPasswordAsync_Rejects_A_Missing_Token_Without_Touching_Any_Account</seealso>
     /// <seealso>AuthServiceTests.ResetPasswordAsync_Deletes_The_Resetting_Accounts_Push_Subscriptions_Only</seealso>
     /// <seealso>AuthServiceTests.ResetPasswordAsync_Keeps_Push_Subscriptions_For_An_Unknown_Token</seealso>
@@ -123,11 +126,12 @@ public class AuthService(
         if (string.IsNullOrEmpty(resetToken))
             return false;
         AdminCredential? cred = await _credentialRepository.GetByResetTokenAsync(resetToken);
-        if (cred == null || cred.ResetTokenExpiry < DateTime.UtcNow)
+        if (cred == null)
             return false;
         string previousHash = cred.PasswordHash;
-        (cred.PasswordHash, cred.PasswordSalt) = _passwordService.Hash(newPassword);
-        await _credentialRepository.RevokeSessionsAsync(cred);
+        (string hash, string salt) = _passwordService.Hash(newPassword);
+        if (!await _credentialRepository.TryResetPasswordAsync(cred, resetToken, DateTime.UtcNow, hash, salt))
+            return false;
         await _pushSubscriptionRepository.DeleteForUserAsync(cred.Id);
 
         // The reset arrives with a token rather than a session, so the actor is whoever the token
@@ -138,6 +142,9 @@ public class AuthService(
         return true;
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
     /// <seealso>AuthServiceTests.LogoutAsync_Keeps_The_Callers_Push_Subscriptions</seealso>
     public virtual async Task LogoutAsync()
     {

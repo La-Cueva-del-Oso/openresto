@@ -1,7 +1,9 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using OpenRestoApi.Core.Application.DTOs;
 using OpenRestoApi.Core.Application.Exceptions;
+using OpenRestoApi.Core.Application.Interfaces;
 using OpenRestoApi.Core.Application.Services;
 using OpenRestoApi.Core.Application.Utilities;
 using OpenRestoApi.Core.Domain;
@@ -111,16 +113,17 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
         return await db.AdminCredentials.CountAsync(c => c.IsActive && c.Role == UserRoles.Owner);
     }
 
-    private async Task<AdminCredential> SeedAccountWithAnswerAsync(string answer)
+    private async Task<AdminCredential> SeedAccountWithAnswerAsync(string answer, string? password = null)
     {
         using AppDbContext db = NewContext();
         await db.AdminCredentials.ExecuteDeleteAsync();
         (string hash, string salt) = new PasswordService().Hash(answer);
+        (string passwordHash, string passwordSalt) = password is null ? ("h", "s") : new PasswordService().Hash(password);
         var account = new AdminCredential
         {
             Email = "owner@example.com",
-            PasswordHash = "h",
-            PasswordSalt = "s",
+            PasswordHash = passwordHash,
+            PasswordSalt = passwordSalt,
             PvqQuestion = "Q?",
             PvqAnswerHash = hash,
             PvqAnswerSalt = salt,
@@ -130,10 +133,78 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
         return account;
     }
 
-    private SecurityQuestionsService SecurityQuestions()
+    private SecurityQuestionsService SecurityQuestions(IPasswordService? passwords = null, AdminCredential? caller = null)
     {
         AppDbContext db = NewContext();
-        return new SecurityQuestionsService(new AdminCredentialRepository(db), new PasswordService(), FakeCurrentUser.Anonymous());
+        return new SecurityQuestionsService(
+            new AdminCredentialRepository(db),
+            passwords ?? new PasswordService(),
+            caller is null ? FakeCurrentUser.Anonymous() : FakeCurrentUser.For(caller));
+    }
+
+    private AuthService AuthServiceAs(AdminCredential? caller = null, IPasswordService? passwords = null)
+    {
+        AppDbContext db = NewContext();
+        return new AuthService(
+            new AdminCredentialRepository(db),
+            passwords ?? new PasswordService(),
+            Mock.Of<IJwtTokenService>(),
+            caller is null ? FakeCurrentUser.Anonymous() : FakeCurrentUser.For(caller),
+            new AdminPushSubscriptionRepository(db));
+    }
+
+    private async Task<AdminCredential> SeedAccountWithResetTokenAsync(string token)
+    {
+        AdminCredential account = await SeedAccountWithAnswerAsync("answer", password: "Current123!");
+        using AppDbContext db = NewContext();
+        await db.AdminCredentials.Where(c => c.Id == account.Id).ExecuteUpdateAsync(s => s
+            .SetProperty(c => c.ResetToken, token)
+            .SetProperty(c => c.ResetTokenExpiry, DateTime.UtcNow.AddMinutes(15)));
+        return await ReloadAsync(account.Id);
+    }
+
+    private async Task<bool> PasswordIsAsync(int id, string password)
+    {
+        AdminCredential stored = await ReloadAsync(id);
+        return new PasswordService().Verify(password, stored.PasswordHash, stored.PasswordSalt);
+    }
+
+    private Task ResetByOwnerAsync(int id)
+        => UserServiceAs().ResetPasswordAsync(id, new ResetUserPasswordRequest { NewPassword = "OwnerReset123!" });
+
+    /// <summary>
+    /// Hashes and verifies like <see cref="PasswordService"/>, but the first call runs
+    /// <paramref name="interruption"/> to completion before returning. Every flow under test hashes
+    /// or verifies after reading the account and before writing it, so the interruption lands in
+    /// exactly the gap a concurrent request would.
+    /// </summary>
+    private sealed class PasswordServiceInterruptedOnce(Func<Task> interruption) : IPasswordService
+    {
+        private readonly PasswordService _inner = new();
+        private Func<Task>? _interruption = interruption;
+
+        public (string Hash, string Salt) Hash(string password)
+        {
+            (string Hash, string Salt) result = _inner.Hash(password);
+            Interrupt();
+            return result;
+        }
+
+        public bool Verify(string password, string storedHash, string storedSalt)
+        {
+            bool result = _inner.Verify(password, storedHash, storedSalt);
+            Interrupt();
+            return result;
+        }
+
+        private void Interrupt()
+        {
+            Func<Task>? pending = Interlocked.Exchange(ref _interruption, null);
+            if (pending != null)
+            {
+                Task.Run(pending).GetAwaiter().GetResult();
+            }
+        }
     }
 
     private async Task<AdminCredential> ReloadAsync(int id)
@@ -309,5 +380,81 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
             Assert.Equal(PvqVerifyStatus.Success, (await SecurityQuestions().VerifyAsync(account.Email, "right")).Status);
             Assert.Equal(0, (await ReloadAsync(account.Id)).PvqFailedAttempts);
         }
+    }
+
+    // ── Recovery writes held to the account as it was read ──────────────────────
+
+    [Fact]
+    public async Task A_Security_Answer_Checked_Before_An_Owner_Reset_Earns_No_Reset_Token()
+    {
+        AdminCredential account = await SeedAccountWithAnswerAsync("old-answer");
+        SecurityQuestionsService verifier = SecurityQuestions(new PasswordServiceInterruptedOnce(() => ResetByOwnerAsync(account.Id)));
+
+        PvqVerifyOutcome outcome = await verifier.VerifyAsync(account.Email, "old-answer");
+
+        Assert.Equal(PvqVerifyStatus.WrongAnswer, outcome.Status);
+        Assert.Null((await ReloadAsync(account.Id)).ResetToken);
+    }
+
+    [Fact]
+    public async Task A_Security_Answer_Checked_Before_The_Question_Changed_Earns_No_Reset_Token()
+    {
+        AdminCredential account = await SeedAccountWithAnswerAsync("old-answer");
+        (string newHash, string newSalt) = new PasswordService().Hash("new-answer");
+        SecurityQuestionsService verifier = SecurityQuestions(new PasswordServiceInterruptedOnce(async () =>
+        {
+            using AppDbContext db = NewContext();
+            await db.AdminCredentials.Where(c => c.Id == account.Id).ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.PvqAnswerHash, newHash)
+                .SetProperty(c => c.PvqAnswerSalt, newSalt));
+        }));
+
+        PvqVerifyOutcome outcome = await verifier.VerifyAsync(account.Email, "old-answer");
+
+        Assert.Equal(PvqVerifyStatus.WrongAnswer, outcome.Status);
+        Assert.Null((await ReloadAsync(account.Id)).ResetToken);
+    }
+
+    [Fact]
+    public async Task A_Security_Question_Set_Up_While_An_Owner_Resets_The_Password_Is_Not_Stored()
+    {
+        AdminCredential account = await SeedAccountWithAnswerAsync("old-answer", password: "Current123!");
+        SecurityQuestionsService setup = SecurityQuestions(
+            new PasswordServiceInterruptedOnce(() => ResetByOwnerAsync(account.Id)), caller: account);
+
+        bool stored = await setup.SetupAsync("Current123!", "Planted?", "planted-answer");
+
+        Assert.False(stored);
+        AdminCredential after = await ReloadAsync(account.Id);
+        Assert.Null(after.PvqQuestion);
+        Assert.Null(after.PvqAnswerHash);
+    }
+
+    [Fact]
+    public async Task A_Reset_Link_Read_Before_The_Password_Changed_Cannot_Set_A_Password_Afterwards()
+    {
+        AdminCredential account = await SeedAccountWithResetTokenAsync("T");
+        AuthService attacker = AuthServiceAs(passwords: new PasswordServiceInterruptedOnce(
+            () => AuthServiceAs(caller: account).ChangePasswordAsync("Current123!", "UserChose123!")));
+
+        bool reset = await attacker.ResetPasswordAsync("T", "Attacker123!");
+
+        Assert.False(reset);
+        Assert.True(await PasswordIsAsync(account.Id, "UserChose123!"));
+    }
+
+    [Fact]
+    public async Task A_Reset_Link_Is_Spent_Once_When_Two_Requests_Read_It()
+    {
+        AdminCredential account = await SeedAccountWithResetTokenAsync("T");
+        bool secondReset = false;
+        AuthService first = AuthServiceAs(passwords: new PasswordServiceInterruptedOnce(
+            async () => secondReset = await AuthServiceAs().ResetPasswordAsync("T", "Second123!")));
+
+        bool firstReset = await first.ResetPasswordAsync("T", "First123!");
+
+        Assert.Equal((false, true), (firstReset, secondReset));
+        Assert.True(await PasswordIsAsync(account.Id, "Second123!"));
+        Assert.Null((await ReloadAsync(account.Id)).ResetToken);
     }
 }

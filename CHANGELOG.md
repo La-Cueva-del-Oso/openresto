@@ -29,6 +29,9 @@ How each feature behaves, its API fields and its error codes are in
 - Web Push requests now give up after 15 seconds and read at most 64 KiB of the push service's answer. Before, a push address chosen by a guest could answer with an endless body and tie up the server while a reminder or notification was being sent; such a send is now just that subscription's failure.
 - Purging a booking no longer erases another guest's notifications and email-failure records when two bookings happen to share a reference. Rows linked to the booking are found by that link; rows that only carry the reference are removed only if they also match the guest's own name or address.
 - An API key with the `users:write` scope can now deactivate an account but no longer reactivate one: the request is refused with `api_key.not_allowed` (403) and an Owner reactivates from a signed-in session. Before, a key could switch an account back on, which gave its login back to anyone who still knew the old password. `openresto users activate` therefore stops working with an API key.
+- Two admins saving the email settings at the same moment can no longer leave one's mail server beside the other's password. Before, an account that changed the server while an Owner was entering a new password could end up with that password pointed at its own server.
+- A security-question answer being checked while an Owner resets that account's password, or while the account's question is changed, no longer earns a reset link once the reset has landed. Setting up a security question likewise fails if the account's password is reset or its sessions end while the request is in flight.
+- A password reset link can no longer set a password after the account's password was changed or reset by an Owner while the reset request was in flight, and two requests carrying the same link can no longer both succeed. The link is now spent in the same step that sets the new password.
 
 ### Changed
 

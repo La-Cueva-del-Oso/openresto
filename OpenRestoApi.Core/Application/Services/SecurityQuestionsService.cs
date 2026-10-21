@@ -16,10 +16,16 @@ public sealed class SecurityQuestionsService(
     ICurrentUserService currentUser,
     IAuditScope? audit = null) : ISecurityQuestionsService
 {
+    /// <summary>
+    /// 
+    /// </summary>
     /// <seealso>SecurityQuestionsServiceTests.VerifyAsync_Allows_Attempts_Up_To_The_Limit</seealso>
     /// <seealso>SecurityQuestionsServiceTests.VerifyAsync_Locks_The_Account_After_Too_Many_Wrong_Answers</seealso>
     public const int MaxFailedAttempts = 5;
 
+    /// <summary>
+    /// 
+    /// </summary>
     /// <seealso>SecurityQuestionsServiceTests.VerifyAsync_Accepts_Answers_Again_Once_The_Lockout_Expires</seealso>
     public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
 
@@ -44,6 +50,9 @@ public sealed class SecurityQuestionsService(
         return ToStatus(await ResolveCurrentUserAsync());
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
     /// <seealso>SecurityQuestionsServiceTests.SetupAsync_Saves_The_Question_When_The_Current_Password_Is_Right</seealso>
     /// <seealso>SecurityQuestionsServiceTests.SetupAsync_Refuses_And_Keeps_The_Existing_Question_When_The_Current_Password_Is_Wrong</seealso>
     /// <seealso>SecurityQuestionsServiceTests.SetupAsync_Refuses_A_Missing_Current_Password</seealso>
@@ -53,9 +62,9 @@ public sealed class SecurityQuestionsService(
             ?? throw new NotFoundException("No account matches the signed-in session.") { Code = ErrorCodes.AuthNoAccountForSession };
         if (string.IsNullOrEmpty(currentPassword) || !CredentialHelper.VerifyPassword(cred, currentPassword, _passwordService))
             return false;
-        (cred.PvqAnswerHash, cred.PvqAnswerSalt) = _passwordService.Hash(NormaliseAnswer(answer));
-        cred.PvqQuestion = question.Trim();
-        await _credentialRepository.SaveChangesAsync();
+        (string answerHash, string answerSalt) = _passwordService.Hash(NormaliseAnswer(answer));
+        if (!await _credentialRepository.TrySetSecurityQuestionAsync(cred, question.Trim(), answerHash, answerSalt))
+            return false;
 
         // Neither the question nor the answer is recorded: together they are a credential, and the
         // question alone narrows a guess at the answer.
@@ -80,7 +89,8 @@ public sealed class SecurityQuestionsService(
             return new PvqVerifyOutcome(PvqVerifyStatus.WrongAnswer);
 
         string token = Guid.NewGuid().ToString("N");
-        await _credentialRepository.CompletePvqVerificationAsync(cred.Id, token, DateTime.UtcNow.AddMinutes(15));
+        if (!await _credentialRepository.TryCompletePvqVerificationAsync(cred, token, DateTime.UtcNow.AddMinutes(15)))
+            return new PvqVerifyOutcome(PvqVerifyStatus.WrongAnswer);
         return new PvqVerifyOutcome(PvqVerifyStatus.Success, token);
     }
 
