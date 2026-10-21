@@ -491,6 +491,8 @@ public class AdminService(
         return ToDetailDto(booking);
     }
 
+    /// <seealso>AdminServiceTests.AdminUpdateBookingAsync_ReadsAnUnspecifiedDate_AsTheRestaurantsWallClock</seealso>
+    /// <seealso>AdminServiceTests.AdminUpdateBookingAsync_KeepsAnExplicitUtcDate_AsThatInstant</seealso>
     public virtual async Task<BookingDetailDto?> AdminUpdateBookingAsync(int id, AdminUpdateBookingRequest req)
     {
         GuestText.RejectControlCharacters(req.CustomerName, req.SpecialRequests);
@@ -536,9 +538,15 @@ public class AdminService(
             throw new ValidationException("Provide tableId when reassigning to a different section.") { Code = ErrorCodes.BookingTableIdRequiredForSectionChange };
         }
 
-        if (req.Date.HasValue && req.Date.Value != booking.Date)
+        if (req.Date.HasValue)
         {
-            RescheduleKeepingDuration(booking, req.Date.Value, durationMinutes);
+            // An Unspecified date is the restaurant's wall clock, as on create; the (possibly new)
+            // restaurant decides the zone.
+            DateTime newDate = TimeZoneHelper.ConvertLocalToUtc(req.Date.Value, restaurant?.Timezone ?? "UTC");
+            if (newDate != booking.Date)
+            {
+                RescheduleKeepingDuration(booking, newDate, durationMinutes);
+            }
         }
 
         if (booking.EndTime.HasValue && booking.EndTime.Value < booking.Date)

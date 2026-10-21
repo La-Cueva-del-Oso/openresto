@@ -57,6 +57,7 @@ How each feature behaves, its API fields and its error codes are in
 - A booking made with stray spaces around the email (`" guest@example.com "`) could not be found afterwards: the lookup answered "not found" for the right reference. The address is now stored trimmed, and the lookup also finds bookings already saved with spaces.
 - Seating the same waitlist ticket twice at the same moment (two staff pressing Seat, or a double tap) created two bookings on two tables. The ticket is now checked and closed inside the same lock as the booking, so the second request gets the "already left the waitlist" answer.
 - Recording a walk-in from the admin on a table that belongs to a combinable group now refuses when that group is already booked at the time. Before, the check only looked at bookings on the table itself, so the same table could be seated twice.
+- Moving a booking from the admin with a date that carries no time zone (for example `2026-10-10T19:00:00` through the API) now reads it as the restaurant's local time, as creating a booking already does. Before, it was stored as UTC, so the booking landed hours off and the conflict check ran against the wrong time. Dates with a `Z` or an offset behave as before.
 
 ## [2.4.1] - 2026-10-14
 
