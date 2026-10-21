@@ -431,10 +431,13 @@
     "email": {
       "auth_failed": "The mail server rejected the username or password. Check them and try again.",
       "connection_failed": "Could not connect to the mail server. Check the server and the port.",
+      "host_required": "Enter the address (host) of the mail server.",
       "not_configured": "Email is not configured.",
       "password_required": "To change the server, port, username or encryption, re-enter the email password.",
+      "port_invalid": "The port must be a number between 1 and 65535.",
       "recipient_rejected": "The mail server did not accept the recipient's address. Check that it is correct.",
-      "send_failed": "The email could not be sent. Try again in a few minutes."
+      "send_failed": "The email could not be sent. Try again in a few minutes.",
+      "username_required": "Enter the username for the mail server."
     },
     "generic": "Something went wrong",
     "genericMessage": "An unexpected error occurred. Try again.",

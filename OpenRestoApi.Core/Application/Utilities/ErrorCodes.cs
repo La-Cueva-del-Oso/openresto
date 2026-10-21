@@ -191,6 +191,9 @@ public static class ErrorCodes
     public const string EmailRecipientRejected = "email.recipient_rejected";
     public const string EmailSendFailed = "email.send_failed";
     public const string EmailPasswordRequired = "email.password_required";
+    public const string EmailHostRequired = "email.host_required";
+    public const string EmailUsernameRequired = "email.username_required";
+    public const string EmailPortInvalid = "email.port_invalid";
     public const string AdminPasswordNotConfigured = "admin.password_not_configured";
     public const string NotificationPushEndpointInvalid = "notification.push_endpoint_invalid";
 }

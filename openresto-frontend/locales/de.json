@@ -431,10 +431,13 @@
     "email": {
       "auth_failed": "Der Mailserver hat den Benutzernamen oder das Passwort abgelehnt. Prüfen Sie beides und versuchen Sie es erneut.",
       "connection_failed": "Es konnte keine Verbindung zum Mailserver hergestellt werden. Prüfen Sie Server und Port.",
+      "host_required": "Geben Sie die Adresse (Host) des Mailservers ein.",
       "not_configured": "E-Mail ist nicht konfiguriert.",
       "password_required": "Um Server, Port, Benutzernamen oder Verschlüsselung zu ändern, geben Sie das E-Mail-Passwort erneut ein.",
+      "port_invalid": "Der Port muss eine Zahl zwischen 1 und 65535 sein.",
       "recipient_rejected": "Der Mailserver hat die Empfängeradresse nicht akzeptiert. Prüfen Sie, ob sie stimmt.",
-      "send_failed": "Die E-Mail konnte nicht gesendet werden. Versuchen Sie es in einigen Minuten erneut."
+      "send_failed": "Die E-Mail konnte nicht gesendet werden. Versuchen Sie es in einigen Minuten erneut.",
+      "username_required": "Geben Sie den Benutzernamen für den Mailserver ein."
     },
     "generic": "Etwas ist schiefgelaufen",
     "genericMessage": "Ein unerwarteter Fehler ist aufgetreten. Versuchen Sie es erneut.",

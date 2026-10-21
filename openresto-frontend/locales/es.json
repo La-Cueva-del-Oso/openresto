@@ -431,10 +431,13 @@
     "email": {
       "auth_failed": "El servidor de correo rechazó el usuario o la contraseña. Revísalos e inténtalo de nuevo.",
       "connection_failed": "No se pudo conectar con el servidor de correo. Revisa el servidor y el puerto.",
+      "host_required": "Escribe la dirección (host) del servidor de correo.",
       "not_configured": "El correo electrónico no está configurado.",
       "password_required": "Para cambiar el servidor, el puerto, el usuario o el cifrado, vuelve a escribir la contraseña de correo.",
+      "port_invalid": "El puerto debe ser un número entre 1 y 65535.",
       "recipient_rejected": "El servidor de correo no aceptó la dirección del destinatario. Revisa que esté bien escrita.",
-      "send_failed": "No se pudo enviar el correo. Inténtalo de nuevo en unos minutos."
+      "send_failed": "No se pudo enviar el correo. Inténtalo de nuevo en unos minutos.",
+      "username_required": "Escribe el usuario del servidor de correo."
     },
     "generic": "Ha ocurrido un error",
     "genericMessage": "Se ha producido un error inesperado. Inténtalo de nuevo.",

@@ -431,10 +431,13 @@
     "email": {
       "auth_failed": "Le serveur de messagerie a refusé l'identifiant ou le mot de passe. Vérifiez-les et réessayez.",
       "connection_failed": "Impossible de se connecter au serveur de messagerie. Vérifiez le serveur et le port.",
+      "host_required": "Saisissez l'adresse (hôte) du serveur de messagerie.",
       "not_configured": "L'e-mail n'est pas configuré.",
       "password_required": "Pour modifier le serveur, le port, le nom d'utilisateur ou le chiffrement, saisissez à nouveau le mot de passe de messagerie.",
+      "port_invalid": "Le port doit être un nombre compris entre 1 et 65535.",
       "recipient_rejected": "Le serveur de messagerie n'a pas accepté l'adresse du destinataire. Vérifiez qu'elle est correcte.",
-      "send_failed": "L'e-mail n'a pas pu être envoyé. Réessayez dans quelques minutes."
+      "send_failed": "L'e-mail n'a pas pu être envoyé. Réessayez dans quelques minutes.",
+      "username_required": "Saisissez l'identifiant du serveur de messagerie."
     },
     "generic": "Une erreur s'est produite",
     "genericMessage": "Une erreur inattendue s'est produite. Réessayez.",

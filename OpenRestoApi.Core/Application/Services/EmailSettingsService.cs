@@ -48,6 +48,7 @@ public class EmailSettingsService(
         bool enableSsl, string? fromName, string? fromEmail,
         bool sendBookingConfirmations = false)
     {
+        host = RequireUsableServer(host, port, username);
         EmailSettings? settings = await _settingsRepository.GetAsync();
         bool isNew = false;
         if (settings == null)
@@ -104,6 +105,36 @@ public class EmailSettingsService(
 
         _audit.Describe(AuditActions.EmailSettingsUpdate, AuditTargets.EmailSettings,
             summary: $"Updated the outgoing email settings ({host}:{port})");
+    }
+
+    /// <summary>
+    /// A host, port and username the mail library cannot connect and sign in with are refused
+    /// rather than stored: the settings screen already requires the first and last, and a blank
+    /// host would leave every guest email failing with a connection error. Returns the trimmed host.
+    /// </summary>
+    /// <seealso>EmailSettingsServiceTests.SaveAsync_RejectsABlankHost</seealso>
+    /// <seealso>EmailSettingsServiceTests.SaveAsync_RejectsABlankUsername</seealso>
+    /// <seealso>EmailSettingsServiceTests.SaveAsync_RejectsAPortOutsideTheValidRange</seealso>
+    /// <seealso>EmailSettingsServiceTests.SaveAsync_AcceptsThePortRangeLimits</seealso>
+    private static string RequireUsableServer(string? host, int port, string? username)
+    {
+        string trimmedHost = (host ?? string.Empty).Trim();
+        if (trimmedHost.Length == 0)
+        {
+            throw new ValidationException("Enter the address (host) of the mail server.") { Code = ErrorCodes.EmailHostRequired };
+        }
+
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            throw new ValidationException("Enter the username for the mail server.") { Code = ErrorCodes.EmailUsernameRequired };
+        }
+
+        if (port is < 1 or > 65535)
+        {
+            throw new ValidationException("The port must be a number between 1 and 65535.") { Code = ErrorCodes.EmailPortInvalid };
+        }
+
+        return trimmedHost;
     }
 
     private static bool SameDestination(EmailSettings stored, string host, int port, string username, bool enableSsl)

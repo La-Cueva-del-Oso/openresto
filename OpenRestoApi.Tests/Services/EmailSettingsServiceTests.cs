@@ -117,6 +117,66 @@ public class EmailSettingsServiceTests
         protectorMock.Verify(p => p.Encrypt(It.IsAny<string>()), Times.Never);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SaveAsync_RejectsABlankHost(string host)
+    {
+        using AppDbContext db = await SeedStoredPasswordAsync(nameof(SaveAsync_RejectsABlankHost) + host.Length);
+        var svc = CreateService(db);
+
+        ValidationException ex = await Assert.ThrowsAsync<ValidationException>(
+            () => svc.SaveAsync(host, 587, "user@real.com", "new-password", true, null, null));
+
+        Assert.Equal(ErrorCodes.EmailHostRequired, ex.Code);
+        Assert.Equal("smtp.real.com", (await db.Set<EmailSettings>().SingleAsync()).Host);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task SaveAsync_RejectsABlankUsername(string username)
+    {
+        using AppDbContext db = await SeedStoredPasswordAsync(nameof(SaveAsync_RejectsABlankUsername) + username.Length);
+        var svc = CreateService(db);
+
+        ValidationException ex = await Assert.ThrowsAsync<ValidationException>(
+            () => svc.SaveAsync("smtp.real.com", 587, username, "new-password", true, null, null));
+
+        Assert.Equal(ErrorCodes.EmailUsernameRequired, ex.Code);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(65536)]
+    public async Task SaveAsync_RejectsAPortOutsideTheValidRange(int port)
+    {
+        using AppDbContext db = await SeedStoredPasswordAsync(nameof(SaveAsync_RejectsAPortOutsideTheValidRange) + port);
+        var svc = CreateService(db);
+
+        ValidationException ex = await Assert.ThrowsAsync<ValidationException>(
+            () => svc.SaveAsync("smtp.real.com", port, "user@real.com", "new-password", true, null, null));
+
+        Assert.Equal(ErrorCodes.EmailPortInvalid, ex.Code);
+        Assert.Equal(587, (await db.Set<EmailSettings>().SingleAsync()).Port);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(65535)]
+    public async Task SaveAsync_AcceptsThePortRangeLimits_AndStoresTheHostTrimmed(int port)
+    {
+        using AppDbContext db = TestDbFactory.Create(nameof(SaveAsync_AcceptsThePortRangeLimits_AndStoresTheHostTrimmed) + port);
+        var svc = CreateService(db);
+
+        await svc.SaveAsync("  smtp.edge.com ", port, "user", null, true, null, null);
+
+        EmailSettings stored = await db.Set<EmailSettings>().SingleAsync();
+        Assert.Equal(port, stored.Port);
+        Assert.Equal("smtp.edge.com", stored.Host);
+    }
+
     private static async Task<AppDbContext> SeedStoredPasswordAsync(string name)
     {
         AppDbContext db = TestDbFactory.Create(name);

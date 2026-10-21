@@ -159,6 +159,28 @@ public class EmailSettingsControllerTests(TestWebAppFactory factory) : IClassFix
         Assert.Equal(587, stored.Port);
     }
 
+    [Theory]
+    [InlineData("", 587, "user@example.com", "email.host_required")]
+    [InlineData("smtp.example.com", 587, "", "email.username_required")]
+    [InlineData("smtp.example.com", 70000, "user@example.com", "email.port_invalid")]
+    public async Task Save_WithABlankHostOrUsernameOrAnInvalidPort_Returns400WithItsCode(string host, int port, string username, string code)
+    {
+        HttpClient client = _factory.CreateAuthenticatedClient();
+
+        HttpResponseMessage response = await client.PatchAsJsonAsync("/api/admin/email-settings", new
+        {
+            host,
+            port,
+            username,
+            password = "pw-new",
+            enableSsl = true,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        JsonElement body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(code, body.GetProperty("code").GetString());
+    }
+
     [Fact]
     public async Task Test_WithoutAuth_Returns401()
     {

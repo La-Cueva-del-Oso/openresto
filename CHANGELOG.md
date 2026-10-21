@@ -64,6 +64,7 @@ How each feature behaves, its API fields and its error codes are in
 - Seating the same waitlist ticket twice at the same moment (two staff pressing Seat, or a double tap) created two bookings on two tables. The ticket is now checked and closed inside the same lock as the booking, so the second request gets the "already left the waitlist" answer.
 - An Owner's password reset or a sign-out that hit a busy database and was retried could lose the changes made alongside it (for a reset, the new password itself). The pending changes now survive the retry. API keys revoked by a recovery also take their timestamp from the application clock instead of the system one.
 - Calling, removing or leaving a waitlist ticket at the same moment staff seated it could undo the seating: a call sent just after the seat put the party back in the queue as "called", and a leave or remove marked a seated party as having left. These now wait for the seat and answer "already left the waitlist" (a guest leaving after being seated is still told it worked).
+- Saving the email settings with a blank server address or username, or a port outside 1-65535, is now refused with a clear message (`email.host_required`, `email.username_required`, `email.port_invalid`, translated into English, Spanish, French and German). Before, a blank host was stored and every guest email then failed with a connection error. The server address is saved without surrounding spaces.
 
 ## [2.4.1] - 2026-10-14
 
