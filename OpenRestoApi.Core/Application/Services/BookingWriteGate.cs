@@ -7,7 +7,12 @@ namespace OpenRestoApi.Core.Application.Services;
 /// singleton shared by <see cref="BookingService"/>, <see cref="AdminService"/> and
 /// <see cref="WaitlistService"/>: a gate per service would serialize each path against itself only.
 /// Holding it keeps the check and the write together; never hold it across an email or push.
+/// A waitlist ticket's own status writes (call, leave, remove, push address) take it too: a seat
+/// closes the ticket inside it, and a write that read the ticket earlier would reopen it.
 /// </summary>
+/// <seealso>WaitlistServiceTests.NotifyAsync_WaitsForTheWriteGate_AndRefusesAPartyThatWasSeatedMeanwhile</seealso>
+/// <seealso>WaitlistServiceTests.LeaveAsync_WaitsForTheWriteGate_AndLeavesAPartyThatWasSeatedMeanwhileSeated</seealso>
+/// <seealso>WaitlistServiceTests.NotifyAsync_ReleasesTheWriteGate_BeforeTellingTheGuest</seealso>
 /// <remarks>
 /// ponytail: process-wide, which is correct for the documented single-instance deployment (as is
 /// <c>HoldService</c>). A second instance needs a database-level guard instead.
