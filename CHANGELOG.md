@@ -58,6 +58,7 @@ How each feature behaves, its API fields and its error codes are in
 - Seating the same waitlist ticket twice at the same moment (two staff pressing Seat, or a double tap) created two bookings on two tables. The ticket is now checked and closed inside the same lock as the booking, so the second request gets the "already left the waitlist" answer.
 - Recording a walk-in from the admin on a table that belongs to a combinable group now refuses when that group is already booked at the time. Before, the check only looked at bookings on the table itself, so the same table could be seated twice.
 - Moving a booking from the admin with a date that carries no time zone (for example `2026-10-10T19:00:00` through the API) now reads it as the restaurant's local time, as creating a booking already does. Before, it was stored as UTC, so the booking landed hours off and the conflict check ran against the wrong time. Dates with a `Z` or an offset behave as before.
+- Extending a booking, or undoing a finish or no-show, now refuses when another booking already holds that table (or its combinable group) during the added time. Before, both lengthened the sitting without looking, so two parties could end up on one table. The admin shows the reason in the booking window, in the four languages; shortening is never blocked.
 
 ## [2.4.1] - 2026-10-14
 
