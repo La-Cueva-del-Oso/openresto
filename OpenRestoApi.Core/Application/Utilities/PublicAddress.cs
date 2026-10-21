@@ -21,6 +21,15 @@ public static class PublicAddress
         {
             address = address.MapToIPv4();
         }
+        else if (address.AddressFamily == AddressFamily.InterNetworkV6)
+        {
+            if (IsLocalUseNat64(address))
+            {
+                return false;
+            }
+
+            address = EmbeddedIPv4(address) ?? address;
+        }
 
         if (IPAddress.IsLoopback(address) || address.Equals(IPAddress.Any) || address.Equals(IPAddress.IPv6Any))
         {
@@ -44,10 +53,33 @@ public static class PublicAddress
             172 when bytes[1] is >= 16 and <= 31 => false, // 172.16.0.0/12 (Docker's default bridges)
             192 when bytes[1] == 168 => false,             // 192.168.0.0/16
             100 when bytes[1] is >= 64 and <= 127 => false, // 100.64.0.0/10 (carrier NAT)
+            198 when bytes[1] is 18 or 19 => false,         // 198.18.0.0/15 (benchmarking)
             0 => false,
             >= 224 => false,                               // multicast and reserved
             _ => true,
         };
+    }
+
+    // 64:ff9b::/96 (NAT64) and 2002::/16 (6to4) carry an IPv4 address that a gateway or relay
+    // delivers to, so the IPv4 rules decide, exactly as for an IPv4-mapped address.
+    private static IPAddress? EmbeddedIPv4(IPAddress v6)
+    {
+        byte[] b = v6.GetAddressBytes();
+        bool nat64 = b[0] == 0x00 && b[1] == 0x64 && b[2] == 0xff && b[3] == 0x9b && b[4..12].All(x => x == 0);
+        bool sixToFour = b[0] == 0x20 && b[1] == 0x02;
+        if (nat64)
+        {
+            return new IPAddress(b[12..16]);
+        }
+
+        return sixToFour ? new IPAddress(b[2..6]) : null;
+    }
+
+    // 64:ff9b:1::/48 (RFC 8215) is NAT64 space reserved for local use, so never the public internet.
+    private static bool IsLocalUseNat64(IPAddress v6)
+    {
+        byte[] b = v6.GetAddressBytes();
+        return b[0] == 0x00 && b[1] == 0x64 && b[2] == 0xff && b[3] == 0x9b && b[4] == 0x00 && b[5] == 0x01;
     }
 
     /// <summary>
