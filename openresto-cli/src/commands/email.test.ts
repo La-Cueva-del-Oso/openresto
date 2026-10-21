@@ -4,6 +4,8 @@ import { Command } from "commander";
 import { registerEmailCommands } from "./email.js";
 import { registerStatusCommand } from "./status.js";
 
+process.env.OPENRESTO_LANG = "en";
+
 function buildProgram(): Command {
   const program = new Command();
   program.exitOverride().option("--profile <name>").option("--json");

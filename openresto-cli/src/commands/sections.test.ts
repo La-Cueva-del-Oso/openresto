@@ -2,6 +2,9 @@ import { test, describe, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { Command } from "commander";
 import { registerSectionsCommands } from "./sections.js";
+import { withLang } from "../withLang.test.js";
+
+process.env.OPENRESTO_LANG = "en";
 
 interface Call {
   method: string;
@@ -219,5 +222,60 @@ describe("sections delete", () => {
     assert.equal(process.exitCode, 1);
     assert.match(lines.join("\n"), /--yes/);
     process.exitCode = originalExitCode;
+  });
+
+  test("in Spanish the refusal carries the booking impact and the confirmation is Spanish", async () => {
+    const { fetch, calls } = fakeFetch((call) =>
+      call.url.endsWith("/impact")
+        ? { status: 200, body: { bookings: 3 } }
+        : { status: 204 },
+    );
+    globalThis.fetch = fetch;
+    const originalIsTTY = process.stdin.isTTY;
+    process.stdin.isTTY = false;
+    const { lines, restore } = captureLogs();
+    const originalExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      await withLang("es", () =>
+        buildProgram().parseAsync(
+          ["sections", "delete", "9", "--location", "7"],
+          { from: "user" },
+        ),
+      );
+    } finally {
+      restore();
+      process.stdin.isTTY = originalIsTTY;
+    }
+
+    assert.ok(!calls.some((c) => c.method === "DELETE"));
+    assert.deepEqual(lines, [
+      "Error: Se quitará la sección 9 junto con sus mesas. 3 reserva(s) próxima(s) perderá(n) la referencia a su sección. Vuelve a ejecutar el comando con --yes para confirmar (es obligatorio cuando no se usa una terminal).",
+    ]);
+    process.exitCode = originalExitCode;
+  });
+
+  test("in Spanish a confirmed delete reports in Spanish", async () => {
+    const { fetch } = fakeFetch((call) =>
+      call.url.endsWith("/impact")
+        ? { status: 200, body: { bookings: 0 } }
+        : { status: 204 },
+    );
+    globalThis.fetch = fetch;
+    const { lines, restore } = captureLogs();
+
+    try {
+      await withLang("es", () =>
+        buildProgram().parseAsync(
+          ["sections", "delete", "9", "--location", "7", "--yes"],
+          { from: "user" },
+        ),
+      );
+    } finally {
+      restore();
+    }
+
+    assert.deepEqual(lines, ["Sección 9 quitada."]);
   });
 });

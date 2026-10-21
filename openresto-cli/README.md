@@ -143,6 +143,14 @@ at `auth login` and the one sent with every request then travel unencrypted.
 `openresto auth logout` removes the saved key for the active profile (the server URL stays, so
 `auth login` next time only needs to ask for a new key).
 
+## Language
+
+The messages the CLI prints on its own (errors, confirmations, prompts, warnings) come in English
+and Spanish. Set `OPENRESTO_LANG=es` or `OPENRESTO_LANG=en` to choose; when it is unset, or holds
+anything else, the CLI follows your system language (any `es*` locale is Spanish, everything else
+English). Command and flag names, `--help`, this README, `--json` output and the text the server
+sends back (an API error's message) are not translated.
+
 ## Output
 
 Every command prints a human-readable table by default. Pass `--json` (before or after the

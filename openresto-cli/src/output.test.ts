@@ -1,6 +1,9 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { printResult } from "./output.js";
+import { withLang } from "./withLang.test.js";
+
+process.env.OPENRESTO_LANG = "en";
 
 function captureConsoleLog(fn: () => void): string[] {
   const lines: string[] = [];
@@ -81,6 +84,47 @@ describe("printResult", () => {
     );
 
     assert.match(lines[2], /\{"a":1\}/);
+  });
+});
+
+describe("placeholders in Spanish", () => {
+  test("an empty list and an empty result say so in Spanish in table mode", async () => {
+    await withLang("es", () => {
+      assert.deepEqual(
+        captureConsoleLog(() => printResult([], false)),
+        ["(sin resultados)"],
+      );
+      assert.deepEqual(
+        captureConsoleLog(() => printResult(undefined, false)),
+        ["(sin contenido)"],
+      );
+    });
+  });
+
+  test("--json output is untouched by the language", async () => {
+    await withLang("es", () => {
+      assert.deepEqual(
+        captureConsoleLog(() => printResult([], true)),
+        ["[]"],
+      );
+      const lines = captureConsoleLog(() =>
+        printResult({ status: "active", name: "Café" }, true),
+      );
+      assert.deepEqual(JSON.parse(lines.join("\n")), {
+        status: "active",
+        name: "Café",
+      });
+    });
+  });
+
+  test("table headers and values are data, not translated", async () => {
+    await withLang("es", () => {
+      const lines = captureConsoleLog(() =>
+        printResult([{ id: 1, status: "cancelled" }], false),
+      );
+      assert.match(lines[0], /id\s+status/);
+      assert.match(lines[2], /1\s+cancelled/);
+    });
   });
 });
 

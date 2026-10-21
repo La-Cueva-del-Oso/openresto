@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { Command } from "commander";
 import { registerUsersCommands } from "./users.js";
 
+process.env.OPENRESTO_LANG = "en";
+
 function usersCommand(): Command {
   const program = new Command();
   program.exitOverride();

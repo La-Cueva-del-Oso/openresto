@@ -10,6 +10,10 @@ How each feature behaves, its API fields and its error codes are in
 
 ## [Unreleased]
 
+### Added
+
+- The command-line client now speaks Spanish: its own errors, confirmations, prompts and version warnings are shown in Spanish when `OPENRESTO_LANG=es` is set, or when the system language is Spanish and `OPENRESTO_LANG` is unset (`OPENRESTO_LANG=en` forces English). `--help`, the README, `--json` output and the text that comes from the server stay in English.
+
 ### Security
 
 - Admin push notifications now belong to the account that enabled them. Before, a subscription had no owner: a deactivated admin kept receiving every booking, and a browser stayed subscribed after its user's password was changed or reset. Bookings are now pushed only to active accounts, a password change or reset removes that account's subscriptions (signing out does not), re-enabling notifications in a browser another admin had used takes it over, and only the account that owns a subscription can remove it. The public demo's reset also clears subscriptions, so a visitor's browser no longer keeps receiving the demo's bookings.

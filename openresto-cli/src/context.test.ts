@@ -2,6 +2,9 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { printError, handle } from "./context.js";
 import { ApiError } from "./transport.js";
+import { withLang } from "./withLang.test.js";
+
+process.env.OPENRESTO_LANG = "en";
 
 function captureConsoleError(fn: () => void): string[] {
   const lines: string[] = [];
@@ -77,6 +80,34 @@ describe("printError", () => {
     const lines = captureConsoleError(() => printError("just a string"));
 
     assert.ok(lines.length > 0);
+  });
+});
+
+describe("printError in Spanish", () => {
+  test("the prefix and the status are Spanish-neutral and the server's message is left raw", async () => {
+    const lines = await withLang("es", () =>
+      captureConsoleError(() =>
+        printError(
+          new ApiError(404, "No booking found.", "booking.lookup_not_found"),
+        ),
+      ),
+    );
+
+    assert.equal(
+      lines[0],
+      "Error (404) [booking.lookup_not_found]: No booking found.",
+    );
+  });
+
+  test("a hostile server message is escaped in Spanish too", async () => {
+    const lines = await withLang("es", () =>
+      captureConsoleError(() =>
+        printError(new ApiError(400, "bad \x1b[2J name", "x")),
+      ),
+    );
+
+    assert.doesNotMatch(lines[0], /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/);
+    assert.match(lines[0], /bad \\x1b\[2J name/);
   });
 });
 

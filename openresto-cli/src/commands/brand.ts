@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { clientFor, getGlobalOptions, handle } from "../context.js";
+import { t } from "../i18n.js";
 import { printResult } from "../output.js";
 import { readJsonInput, omitUndefined } from "../io.js";
 
@@ -81,9 +82,7 @@ export function registerBrandCommands(program: Command): void {
             });
 
         if (Object.keys(body as object).length === 0) {
-          throw new Error(
-            "Nothing to update — pass at least one flag or --from-json.",
-          );
+          throw new Error(t("brand.nothingToUpdate"));
         }
 
         const result = await client.patch("/api/brand", { body });

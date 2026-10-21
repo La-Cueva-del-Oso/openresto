@@ -2,6 +2,9 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { Client } from "./transport.js";
 import { warnOnServerVersionMismatch } from "./versionCheck.js";
+import { withLang } from "./withLang.test.js";
+
+process.env.OPENRESTO_LANG = "en";
 
 function clientReturning(
   handler: (url: string) => { status: number; body?: unknown },
@@ -36,6 +39,84 @@ async function run(fn: () => Promise<void>): Promise<string[]> {
   }
   return lines;
 }
+
+describe("a line break in the server's version cannot forge a second line", () => {
+  for (const lang of ["en", "es"] as const) {
+    test(`stays on one stderr line with the break shown escaped (${lang})`, async () => {
+      const client = clientReturning(() => ({
+        status: 200,
+        body: { version: "9.9.0\nError: FORGED" },
+      }));
+
+      const lines = await withLang(lang, () =>
+        run(() => warnOnServerVersionMismatch(client, "2.4.1")),
+      );
+
+      assert.equal(lines.length, 1);
+      assert.doesNotMatch(lines[0], /\n/);
+      assert.match(lines[0], /9\.9\.0\\nError: FORGED/);
+    });
+  }
+});
+
+describe("warnOnServerVersionMismatch in Spanish", () => {
+  test("a minor mismatch warns in Spanish naming both versions", async () => {
+    const client = clientReturning(() => ({
+      status: 200,
+      body: { version: "1.8.0" },
+    }));
+
+    const lines = await withLang("es", () =>
+      run(() => warnOnServerVersionMismatch(client, "1.9.0")),
+    );
+
+    assert.deepEqual(lines, [
+      "ERR:aviso: el servidor está en la versión 1.8.0 y la CLI en la 1.9.0: puede que los comandos no coincidan con la API del servidor",
+    ]);
+  });
+
+  test("a 404 says in Spanish that the server is older", async () => {
+    const client = clientReturning(() => ({ status: 404 }));
+
+    const lines = await withLang("es", () =>
+      run(() => warnOnServerVersionMismatch(client, "1.9.0")),
+    );
+
+    assert.equal(lines.length, 1);
+    assert.match(
+      lines[0],
+      /^ERR:aviso: no se pudo conocer la versión del servidor/,
+    );
+    assert.match(lines[0], /anterior a la 1\.9\.0/);
+  });
+
+  test("a server-supplied version with escape sequences is escaped in Spanish too", async () => {
+    const client = clientReturning(() => ({
+      status: 200,
+      body: { version: "1.2.0\x1b[2J" },
+    }));
+
+    const lines = await withLang("es", () =>
+      run(() => warnOnServerVersionMismatch(client, "2.4.1")),
+    );
+
+    assert.doesNotMatch(lines[0], /[\u0000-\u001f\u007f-\u009f]/);
+    assert.match(lines[0], /1\.2\.0\\x1b\[2J/);
+  });
+
+  test("a matching version stays silent in Spanish", async () => {
+    const client = clientReturning(() => ({
+      status: 200,
+      body: { version: "1.9.0" },
+    }));
+
+    const lines = await withLang("es", () =>
+      run(() => warnOnServerVersionMismatch(client, "1.9.0")),
+    );
+
+    assert.deepEqual(lines, []);
+  });
+});
 
 describe("warnOnServerVersionMismatch", () => {
   test("a server-supplied version carrying escape sequences is warned about escaped, not raw", async () => {
