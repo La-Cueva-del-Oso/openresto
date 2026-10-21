@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline/promises";
+import { neutralizeControl } from "./output.js";
 
 export class ConfirmationRequiredError extends Error {
   constructor(message: string) {
@@ -16,16 +17,20 @@ export interface ConfirmDeps {
 /**
  * Gates a destructive command: `--yes` always proceeds; otherwise an interactive TTY is prompted
  * y/N; a non-interactive session (piped input, CI) with no `--yes` is refused rather than
- * silently blocking on a prompt nobody can answer.
+ * silently blocking on a prompt nobody can answer. The message routinely carries a name from the
+ * API (a location's), so it is neutralized here, where every caller's prompt and refusal pass.
+ *
+ * @see [confirm.test.ts](./confirm.test.ts) — pins that no raw escape or BEL reaches the prompt.
  */
 export async function confirmOrExit(
-  message: string,
+  rawMessage: string,
   yes: boolean,
   deps: ConfirmDeps = {},
 ): Promise<void> {
   if (yes) {
     return;
   }
+  const message = neutralizeControl(rawMessage, true);
 
   const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY);
   if (!isTTY) {

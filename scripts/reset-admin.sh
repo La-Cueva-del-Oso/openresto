@@ -124,9 +124,14 @@ fi
 
 # Also forces the account back to an active Owner: being locked out because the last Owner
 # was deactivated or demoted is exactly the situation this script exists to undo.
+#
+# The account's push subscriptions go in the same transaction: a browser an intruder registered
+# would otherwise keep receiving every booking after the recovery (the HTTP resets drop them too).
+# If the table were missing the statement fails and rolls everything back, so the script stops
+# instead of reporting a recovery that left that push in place.
 log "Resetting admin credentials for $NEW_EMAIL (account #$TARGET_ID)..."
 docker exec "$CONTAINER" sqlite3 "$DB" \
-  "UPDATE AdminCredentials SET Email='$ESCAPED_EMAIL', PasswordHash='$NEW_HASH', PasswordSalt='$NEW_SALT', Role='Owner', IsActive=1, SessionVersion=SessionVersion+1, PvqQuestion=NULL, PvqAnswerHash=NULL, PvqAnswerSalt=NULL, PvqFailedAttempts=0, PvqLockedUntil=NULL, ResetToken=NULL, ResetTokenExpiry=NULL WHERE Id=$TARGET_ID;"
+  "BEGIN; UPDATE AdminCredentials SET Email='$ESCAPED_EMAIL', PasswordHash='$NEW_HASH', PasswordSalt='$NEW_SALT', Role='Owner', IsActive=1, SessionVersion=SessionVersion+1, PvqQuestion=NULL, PvqAnswerHash=NULL, PvqAnswerSalt=NULL, PvqFailedAttempts=0, PvqLockedUntil=NULL, ResetToken=NULL, ResetTokenExpiry=NULL WHERE Id=$TARGET_ID; DELETE FROM AdminPushSubscriptions WHERE UserId=$TARGET_ID; COMMIT;"
 
 ACTUAL_EMAIL="$(docker exec "$CONTAINER" sqlite3 "$DB" "SELECT Email FROM AdminCredentials WHERE Id=$TARGET_ID;")"
 if [[ "$ACTUAL_EMAIL" != "$NEW_EMAIL" ]]; then

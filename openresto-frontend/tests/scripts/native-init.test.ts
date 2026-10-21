@@ -1,4 +1,7 @@
+import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer, type Server, type ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -18,6 +21,7 @@ import {
   deriveScheme,
   deriveSlug,
   fetchBrand,
+  neutralizeControl,
   nextSteps,
   normalizeFingerprint,
   normalizeServerUrl,
@@ -413,5 +417,109 @@ describe("run", () => {
     expect(text).toContain("--android-fingerprint");
     expect(text).toContain("--apple-team-id");
     expect(text).toContain("bundled artwork");
+  });
+});
+
+describe("terminal output that came from the instance", () => {
+  // Clears the screen, writes "evil" to the clipboard (OSC 52) and rings the bell.
+  const hostile = "Cafe \u001b[2J\u001b]52;c;ZXZpbA==\u0007 Norte\u009b31m";
+  const rawControl = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/;
+
+  it("neutralizeControl matches the command-line client's neutralizeControl", () => {
+    const text = `${hostile}\u007f\ta\nb`;
+    expect(neutralizeControl(text)).toBe(
+      "Cafe \\x1b[2J\\x1b]52;c;ZXZpbA==\\x07 Norte\\x9b31m\\x7f\\ta\\nb"
+    );
+    expect(neutralizeControl(text, true)).toBe(
+      "Cafe \\x1b[2J\\x1b]52;c;ZXZpbA==\\x07 Norte\\x9b31m\\x7f\ta\nb"
+    );
+    expect(neutralizeControl("Café ☕ ok")).toBe("Café ☕ ok");
+  });
+
+  it("run() logs a hostile brand name as visible escapes, and an ordinary one untouched", async () => {
+    const root = mkdtempSync(join(tmpdir(), "native-init-term-"));
+    const lines: string[] = [];
+    const serverWith = (appName: string) => async (url: string) =>
+      ({
+        ok: !url.includes("/app-icon-"),
+        status: url.includes("/app-icon-") ? 404 : 200,
+        json: async () => ({ appName, primaryColor: "#aa3311" }),
+      }) as unknown as Response;
+    const argv = ["--server", "https://b.example", "--bundle-id", "com.x.app"];
+    try {
+      await run({ argv, root, fetch: serverWith(hostile), log: (l) => lines.push(l) });
+      expect(lines.join("\n")).not.toMatch(rawControl);
+      expect(lines.join("\n")).toContain("Cafe \\x1b[2J\\x1b]52;c;ZXZpbA==\\x07 Norte\\x9b31m");
+
+      lines.length = 0;
+      rmSync(join(root, "native"), { recursive: true, force: true });
+      await run({ argv, root, fetch: serverWith("Café Norte ☕"), log: (l) => lines.push(l) });
+      expect(lines.join("\n")).toContain("Café Norte ☕ → https://b.example");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  describe("the script itself, against a server that answers with hostile text", () => {
+    let server: Server;
+    let origin: string;
+    let reply: (res: ServerResponse) => void;
+
+    beforeAll(async () => {
+      server = createServer((req, res) => {
+        if (req.url === "/api/brand") return reply(res);
+        res.writeHead(404).end();
+      });
+      await new Promise<void>((done) => server.listen(0, done));
+      origin = `http://localhost:${(server.address() as AddressInfo).port}`;
+    });
+    afterAll(() => new Promise<void>((done) => server.close(() => done())));
+
+    function runScript(out: string) {
+      const script = join(__dirname, "../../scripts/native-init.mjs");
+      return new Promise<{ code: number | null; stdout: Buffer; stderr: Buffer }>((done) => {
+        const child = spawn(
+          process.execPath,
+          [script, "--server", origin, "--bundle-id", "com.x.app", "--out", out],
+          { stdio: ["ignore", "pipe", "pipe"] }
+        );
+        const stdout: Buffer[] = [];
+        const stderr: Buffer[] = [];
+        child.stdout.on("data", (c) => stdout.push(c));
+        child.stderr.on("data", (c) => stderr.push(c));
+        child.on("close", (code) =>
+          done({ code, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr) })
+        );
+      });
+    }
+
+    it("writes no raw escape or bell to stdout for a hostile brand name", async () => {
+      reply = (res) =>
+        res
+          .writeHead(200, { "content-type": "application/json" })
+          .end(JSON.stringify({ appName: hostile, primaryColor: "#aa3311" }));
+      const out = mkdtempSync(join(tmpdir(), "native-init-bin-"));
+      try {
+        const { code, stdout, stderr } = await runScript(out);
+        expect({ code, stderr: stderr.toString("utf8") }).toEqual({ code: 0, stderr: "" });
+        expect(stdout.toString("utf8")).not.toMatch(rawControl);
+        expect(stdout.toString("utf8")).toContain("\\x1b]52;c;ZXZpbA==\\x07");
+      } finally {
+        rmSync(out, { recursive: true, force: true });
+      }
+    });
+
+    it("writes no raw escape or bell to stderr when the failure echoes the response", async () => {
+      reply = (res) => res.writeHead(200).end(`${hostile} is not json`);
+      const out = mkdtempSync(join(tmpdir(), "native-init-bin-"));
+      try {
+        const { code, stdout, stderr } = await runScript(out);
+        expect(code).toBe(1);
+        expect(stdout.toString("utf8") + stderr.toString("utf8")).not.toMatch(rawControl);
+        expect(stderr.toString("utf8")).toContain("\\x1b");
+      } finally {
+        rmSync(out, { recursive: true, force: true });
+      }
+    });
   });
 });
