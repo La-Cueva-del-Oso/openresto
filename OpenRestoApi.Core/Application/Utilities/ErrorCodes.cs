@@ -30,6 +30,8 @@ public static class ErrorCodes
     public const string BookingAlreadyPast = "booking.already_past";
     public const string BookingAlreadyActive = "booking.already_active";
     public const string BookingMoveConflict = "booking.move_conflict";
+    public const string BookingExtendConflict = "booking.extend_conflict";
+    public const string BookingUndoConflict = "booking.undo_conflict";
     public const string BookingTableNotInSection = "booking.table_not_in_section";
     public const string BookingInvalidTableForRestaurant = "booking.invalid_table_for_restaurant";
     public const string BookingSectionMismatch = "booking.section_mismatch";

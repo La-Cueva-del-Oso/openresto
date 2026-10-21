@@ -444,9 +444,29 @@ describe("adminExtendBooking", () => {
     expect(JSON.parse(opts.body)).toEqual({ minutes: 30 });
   });
 
-  it("returns null on failure", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false });
-    expect(await adminExtendBooking(5, 30)).toBeNull();
+  it("throws with the server's reason when the extension is refused", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({
+        message:
+          "Another booking starts before the sitting would end, so it cannot be extended that long.",
+      }),
+    });
+
+    await expect(adminExtendBooking(5, 30)).rejects.toThrow(
+      "Another booking starts before the sitting would end, so it cannot be extended that long."
+    );
+  });
+
+  it("throws a generic message when the refusal has no readable body", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => {
+        throw new Error("not json");
+      },
+    });
+
+    await expect(adminExtendBooking(5, 30)).rejects.toThrow("Failed to extend booking");
   });
 });
 

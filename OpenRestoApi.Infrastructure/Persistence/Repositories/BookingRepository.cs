@@ -85,6 +85,9 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories
             return booking;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
         /// <seealso>AdminServiceTests.PurgeBookingAsync_WithASharedReference_ErasesOnlyThatGuestsRows</seealso>
         /// <seealso>AdminServiceTests.PurgeBookingAsync_OfABookingWithNoReference_KeepsRowsThatHaveNoReferenceEither</seealso>
         public async Task DeleteAsync(int id)
@@ -280,16 +283,6 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories
                             !b.IsCancelled)
                 .OrderBy(b => b.Date)
                 .ToListAsync();
-        }
-
-        public async Task<bool> HasConflictAsync(int? tableId, DateTime newStart, DateTime newEnd, int fallbackDurationMinutes, int? excludeBookingId = null)
-        {
-            return await _db.Bookings.AnyAsync(b =>
-                b.TableId == tableId &&
-                !b.IsCancelled &&
-                (excludeBookingId == null || b.Id != excludeBookingId.Value) &&
-                b.Date < newEnd &&
-                (b.EndTime != null ? b.EndTime > newStart : b.Date.AddMinutes(fallbackDurationMinutes) > newStart));
         }
 
         public async Task<int> CountDistinctBookedTablesAsync(int restaurantId, DateTime startUtc, DateTime endUtc)

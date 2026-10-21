@@ -228,18 +228,20 @@ export async function adminCreateBooking(
   return await res.json();
 }
 
+/**
+ * Throws with the server's reason when the extension is refused (another booking starts before
+ * the new end), so the popup can say why instead of doing nothing.
+ */
 export async function adminExtendBooking(
   id: number,
   minutes: number
-): Promise<{ endTime: string } | null> {
-  try {
-    const res = await post(`/admin/bookings/${id}/extend`, { minutes });
-    if (!res.ok) throw new Error("Failed to extend booking");
-    return await res.json();
-  } catch (err) {
-    console.error("adminExtendBooking error:", err);
-    return null;
+): Promise<{ endTime: string }> {
+  const res = await post(`/admin/bookings/${id}/extend`, { minutes });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(apiErrorMessage(body, "Failed to extend booking"));
   }
+  return await res.json();
 }
 
 /**
