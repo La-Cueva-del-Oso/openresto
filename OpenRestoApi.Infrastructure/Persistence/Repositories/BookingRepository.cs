@@ -210,11 +210,19 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories
                 reservedGroupIds.Add(tableGroupId.Value);
             }
 
+            // A row with no EndTime holds its unit for the restaurant's default, not for the
+            // requester's length. Every booking on these tables belongs to the one restaurant.
+            int restaurantDefault = await _db.Restaurants
+                .Where(r => r.Sections.Any(s => s.Tables.Any(t => reservedTableIds.Contains(t.Id))))
+                .Select(r => r.DefaultBookingDurationMinutes)
+                .FirstOrDefaultAsync();
+            DateTime legacyThreshold = restaurantDefault > 0 ? newStart.AddMinutes(-restaurantDefault) : thresholdStart;
+
             return await _db.Bookings.AnyAsync(b =>
                 !b.IsCancelled &&
                 (excludeBookingId == null || b.Id != excludeBookingId.Value) &&
                 b.Date < newEnd &&
-                (b.EndTime != null ? b.EndTime > newStart : b.Date > thresholdStart) &&
+                (b.EndTime != null ? b.EndTime > newStart : b.Date > legacyThreshold) &&
                 ((b.TableId.HasValue && reservedTableIds.Contains(b.TableId.Value)) ||
                  (b.TableGroupId.HasValue && reservedGroupIds.Contains(b.TableGroupId.Value))));
         }
