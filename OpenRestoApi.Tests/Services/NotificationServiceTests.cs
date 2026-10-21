@@ -269,9 +269,9 @@ public class NotificationServiceTests : IDisposable
 
     // ── SubscribeAsync ────────────────────────────────────────────────────────
 
-    private async Task<int> SeedUserAsync(string email = "owner@example.com")
+    private async Task<int> SeedUserAsync(string email = "owner@example.com", int sessionVersion = 0, bool isActive = true)
     {
-        var user = new AdminCredential { Email = email, PasswordHash = "h", PasswordSalt = "s" };
+        var user = new AdminCredential { Email = email, PasswordHash = "h", PasswordSalt = "s", SessionVersion = sessionVersion, IsActive = isActive };
         _db.AdminCredentials.Add(user);
         await _db.SaveChangesAsync();
         return user.Id;
@@ -282,7 +282,7 @@ public class NotificationServiceTests : IDisposable
     {
         await SeedRestaurantAsync();
         int userId = await SeedUserAsync();
-        await CreateService().SubscribeAsync(userId, new PushSubscribeRequest("https://ep", "p256", "auth"));
+        await CreateService().SubscribeAsync(userId, 0, new PushSubscribeRequest("https://ep", "p256", "auth"));
 
         Assert.Equal(1, await _db.AdminPushSubscriptions.CountAsync());
         AdminPushSubscription sub = await _db.AdminPushSubscriptions.FirstAsync();
@@ -295,7 +295,7 @@ public class NotificationServiceTests : IDisposable
         int caller = await SeedUserAsync("caller@example.com");
         await SeedUserAsync("bystander@example.com");
 
-        await CreateService().SubscribeAsync(caller, new PushSubscribeRequest("https://ep", "p256", "auth"));
+        await CreateService().SubscribeAsync(caller, 0, new PushSubscribeRequest("https://ep", "p256", "auth"));
 
         Assert.Equal(caller, (await _db.AdminPushSubscriptions.SingleAsync()).UserId);
     }
@@ -317,9 +317,9 @@ public class NotificationServiceTests : IDisposable
         });
         await _db.SaveChangesAsync();
 
-        await CreateService().SubscribeAsync(caller, new PushSubscribeRequest("https://ep", "new-p256", "new-auth"));
+        await CreateService().SubscribeAsync(caller, 0, new PushSubscribeRequest("https://ep", "new-p256", "new-auth"));
 
-        AdminPushSubscription sub = await _db.AdminPushSubscriptions.SingleAsync();
+        AdminPushSubscription sub = await _db.AdminPushSubscriptions.AsNoTracking().SingleAsync();
         Assert.Equal(caller, sub.UserId);
         Assert.Equal("new-p256", sub.P256dh);
         Assert.Equal("new-auth", sub.Auth);
@@ -336,7 +336,7 @@ public class NotificationServiceTests : IDisposable
         int userId = await SeedUserAsync();
 
         var ex = await Assert.ThrowsAsync<ValidationException>(
-            () => CreateService().SubscribeAsync(userId, new PushSubscribeRequest(endpoint, "p256", "auth")));
+            () => CreateService().SubscribeAsync(userId, 0, new PushSubscribeRequest(endpoint, "p256", "auth")));
 
         Assert.Equal(ErrorCodes.NotificationPushEndpointInvalid, ex.Code);
         Assert.Equal(0, await _db.AdminPushSubscriptions.CountAsync());
@@ -357,12 +357,71 @@ public class NotificationServiceTests : IDisposable
         });
         await _db.SaveChangesAsync();
 
-        await CreateService().SubscribeAsync(userId, new PushSubscribeRequest("https://ep", "new-p256", "new-auth"));
+        await CreateService().SubscribeAsync(userId, 0, new PushSubscribeRequest("https://ep", "new-p256", "new-auth"));
 
         Assert.Equal(1, await _db.AdminPushSubscriptions.CountAsync());
-        AdminPushSubscription sub = await _db.AdminPushSubscriptions.FirstAsync();
+        AdminPushSubscription sub = await _db.AdminPushSubscriptions.AsNoTracking().FirstAsync();
         Assert.Equal("new-p256", sub.P256dh);
         Assert.Equal("new-auth", sub.Auth);
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_RegistersWhenTheSessionVersionStillMatches()
+    {
+        int userId = await SeedUserAsync(sessionVersion: 4);
+
+        bool registered = await CreateService().SubscribeAsync(userId, 4, new PushSubscribeRequest("https://ep", "p256", "auth"));
+
+        Assert.True(registered);
+        Assert.Equal(userId, (await _db.AdminPushSubscriptions.SingleAsync()).UserId);
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_RefusesASessionTheAccountHasMovedPast_AndLeavesNoRow()
+    {
+        // The request was authenticated at version 3; a password change raised it to 4 and swept
+        // the account's subscriptions before this insert could land.
+        int userId = await SeedUserAsync(sessionVersion: 4);
+
+        bool registered = await CreateService().SubscribeAsync(userId, 3, new PushSubscribeRequest("https://ep", "p256", "auth"));
+
+        Assert.False(registered);
+        Assert.Equal(0, await _db.AdminPushSubscriptions.CountAsync());
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_RefusesADeactivatedAccount_AndLeavesNoRow()
+    {
+        int userId = await SeedUserAsync(isActive: false);
+
+        bool registered = await CreateService().SubscribeAsync(userId, 0, new PushSubscribeRequest("https://ep", "p256", "auth"));
+
+        Assert.False(registered);
+        Assert.Equal(0, await _db.AdminPushSubscriptions.CountAsync());
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_FromAnEndedSession_DoesNotTakeOverTheEndpointAnotherAccountHolds()
+    {
+        int holder = await SeedUserAsync("holder@example.com");
+        int stale = await SeedUserAsync("stale@example.com", sessionVersion: 2);
+        _db.AdminPushSubscriptions.Add(new AdminPushSubscription
+        {
+            UserId = holder,
+            Endpoint = "https://ep",
+            P256dh = "old-p256",
+            Auth = "old-auth",
+            CreatedAt = DateTime.UtcNow,
+        });
+        await _db.SaveChangesAsync();
+
+        bool registered = await CreateService().SubscribeAsync(stale, 1, new PushSubscribeRequest("https://ep", "new-p256", "new-auth"));
+
+        Assert.False(registered);
+        AdminPushSubscription kept = await _db.AdminPushSubscriptions.AsNoTracking().SingleAsync();
+        Assert.Equal(holder, kept.UserId);
+        Assert.Equal("old-p256", kept.P256dh);
+        Assert.Equal("old-auth", kept.Auth);
     }
 
     // ── UnsubscribeAsync ──────────────────────────────────────────────────────
@@ -406,9 +465,9 @@ public class NotificationServiceTests : IDisposable
         // visit — which is what the old per-restaurant key did.
         int userId = await SeedUserAsync();
         NotificationService svc = CreateService();
-        await svc.SubscribeAsync(userId, new PushSubscribeRequest("https://ep", "p256", "auth"));
-        await svc.SubscribeAsync(userId, new PushSubscribeRequest("https://ep", "p256", "auth"));
-        await svc.SubscribeAsync(userId, new PushSubscribeRequest("https://ep", "p256", "auth"));
+        await svc.SubscribeAsync(userId, 0, new PushSubscribeRequest("https://ep", "p256", "auth"));
+        await svc.SubscribeAsync(userId, 0, new PushSubscribeRequest("https://ep", "p256", "auth"));
+        await svc.SubscribeAsync(userId, 0, new PushSubscribeRequest("https://ep", "p256", "auth"));
 
         Assert.Equal(1, await _db.AdminPushSubscriptions.CountAsync());
     }

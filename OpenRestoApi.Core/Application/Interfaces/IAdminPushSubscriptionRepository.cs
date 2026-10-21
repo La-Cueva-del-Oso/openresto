@@ -17,8 +17,12 @@ public interface IAdminPushSubscriptionRepository
     /// </summary>
     Task<List<AdminPushSubscription>> GetForActiveUsersAsync();
 
-    /// <summary>Adds and saves a subscription.</summary>
-    Task<AdminPushSubscription> AddAsync(AdminPushSubscription subscription);
+    /// <summary>
+    /// Registers the endpoint for <c>subscription.UserId</c>, taking it over (and refreshing its keys)
+    /// from whoever held it. False, with nothing written, when that account is no longer active at
+    /// <paramref name="sessionVersion"/> — its sessions ended while the request was in flight.
+    /// </summary>
+    Task<bool> TryRegisterAsync(AdminPushSubscription subscription, int sessionVersion);
 
     /// <summary>Removes the given subscriptions (caller is responsible for SaveChanges — used by SendPushAsync stale cleanup).</summary>
     void RemoveRange(IEnumerable<AdminPushSubscription> subscriptions);

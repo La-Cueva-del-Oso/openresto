@@ -154,14 +154,25 @@ public class NotificationsControllerUnitTests
     // ── Subscribe ─────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Subscribe_ReturnsOk_AndPassesTheCallersId()
+    public async Task Subscribe_ReturnsOk_AndPassesTheCallersIdAndSessionVersion()
     {
-        _mockService.Setup(s => s.SubscribeAsync(It.IsAny<int>(), It.IsAny<PushSubscribeRequest>())).Returns(Task.CompletedTask);
+        _currentUser.SessionVersion = 3;
+        _mockService.Setup(s => s.SubscribeAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<PushSubscribeRequest>())).ReturnsAsync(true);
 
         IActionResult result = await _controller.Subscribe(new PushSubscribeRequest("ep", "p256", "auth"));
 
         Assert.IsType<OkResult>(result);
-        _mockService.Verify(s => s.SubscribeAsync(CallerId, It.IsAny<PushSubscribeRequest>()), Times.Once);
+        _mockService.Verify(s => s.SubscribeAsync(CallerId, 3, It.IsAny<PushSubscribeRequest>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Subscribe_ReturnsUnauthorized_WhenTheSessionEndedWhileTheRequestWasInFlight()
+    {
+        _mockService.Setup(s => s.SubscribeAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<PushSubscribeRequest>())).ReturnsAsync(false);
+
+        IActionResult result = await _controller.Subscribe(new PushSubscribeRequest("ep", "p256", "auth"));
+
+        Assert.IsType<UnauthorizedObjectResult>(result);
     }
 
     [Fact]
@@ -172,7 +183,7 @@ public class NotificationsControllerUnitTests
         IActionResult result = await _controller.Subscribe(new PushSubscribeRequest("ep", "p256", "auth"));
 
         Assert.IsType<UnauthorizedResult>(result);
-        _mockService.Verify(s => s.SubscribeAsync(It.IsAny<int>(), It.IsAny<PushSubscribeRequest>()), Times.Never);
+        _mockService.Verify(s => s.SubscribeAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<PushSubscribeRequest>()), Times.Never);
     }
 
     // ── Unsubscribe ───────────────────────────────────────────────────────────

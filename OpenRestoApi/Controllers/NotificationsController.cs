@@ -106,7 +106,11 @@ public class NotificationsController(INotificationService notificationService, I
     public async Task<IActionResult> Subscribe([FromBody] PushSubscribeRequest request)
     {
         if (_currentUser.UserId is not int userId) return Unauthorized();
-        await _notifications.SubscribeAsync(userId, request);
+        if (!await _notifications.SubscribeAsync(userId, _currentUser.SessionVersion, request))
+        {
+            return Unauthorized(new { message = "Your session has ended. Sign in again to turn on notifications." });
+        }
+
         return Ok();
     }
 
