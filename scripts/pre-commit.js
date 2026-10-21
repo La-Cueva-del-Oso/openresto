@@ -6,8 +6,15 @@ const path = require("path");
 // string: a staged file called `x$(cmd).md` must stay a file name. The node
 // tools run through process.execPath because `npx` is a .cmd shim on Windows
 // that only a shell can launch.
-function toolBin(pkg, bin, from) {
-  return require.resolve(`${pkg}/${bin}`, { paths: [from] });
+// The bin comes from the package's own manifest: a deep `pkg/bin/x` path is
+// refused by packages whose `exports` map does not list it (oxlint's).
+function toolBin(pkg, from) {
+  const manifest = require.resolve(`${pkg}/package.json`, { paths: [from] });
+  const { bin } = require(manifest);
+  return path.join(
+    path.dirname(manifest),
+    typeof bin === "string" ? bin : bin[pkg],
+  );
 }
 
 // A leading "-" would be read as an option.
@@ -76,11 +83,7 @@ if (prettierFiles.length > 0) {
   try {
     execFileSync(
       process.execPath,
-      [
-        toolBin("prettier", "bin/prettier.cjs", __dirname),
-        "--write",
-        ...prettierFiles.map(asArg),
-      ],
+      [toolBin("prettier", __dirname), "--write", ...prettierFiles.map(asArg)],
       { stdio: "inherit" },
     );
     modified = true;
@@ -107,7 +110,7 @@ if (frontendFiles.length > 0) {
     execFileSync(
       process.execPath,
       [
-        toolBin("oxlint", "bin/oxlint", path.resolve("openresto-frontend")),
+        toolBin("oxlint", path.resolve("openresto-frontend")),
         "--fix",
         ...relFiles,
       ],

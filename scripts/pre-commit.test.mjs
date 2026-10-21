@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,6 +47,24 @@ describe("scripts/pre-commit.js", () => {
     assert.equal(status, 0, stderr);
     assert.doesNotMatch(git("show", `:${name}`), /\r/);
   });
+
+  const frontendModules = join(dirname(hook), "..", "openresto-frontend", "node_modules");
+  it(
+    "lints a staged frontend file with the frontend's own oxlint",
+    { skip: !existsSync(join(frontendModules, "oxlint")) && "frontend dependencies not installed" },
+    () => {
+      mkdirSync(join(repo, "openresto-frontend"));
+      symlinkSync(frontendModules, join(repo, "openresto-frontend", "node_modules"), "junction");
+      const file = "openresto-frontend/clean.ts";
+      writeFileSync(join(repo, file), "export const answer = 42;\n");
+      git("add", "--", file);
+
+      const { status, stderr } = runHook();
+
+      assert.equal(status, 0, stderr);
+      git("rm", "-q", "--cached", "--", file);
+    },
+  );
 
   it("succeeds with nothing staged", () => {
     git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x");
