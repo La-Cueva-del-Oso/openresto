@@ -123,11 +123,12 @@ public class AuthService(
         if (string.IsNullOrEmpty(resetToken))
             return false;
         AdminCredential? cred = await _credentialRepository.GetByResetTokenAsync(resetToken);
-        if (cred == null || cred.ResetTokenExpiry < DateTime.UtcNow)
+        if (cred == null)
             return false;
         string previousHash = cred.PasswordHash;
-        (cred.PasswordHash, cred.PasswordSalt) = _passwordService.Hash(newPassword);
-        await _credentialRepository.RevokeSessionsAsync(cred);
+        (string hash, string salt) = _passwordService.Hash(newPassword);
+        if (!await _credentialRepository.TryResetPasswordAsync(cred, resetToken, DateTime.UtcNow, hash, salt))
+            return false;
         await _pushSubscriptionRepository.DeleteForUserAsync(cred.Id);
 
         // The reset arrives with a token rather than a session, so the actor is whoever the token

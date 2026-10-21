@@ -28,6 +28,7 @@ How each feature behaves, its API fields and its error codes are in
 - Text that comes from the API can no longer drive the terminal of someone using the command-line client: control and escape characters in tables, records, errors and `--json` output are shown as visible `\xNN` escapes. The server also refuses control characters in a booking's name and special requests (`booking.name_invalid`, `booking.special_requests_invalid`).
 - Two admins saving the email settings at the same moment can no longer leave one's mail server beside the other's password. Before, an account that changed the server while an Owner was entering a new password could end up with that password pointed at its own server.
 - A security-question answer being checked while an Owner resets that account's password, or while the account's question is changed, no longer earns a reset link once the reset has landed. Setting up a security question likewise fails if the account's password is reset or its sessions end while the request is in flight.
+- A password reset link can no longer set a password after the account's password was changed or reset by an Owner while the reset request was in flight, and two requests carrying the same link can no longer both succeed. The link is now spent in the same step that sets the new password.
 
 ### Changed
 

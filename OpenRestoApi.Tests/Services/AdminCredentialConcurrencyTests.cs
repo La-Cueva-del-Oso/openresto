@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using OpenRestoApi.Core.Application.DTOs;
 using OpenRestoApi.Core.Application.Exceptions;
 using OpenRestoApi.Core.Application.Interfaces;
@@ -139,6 +140,33 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
             new AdminCredentialRepository(db),
             passwords ?? new PasswordService(),
             caller is null ? FakeCurrentUser.Anonymous() : FakeCurrentUser.For(caller));
+    }
+
+    private AuthService AuthServiceAs(AdminCredential? caller = null, IPasswordService? passwords = null)
+    {
+        AppDbContext db = NewContext();
+        return new AuthService(
+            new AdminCredentialRepository(db),
+            passwords ?? new PasswordService(),
+            Mock.Of<IJwtTokenService>(),
+            caller is null ? FakeCurrentUser.Anonymous() : FakeCurrentUser.For(caller),
+            new AdminPushSubscriptionRepository(db));
+    }
+
+    private async Task<AdminCredential> SeedAccountWithResetTokenAsync(string token)
+    {
+        AdminCredential account = await SeedAccountWithAnswerAsync("answer", password: "Current123!");
+        using AppDbContext db = NewContext();
+        await db.AdminCredentials.Where(c => c.Id == account.Id).ExecuteUpdateAsync(s => s
+            .SetProperty(c => c.ResetToken, token)
+            .SetProperty(c => c.ResetTokenExpiry, DateTime.UtcNow.AddMinutes(15)));
+        return await ReloadAsync(account.Id);
+    }
+
+    private async Task<bool> PasswordIsAsync(int id, string password)
+    {
+        AdminCredential stored = await ReloadAsync(id);
+        return new PasswordService().Verify(password, stored.PasswordHash, stored.PasswordSalt);
     }
 
     private Task ResetByOwnerAsync(int id)
@@ -400,5 +428,33 @@ public sealed class AdminCredentialConcurrencyTests : IDisposable
         AdminCredential after = await ReloadAsync(account.Id);
         Assert.Null(after.PvqQuestion);
         Assert.Null(after.PvqAnswerHash);
+    }
+
+    [Fact]
+    public async Task A_Reset_Link_Read_Before_The_Password_Changed_Cannot_Set_A_Password_Afterwards()
+    {
+        AdminCredential account = await SeedAccountWithResetTokenAsync("T");
+        AuthService attacker = AuthServiceAs(passwords: new PasswordServiceInterruptedOnce(
+            () => AuthServiceAs(caller: account).ChangePasswordAsync("Current123!", "UserChose123!")));
+
+        bool reset = await attacker.ResetPasswordAsync("T", "Attacker123!");
+
+        Assert.False(reset);
+        Assert.True(await PasswordIsAsync(account.Id, "UserChose123!"));
+    }
+
+    [Fact]
+    public async Task A_Reset_Link_Is_Spent_Once_When_Two_Requests_Read_It()
+    {
+        AdminCredential account = await SeedAccountWithResetTokenAsync("T");
+        bool secondReset = false;
+        AuthService first = AuthServiceAs(passwords: new PasswordServiceInterruptedOnce(
+            async () => secondReset = await AuthServiceAs().ResetPasswordAsync("T", "Second123!")));
+
+        bool firstReset = await first.ResetPasswordAsync("T", "First123!");
+
+        Assert.Equal((false, true), (firstReset, secondReset));
+        Assert.True(await PasswordIsAsync(account.Id, "Second123!"));
+        Assert.Null((await ReloadAsync(account.Id)).ResetToken);
     }
 }

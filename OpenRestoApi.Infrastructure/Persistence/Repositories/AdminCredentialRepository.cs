@@ -67,6 +67,19 @@ internal class AdminCredentialRepository(AppDbContext db) : IAdminCredentialRepo
         return rows > 0;
     }
 
+    public async Task<bool> TryResetPasswordAsync(AdminCredential credential, string resetToken, DateTime nowUtc, string passwordHash, string passwordSalt)
+    {
+        int rows = await StillAsRead(credential)
+            .Where(c => c.ResetToken == resetToken && c.ResetTokenExpiry >= nowUtc)
+            .ExecuteUpdateAsync(s =>
+            {
+                s.SetProperty(c => c.PasswordHash, passwordHash);
+                s.SetProperty(c => c.PasswordSalt, passwordSalt);
+                RevokeSessions(s);
+            });
+        return await RefreshAsync(credential, rows);
+    }
+
     public async Task<bool> TrySetSecurityQuestionAsync(AdminCredential credential, string question, string answerHash, string answerSalt)
     {
         int rows = await StillAsRead(credential).ExecuteUpdateAsync(s => s

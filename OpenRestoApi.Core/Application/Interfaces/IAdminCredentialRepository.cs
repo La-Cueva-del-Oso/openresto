@@ -64,6 +64,20 @@ public interface IAdminCredentialRepository
     Task<bool> TryCompletePvqVerificationAsync(AdminCredential verified, string resetToken, DateTime resetTokenExpiryUtc);
 
     /// <summary>
+    /// Consumes <paramref name="resetToken"/>: sets the new password and revokes the account's
+    /// sessions (which withdraws the token) in one statement, held to the token still being the
+    /// stored, unexpired one at <paramref name="nowUtc"/> and to the
+    /// <see cref="AdminCredential.SessionVersion"/> <paramref name="credential"/> was read with.
+    /// False means refused and nothing changed: a password change, an Owner's reset or another
+    /// request spending the same token got there first.
+    /// </summary>
+    /// <seealso>AdminCredentialConcurrencyTests.A_Reset_Link_Read_Before_The_Password_Changed_Cannot_Set_A_Password_Afterwards</seealso>
+    /// <seealso>AdminCredentialConcurrencyTests.A_Reset_Link_Is_Spent_Once_When_Two_Requests_Read_It</seealso>
+    /// <seealso>AuthServiceTests.ResetPasswordAsync_Succeeds_Clears_Token_And_Allows_New_Password</seealso>
+    /// <seealso>AuthServiceTests.ResetPasswordAsync_Returns_False_For_Expired_Token</seealso>
+    Task<bool> TryResetPasswordAsync(AdminCredential credential, string resetToken, DateTime nowUtc, string passwordHash, string passwordSalt);
+
+    /// <summary>
     /// Stores the security question on <paramref name="credential"/> unless its sessions were
     /// revoked (a password change or reset, a deactivation, a sign-out) since it was read; false
     /// means refused and nothing changed.
