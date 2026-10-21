@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { clientFor, getGlobalOptions, handle } from "../context.js";
+import { t } from "../i18n.js";
 import { printResult } from "../output.js";
 import { confirmOrExit } from "../confirm.js";
 
@@ -99,13 +100,13 @@ export function registerSectionsCommands(program: Command): void {
           const { client } = clientFor(command);
           const globals = getGlobalOptions(command);
 
-          let message = `This will remove section ${sectionId} and its tables.`;
+          let message = t("section.removeConfirm", { id: sectionId });
           try {
             const impact = await client.get<{ bookings: number }>(
               `/api/restaurants/${options.location}/sections/${sectionId}/impact`,
             );
             if (impact.bookings > 0) {
-              message += ` ${impact.bookings} upcoming booking(s) will lose their section reference.`;
+              message += ` ${t("section.removeImpact", { count: impact.bookings })}`;
             }
           } catch {
             // Best-effort preview only.
@@ -115,7 +116,7 @@ export function registerSectionsCommands(program: Command): void {
           await client.delete(
             `/api/restaurants/${options.location}/sections/${encodeURIComponent(sectionId)}`,
           );
-          console.log(`Section ${sectionId} removed.`);
+          console.log(t("section.removed", { id: sectionId }));
         },
       ),
     );

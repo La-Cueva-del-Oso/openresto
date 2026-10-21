@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 import { resolveProfile, type ResolvedProfile } from "./config.js";
 import { ApiError, Client } from "./transport.js";
-import { ConfirmationRequiredError } from "./confirm.js";
+import { t } from "./i18n.js";
 import { neutralizeControl } from "./output.js";
 
 export interface GlobalOptions {
@@ -46,13 +46,11 @@ export function handle<TArgs extends unknown[]>(
 export function printError(err: unknown): void {
   const say = (line: string) => console.error(neutralizeControl(line, true));
   if (err instanceof ApiError) {
-    const codePart = err.code ? ` [${err.code}]` : "";
-    say(`Error (${err.status})${codePart}: ${err.message}`);
-  } else if (err instanceof ConfirmationRequiredError) {
-    say(`Error: ${err.message}`);
+    const code = err.code ? ` [${err.code}]` : "";
+    say(t("error.api", { status: err.status, code, message: err.message }));
   } else if (err instanceof Error) {
-    say(`Error: ${err.message}`);
+    say(t("error.generic", { message: err.message }));
   } else {
-    say(`Error: ${String(err)}`);
+    say(t("error.generic", { message: String(err) }));
   }
 }

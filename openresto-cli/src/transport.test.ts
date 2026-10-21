@@ -1,6 +1,9 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { ApiError, Client } from "./transport.js";
+import { withLang } from "./withLang.test.js";
+
+process.env.OPENRESTO_LANG = "en";
 
 function fakeFetch(
   handler: (
@@ -382,5 +385,117 @@ describe("connection failures", () => {
         return true;
       },
     );
+  });
+});
+
+describe("messages in Spanish", () => {
+  const redirectingFetch = (location: string | null, status: number) =>
+    (async () =>
+      new Response(null, {
+        status,
+        headers: location ? { Location: location } : {},
+      })) as unknown as typeof fetch;
+  const EXCEPTION_NAMES =
+    /TypeError|ReferenceError|SyntaxError|ApiError|\bError:|at .*\.js/;
+
+  test("plain http to a remote host is refused in Spanish, without exception names", async () => {
+    await withLang("es", () => {
+      assert.throws(
+        () => new Client({ baseUrl: "http://example.com", env: {} }),
+        (err: unknown) => {
+          assert.ok(err instanceof Error);
+          assert.equal(
+            err.message,
+            "http://example.com no está cifrada, así que tu clave de API viajaría sin protección. " +
+              "Usa una dirección https://, o define OPENRESTO_ALLOW_HTTP=1 si de verdad quieres enviar tus credenciales sin cifrar.",
+          );
+          assert.doesNotMatch(err.message, EXCEPTION_NAMES);
+          return true;
+        },
+      );
+    });
+  });
+
+  test("the same refusal stays in English under OPENRESTO_LANG=en", async () => {
+    await withLang("en", () => {
+      assert.throws(
+        () => new Client({ baseUrl: "http://example.com", env: {} }),
+        /is not encrypted, so your API key would travel in the clear/,
+      );
+    });
+  });
+
+  test("an invalid address and a missing address are explained in Spanish", async () => {
+    await withLang("es", () => {
+      assert.throws(
+        () => new Client({ baseUrl: "no es una url", env: {} }),
+        /^Error: "no es una url" no es una dirección de servidor válida\. Usa una dirección completa/,
+      );
+      assert.throws(
+        () => new Client({ baseUrl: "", env: {} }),
+        /^Error: No hay una dirección de servidor configurada\. Ejecuta `openresto auth login`/,
+      );
+    });
+  });
+
+  test("a redirect and an unreachable server are reported in Spanish", async () => {
+    await withLang("es", async () => {
+      const redirected = new Client({
+        baseUrl: "https://api.example",
+        fetchImpl: redirectingFetch("https://otro.example/api/brand", 308),
+      });
+      await assert.rejects(
+        () => redirected.get("/api/brand"),
+        /^Error: https:\/\/api\.example redirigió a https:\/\/otro\.example\/api\/brand \(HTTP 308\)\. openresto no sigue redirecciones/,
+      );
+
+      const noTarget = new Client({
+        baseUrl: "https://api.example",
+        fetchImpl: redirectingFetch(null, 302),
+      });
+      await assert.rejects(
+        () => noTarget.get("/api/brand"),
+        /redirigió sin indicar a qué dirección ir \(HTTP 302\)/,
+      );
+
+      const gone = new Client({
+        baseUrl: "https://gone.example",
+        fetchImpl: (async () => {
+          throw new Error("fetch failed", { cause: new Error("ENOTFOUND") });
+        }) as typeof fetch,
+      });
+      await assert.rejects(
+        () => gone.get("/api/brand"),
+        /^Error: No se pudo conectar con https:\/\/gone\.example: ENOTFOUND$/,
+      );
+    });
+  });
+
+  test("a failure with no server message gets the generic text in Spanish; the server's own text stays raw", async () => {
+    await withLang("es", async () => {
+      const bare = new Client({
+        baseUrl: "https://api.example",
+        fetchImpl: fakeFetch(() => ({ status: 500 })),
+      });
+      await assert.rejects(
+        () => bare.get("/api/brand"),
+        (err: unknown) =>
+          err instanceof ApiError &&
+          err.message === "La solicitud falló con el estado 500",
+      );
+
+      const withMessage = new Client({
+        baseUrl: "https://api.example",
+        fetchImpl: fakeFetch(() => ({
+          status: 400,
+          body: { message: "Table 3 does not exist.", code: "table.missing" },
+        })),
+      });
+      await assert.rejects(
+        () => withMessage.get("/api/brand"),
+        (err: unknown) =>
+          err instanceof ApiError && err.message === "Table 3 does not exist.",
+      );
+    });
   });
 });

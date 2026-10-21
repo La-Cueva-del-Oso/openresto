@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { clientFor, getGlobalOptions, handle } from "../context.js";
+import { t } from "../i18n.js";
 import { printResult } from "../output.js";
 import { confirmOrExit } from "../confirm.js";
 import { omitUndefined, readTextInput } from "../io.js";
@@ -193,7 +194,7 @@ export function registerBookingsCommands(program: Command): void {
         await client.post(
           `/api/admin/bookings/${encodeURIComponent(id)}/cancel`,
         );
-        console.log(`Booking ${id} cancelled.`);
+        console.log(t("booking.cancelled", { id }));
       }),
     );
 
@@ -206,7 +207,7 @@ export function registerBookingsCommands(program: Command): void {
         await client.post(
           `/api/admin/bookings/${encodeURIComponent(id)}/restore`,
         );
-        console.log(`Booking ${id} restored.`);
+        console.log(t("booking.restored", { id }));
       }),
     );
 
@@ -248,7 +249,7 @@ export function registerBookingsCommands(program: Command): void {
         ) => {
           const body = await readEmailBody(options.bodyFile);
           if (!body.trim()) {
-            throw new Error("The email body is empty.");
+            throw new Error(t("booking.emailEmpty"));
           }
           const { client } = clientFor(command);
           const globals = getGlobalOptions(command);
@@ -270,12 +271,12 @@ export function registerBookingsCommands(program: Command): void {
         async (id: string, options: { yes?: boolean }, command: Command) => {
           const globals = getGlobalOptions(command);
           await confirmOrExit(
-            `This will permanently delete booking ${id}.`,
+            t("booking.purgeConfirm", { id }),
             Boolean(options.yes ?? globals.yes),
           );
           const { client } = clientFor(command);
           await client.delete(`/api/admin/bookings/${encodeURIComponent(id)}`);
-          console.log(`Booking ${id} purged.`);
+          console.log(t("booking.purged", { id }));
         },
       ),
     );
@@ -290,9 +291,7 @@ async function readEmailBody(bodyFile: string | undefined): Promise<string> {
     return readTextInput(bodyFile);
   }
   if (process.stdin.isTTY) {
-    throw new Error(
-      "No message body. Pass --body-file <path>, or pipe the body into stdin.",
-    );
+    throw new Error(t("booking.emailNoBody"));
   }
   return readAllStdin();
 }

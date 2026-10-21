@@ -7,6 +7,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import { t } from "./i18n.js";
 
 export interface Profile {
   url: string;
@@ -38,7 +39,7 @@ export function loadConfigFile(): ConfigFile {
     const parsed = JSON.parse(raw) as Partial<ConfigFile>;
     return { profiles: parsed.profiles ?? {} };
   } catch {
-    throw new Error(`Config file at ${file} is not valid JSON.`);
+    throw new Error(t("config.invalidFile", { file }));
   }
 }
 

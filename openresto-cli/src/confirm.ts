@@ -1,5 +1,9 @@
 import { createInterface } from "node:readline/promises";
+import { t } from "./i18n.js";
 import { neutralizeControl } from "./output.js";
+
+/** Both languages' yes, whichever one the prompt was drawn in: `y`/`yes`, `s`/`si`/`sí`. */
+const AFFIRMATIVE = /^(y(es)?|s[ií]?)$/i;
 
 export class ConfirmationRequiredError extends Error {
   constructor(message: string) {
@@ -34,9 +38,7 @@ export async function confirmOrExit(
 
   const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY);
   if (!isTTY) {
-    throw new ConfirmationRequiredError(
-      `${message} Re-run with --yes to confirm (required when not running in a terminal).`,
-    );
+    throw new ConfirmationRequiredError(t("confirm.notTerminal", { message }));
   }
 
   const rl = createInterface({
@@ -44,9 +46,9 @@ export async function confirmOrExit(
     output: deps.stdout ?? process.stdout,
   });
   try {
-    const answer = await rl.question(`${message} [y/N] `);
-    if (!/^y(es)?$/i.test(answer.trim())) {
-      throw new ConfirmationRequiredError("Aborted: not confirmed.");
+    const answer = await rl.question(`${message} ${t("confirm.choices")} `);
+    if (!AFFIRMATIVE.test(answer.trim())) {
+      throw new ConfirmationRequiredError(t("confirm.declined"));
     }
   } finally {
     rl.close();

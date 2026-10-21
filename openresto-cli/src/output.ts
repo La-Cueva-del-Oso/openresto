@@ -1,3 +1,5 @@
+import { t } from "./i18n.js";
+
 /** Table/JSON rendering shared by every command. */
 
 const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
@@ -48,7 +50,7 @@ export function printTable(data: unknown, columns?: string[]): void {
     return;
   }
   if (data.length === 0) {
-    console.log("(no results)");
+    console.log(t("output.noResults"));
     return;
   }
 
@@ -75,7 +77,7 @@ export function printTable(data: unknown, columns?: string[]): void {
 
 function printRecord(data: unknown): void {
   if (data === undefined || data === null) {
-    console.log("(no content)");
+    console.log(t("output.noContent"));
     return;
   }
   if (typeof data !== "object" || Array.isArray(data)) {

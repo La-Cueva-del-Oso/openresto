@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline/promises";
+import { t } from "./i18n.js";
 
 /** Plain-text prompt (used for the server URL). */
 export async function promptText(
@@ -59,7 +60,7 @@ export function promptHidden(
         if (char === "") {
           // Ctrl+C
           cleanup();
-          reject(new Error("Aborted."));
+          reject(new Error(t("prompt.aborted")));
           return;
         }
         if (char === "\r" || char === "\n") {

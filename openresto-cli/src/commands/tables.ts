@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { clientFor, getGlobalOptions, handle } from "../context.js";
+import { t } from "../i18n.js";
 import { printResult } from "../output.js";
 import { confirmOrExit } from "../confirm.js";
 
@@ -149,13 +150,13 @@ export function registerTablesCommands(program: Command): void {
           const { client } = clientFor(command);
           const globals = getGlobalOptions(command);
 
-          let message = `This will remove table ${tableId}.`;
+          let message = t("table.removeConfirm", { id: tableId });
           try {
             const impact = await client.get<{ bookings: number }>(
               `/api/restaurants/${options.location}/sections/${options.section}/tables/${tableId}/impact`,
             );
             if (impact.bookings > 0) {
-              message += ` ${impact.bookings} upcoming booking(s) will lose their table reference.`;
+              message += ` ${t("table.removeImpact", { count: impact.bookings })}`;
             }
           } catch {
             // Best-effort preview only.
@@ -165,7 +166,7 @@ export function registerTablesCommands(program: Command): void {
           await client.delete(
             `/api/restaurants/${options.location}/sections/${options.section}/tables/${encodeURIComponent(tableId)}`,
           );
-          console.log(`Table ${tableId} removed.`);
+          console.log(t("table.removed", { id: tableId }));
         },
       ),
     );

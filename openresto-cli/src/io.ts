@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { t } from "./i18n.js";
 import { readAllStdin } from "./prompt.js";
 
 /**
@@ -21,9 +22,12 @@ export async function readJsonInput(pathOrDash: string): Promise<unknown> {
   try {
     return JSON.parse(raw);
   } catch (err) {
-    const source = pathOrDash === "-" ? "stdin" : pathOrDash;
+    const source = pathOrDash === "-" ? t("io.stdin") : pathOrDash;
     throw new Error(
-      `Could not parse JSON from ${source}: ${err instanceof Error ? err.message : String(err)}`,
+      t("io.jsonUnreadable", {
+        source,
+        detail: err instanceof Error ? err.message : String(err),
+      }),
     );
   }
 }
