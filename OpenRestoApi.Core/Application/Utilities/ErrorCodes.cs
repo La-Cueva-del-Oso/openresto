@@ -38,6 +38,7 @@ public static class ErrorCodes
     public const string BookingTableIdRequiredForSectionChange = "booking.table_id_required_for_section_change";
     public const string BookingEmailFieldsRequired = "booking.email_fields_required";
     public const string BookingReminderChannelInvalid = "booking.reminder_channel_invalid";
+    public const string BookingReminderDeviceLimit = "booking.reminder_device_limit";
     public const string BookingReminderKeysRequired = "booking.reminder_keys_required";
     public const string BookingReminderEndpointInvalid = "booking.reminder_endpoint_invalid";
     public const string BookingReminderTooLate = "booking.reminder_too_late";

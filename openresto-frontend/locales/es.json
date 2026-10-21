@@ -392,6 +392,7 @@
       "paused_indefinitely": "Las reservas de este restaurante están pausadas en este momento. Vuelve a intentarlo más tarde.",
       "reminder_cancelled": "Esta reserva está cancelada, así que no se pueden activar los recordatorios.",
       "reminder_channel_invalid": "Este dispositivo no puede recibir recordatorios de este sitio.",
+      "reminder_device_limit": "Ya hay demasiados dispositivos con recordatorios para esta reserva. Desactívalos en uno de ellos para agregar este.",
       "reminder_endpoint_invalid": "Este dispositivo no puede recibir recordatorios de este sitio.",
       "reminder_keys_required": "No pudimos activar los recordatorios en este dispositivo. Vuelve a activarlos e inténtalo de nuevo.",
       "reminder_too_late": "Esta reserva ya comenzó, así que ya no se pueden activar los recordatorios.",

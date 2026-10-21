@@ -392,6 +392,7 @@
       "paused_indefinitely": "Les réservations pour ce restaurant sont actuellement suspendues. Veuillez réessayer plus tard.",
       "reminder_cancelled": "Cette réservation est annulée : les rappels ne peuvent pas être activés.",
       "reminder_channel_invalid": "Cet appareil ne peut pas recevoir de rappels de ce site.",
+      "reminder_device_limit": "Trop d'appareils reçoivent déjà des rappels pour cette réservation. Désactivez-les sur l'un d'eux pour ajouter celui-ci.",
       "reminder_endpoint_invalid": "Cet appareil ne peut pas recevoir de rappels de ce site.",
       "reminder_keys_required": "Nous n'avons pas pu activer les rappels sur cet appareil. Réactivez-les puis réessayez.",
       "reminder_too_late": "Cette réservation a déjà commencé : les rappels ne peuvent plus être activés.",

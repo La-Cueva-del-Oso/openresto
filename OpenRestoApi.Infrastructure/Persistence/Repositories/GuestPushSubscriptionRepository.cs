@@ -14,6 +14,9 @@ internal class GuestPushSubscriptionRepository(AppDbContext db) : IGuestPushSubs
     public Task<GuestPushSubscription?> GetByBookingAndEndpointAsync(int bookingId, string endpoint) =>
         db.GuestPushSubscriptions.FirstOrDefaultAsync(s => s.BookingId == bookingId && s.Endpoint == endpoint);
 
+    public Task<int> CountForBookingAsync(int bookingId) =>
+        db.GuestPushSubscriptions.CountAsync(s => s.BookingId == bookingId);
+
     public Task<List<GuestPushSubscription>> GetUpcomingAsync(DateTime nowUtc) =>
         db.GuestPushSubscriptions
             .Include(s => s.Booking).ThenInclude(b => b.Restaurant)

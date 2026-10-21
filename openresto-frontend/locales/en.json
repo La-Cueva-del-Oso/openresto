@@ -392,6 +392,7 @@
       "paused_indefinitely": "Bookings for this restaurant are currently paused. Please try again later.",
       "reminder_cancelled": "This booking has been cancelled, so reminders can't be turned on.",
       "reminder_channel_invalid": "This device can't receive reminders from this site.",
+      "reminder_device_limit": "There are already too many devices with reminders for this booking. Turn them off on one of them to add this one.",
       "reminder_endpoint_invalid": "This device can't receive reminders from this site.",
       "reminder_keys_required": "We couldn't set up reminders on this device. Turn reminders on again and retry.",
       "reminder_too_late": "This booking has already started, so reminders can no longer be turned on.",

@@ -59,7 +59,7 @@ public class WebPushResponseLimitTests(TestWebAppFactory factory) : IClassFixtur
             PublicKey = vapid.PublicKey,
             PrivateKey = vapid.PrivateKey,
         });
-        return new GuestPushSender(new WebPushClient(client), new Mock<IExpoPushClient>().Object, settings);
+        return new GuestPushSender(new WebPushClient(client), new Mock<IExpoPushClient>().Object, settings, Options.Create(new GuestPushSettings()));
     }
 
     private static readonly GuestPushMessage Message = new("Your table", "Tomorrow at 19:30", "https://bookings.example.com/x", "booking-7");

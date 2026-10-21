@@ -392,6 +392,7 @@
       "paused_indefinitely": "Buchungen für dieses Restaurant sind derzeit pausiert. Bitte versuchen Sie es später erneut.",
       "reminder_cancelled": "Diese Buchung wurde storniert, daher können keine Erinnerungen aktiviert werden.",
       "reminder_channel_invalid": "Dieses Gerät kann keine Erinnerungen von dieser Website empfangen.",
+      "reminder_device_limit": "Für diese Buchung erhalten bereits zu viele Geräte Erinnerungen. Deaktivieren Sie sie auf einem der Geräte, um dieses hinzuzufügen.",
       "reminder_endpoint_invalid": "Dieses Gerät kann keine Erinnerungen von dieser Website empfangen.",
       "reminder_keys_required": "Die Erinnerungen konnten auf diesem Gerät nicht eingerichtet werden. Aktivieren Sie sie erneut und versuchen Sie es noch einmal.",
       "reminder_too_late": "Diese Buchung hat bereits begonnen, daher können keine Erinnerungen mehr aktiviert werden.",
