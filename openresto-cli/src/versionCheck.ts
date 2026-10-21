@@ -1,4 +1,5 @@
 import { t } from "./i18n.js";
+import { neutralizeControl } from "./output.js";
 import { ApiError, type Client } from "./transport.js";
 
 /**
@@ -47,8 +48,13 @@ export async function warnOnServerVersionMismatch(
   }
 
   if (server.major !== cli.major || server.minor !== cli.minor) {
+    // A version is one token: unlike an error message, its line breaks are escaped, not kept, so
+    // a hostile server cannot forge a second stderr line.
     console.error(
-      t("version.mismatch", { server: response.version, cli: cliVersion }),
+      t("version.mismatch", {
+        server: neutralizeControl(response.version),
+        cli: cliVersion,
+      }),
     );
   }
 }

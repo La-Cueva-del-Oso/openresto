@@ -1,5 +1,10 @@
 import { Command } from "commander";
-import { clientFor, getGlobalOptions, handle } from "../context.js";
+import {
+  clientFor,
+  getGlobalOptions,
+  handle,
+  printMessage,
+} from "../context.js";
 import { t } from "../i18n.js";
 import { printResult } from "../output.js";
 import { confirmOrExit } from "../confirm.js";
@@ -116,7 +121,7 @@ export function registerSectionsCommands(program: Command): void {
           await client.delete(
             `/api/restaurants/${options.location}/sections/${encodeURIComponent(sectionId)}`,
           );
-          console.log(t("section.removed", { id: sectionId }));
+          printMessage(command, "section.removed", { id: sectionId });
         },
       ),
     );

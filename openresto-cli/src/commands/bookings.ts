@@ -1,5 +1,10 @@
 import { Command } from "commander";
-import { clientFor, getGlobalOptions, handle } from "../context.js";
+import {
+  clientFor,
+  getGlobalOptions,
+  handle,
+  printMessage,
+} from "../context.js";
 import { t } from "../i18n.js";
 import { printResult } from "../output.js";
 import { confirmOrExit } from "../confirm.js";
@@ -194,7 +199,7 @@ export function registerBookingsCommands(program: Command): void {
         await client.post(
           `/api/admin/bookings/${encodeURIComponent(id)}/cancel`,
         );
-        console.log(t("booking.cancelled", { id }));
+        printMessage(command, "booking.cancelled", { id });
       }),
     );
 
@@ -207,7 +212,7 @@ export function registerBookingsCommands(program: Command): void {
         await client.post(
           `/api/admin/bookings/${encodeURIComponent(id)}/restore`,
         );
-        console.log(t("booking.restored", { id }));
+        printMessage(command, "booking.restored", { id });
       }),
     );
 
@@ -276,7 +281,7 @@ export function registerBookingsCommands(program: Command): void {
           );
           const { client } = clientFor(command);
           await client.delete(`/api/admin/bookings/${encodeURIComponent(id)}`);
-          console.log(t("booking.purged", { id }));
+          printMessage(command, "booking.purged", { id });
         },
       ),
     );

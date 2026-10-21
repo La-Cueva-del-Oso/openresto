@@ -1,5 +1,10 @@
 import { Command } from "commander";
-import { clientFor, getGlobalOptions, handle } from "../context.js";
+import {
+  clientFor,
+  getGlobalOptions,
+  handle,
+  printMessage,
+} from "../context.js";
 import { t } from "../i18n.js";
 import { printResult } from "../output.js";
 import { confirmOrExit } from "../confirm.js";
@@ -166,7 +171,7 @@ export function registerTablesCommands(program: Command): void {
           await client.delete(
             `/api/restaurants/${options.location}/sections/${options.section}/tables/${encodeURIComponent(tableId)}`,
           );
-          console.log(t("table.removed", { id: tableId }));
+          printMessage(command, "table.removed", { id: tableId });
         },
       ),
     );

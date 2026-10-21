@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 import { resolveProfile, type ResolvedProfile } from "./config.js";
 import { ApiError, Client } from "./transport.js";
-import { t } from "./i18n.js";
+import { t, type MessageKey } from "./i18n.js";
 import { neutralizeControl } from "./output.js";
 
 export interface GlobalOptions {
@@ -12,6 +12,22 @@ export interface GlobalOptions {
 
 export function getGlobalOptions(cmd: Command): GlobalOptions {
   return cmd.optsWithGlobals() as GlobalOptions;
+}
+
+/**
+ * Prints a command's confirmation line. Under `--json` the output is for a script, so it stays in
+ * English whatever the language; otherwise it follows the language like every other message.
+ *
+ * @see [jsonLanguage.test.ts](./jsonLanguage.test.ts) — pins that `--json` fixes the confirmation
+ * lines to English while the same command without it follows the language.
+ */
+export function printMessage(
+  command: Command,
+  key: MessageKey,
+  params?: Record<string, string | number>,
+): void {
+  const lang = getGlobalOptions(command).json ? "en" : undefined;
+  console.log(t(key, params, lang));
 }
 
 export function clientFor(cmd: Command): {

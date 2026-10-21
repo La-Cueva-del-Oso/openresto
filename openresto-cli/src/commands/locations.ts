@@ -1,5 +1,10 @@
 import { Command } from "commander";
-import { clientFor, getGlobalOptions, handle } from "../context.js";
+import {
+  clientFor,
+  getGlobalOptions,
+  handle,
+  printMessage,
+} from "../context.js";
 import { t } from "../i18n.js";
 import { printResult } from "../output.js";
 import { confirmOrExit } from "../confirm.js";
@@ -92,7 +97,10 @@ export function registerLocationsCommands(program: Command): void {
               body: { minutes: options.minutes },
             },
           );
-          console.log(t("location.paused", { id, minutes: options.minutes }));
+          printMessage(command, "location.paused", {
+            id,
+            minutes: options.minutes,
+          });
         },
       ),
     );
@@ -106,7 +114,7 @@ export function registerLocationsCommands(program: Command): void {
         await client.post(
           `/api/admin/restaurants/${encodeURIComponent(id)}/unpause`,
         );
-        console.log(t("location.unpaused", { id }));
+        printMessage(command, "location.unpaused", { id });
       }),
     );
 
@@ -156,7 +164,7 @@ export function registerLocationsCommands(program: Command): void {
         await client.patch(`/api/admin/restaurants/${encodeURIComponent(id)}`, {
           body: { isArchived: true },
         });
-        console.log(t("location.archived", { id }));
+        printMessage(command, "location.archived", { id });
       }),
     );
 
@@ -171,7 +179,7 @@ export function registerLocationsCommands(program: Command): void {
         await client.patch(`/api/admin/restaurants/${encodeURIComponent(id)}`, {
           body: { isArchived: false },
         });
-        console.log(t("location.restored", { id }));
+        printMessage(command, "location.restored", { id });
       }),
     );
 
@@ -225,7 +233,7 @@ export function registerLocationsCommands(program: Command): void {
             }
             throw err;
           }
-          console.log(t("location.deleted", { id }));
+          printMessage(command, "location.deleted", { id });
         },
       ),
     );

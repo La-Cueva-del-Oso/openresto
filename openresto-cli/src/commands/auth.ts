@@ -6,7 +6,12 @@ import {
 } from "../config.js";
 import { ApiError, Client } from "../transport.js";
 import { promptHidden, promptText, readAllStdin } from "../prompt.js";
-import { clientFor, getGlobalOptions, handle } from "../context.js";
+import {
+  clientFor,
+  getGlobalOptions,
+  handle,
+  printMessage,
+} from "../context.js";
 import { t } from "../i18n.js";
 import { printResult } from "../output.js";
 import { getCliVersion } from "../version.js";
@@ -57,7 +62,7 @@ export function registerAuthCommands(program: Command): void {
         }
 
         upsertProfile(profileName, { url, apiKey });
-        console.log(t("auth.saved", { profile: profileName, url }));
+        printMessage(command, "auth.saved", { profile: profileName, url });
         await warnOnServerVersionMismatch(client, getCliVersion());
       }),
     );
@@ -85,7 +90,7 @@ export function registerAuthCommands(program: Command): void {
         const globals = getGlobalOptions(command);
         const profileName = globals.profile ?? DEFAULT_PROFILE_NAME;
         clearProfileKey(profileName);
-        console.log(t("auth.keyRemoved", { profile: profileName }));
+        printMessage(command, "auth.keyRemoved", { profile: profileName });
       }),
     );
 }

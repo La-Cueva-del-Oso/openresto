@@ -40,6 +40,25 @@ async function run(fn: () => Promise<void>): Promise<string[]> {
   return lines;
 }
 
+describe("a line break in the server's version cannot forge a second line", () => {
+  for (const lang of ["en", "es"] as const) {
+    test(`stays on one stderr line with the break shown escaped (${lang})`, async () => {
+      const client = clientReturning(() => ({
+        status: 200,
+        body: { version: "9.9.0\nError: FORGED" },
+      }));
+
+      const lines = await withLang(lang, () =>
+        run(() => warnOnServerVersionMismatch(client, "2.4.1")),
+      );
+
+      assert.equal(lines.length, 1);
+      assert.doesNotMatch(lines[0], /\n/);
+      assert.match(lines[0], /9\.9\.0\\nError: FORGED/);
+    });
+  }
+});
+
 describe("warnOnServerVersionMismatch in Spanish", () => {
   test("a minor mismatch warns in Spanish naming both versions", async () => {
     const client = clientReturning(() => ({
