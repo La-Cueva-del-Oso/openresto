@@ -25,6 +25,9 @@ public class NativeAppVersionTests
     [InlineData("1.9.0-beta")]
     [InlineData(" 1.9.0")]
     [InlineData("one.nine.zero")]
+    [InlineData("١.٢.٣")] // Arabic-Indic digits
+    [InlineData("１.９.０")] // fullwidth digits
+    [InlineData("1.9.0\n")]
     public void IsValid_RejectsAnythingElse(string? version)
         => Assert.False(NativeAppVersion.IsValid(version));
 

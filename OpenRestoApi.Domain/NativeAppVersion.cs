@@ -15,7 +15,8 @@ public static partial class NativeAppVersion
     /// <summary>Matches <c>BrandSettings.MinimumAppVersion</c>'s column width.</summary>
     public const int MaxLength = 32;
 
-    [GeneratedRegex(@"^\d+\.\d+\.\d+$")]
+    // [0-9] and \z, not \d and $: \d matches any Unicode digit and $ accepts a trailing newline.
+    [GeneratedRegex(@"^[0-9]+\.[0-9]+\.[0-9]+\z")]
     private static partial Regex Pattern();
 
     public static bool IsValid(string? value)
