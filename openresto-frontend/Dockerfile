@@ -19,7 +19,7 @@ RUN npx expo export --platform web
 
 # Production stage — serve static files
 FROM node:24-alpine
-RUN apk add --no-cache curl && npm install -g serve
+RUN apk add --no-cache curl && npm install -g serve@14.2.6
 WORKDIR /app
 COPY --from=build /app/dist ./dist
 RUN chown -R node:node /app

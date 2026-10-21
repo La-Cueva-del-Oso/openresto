@@ -10,13 +10,13 @@ Docker volumes, so there is no separate database server or storage service to wo
 
 ## What to back up
 
-| What | Where | Why it matters |
-| ---- | ----- | -------------- |
-| The database, `openresto.db` | `/data` in the backend (volume `db_data`) | **Everything**: bookings, locations, tables, accounts, brand and email settings. |
-| Data Protection keys | `/data/dp-keys`, in the same volume | Encrypt the saved SMTP password and the guest "recent bookings" cookie. Lose them and you re-enter the SMTP password; no bookings are lost. |
-| Uploaded media | `/app/wwwroot/media` (volume `media_data`) | Hero image, location photos and menu PDFs. |
-| `.env` and `docker-compose.yml` | Next to each other on the host | Your secrets and settings, including the VAPID keys browsers subscribed with. |
-| `./wallet`, `./well-known` | Next to `docker-compose.yml` | Only if you set up Wallet passes or a native app. |
+| What                            | Where                                      | Why it matters                                                                                                                                                                                                                  |
+| ------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The database, `openresto.db`    | `/data` in the backend (volume `db_data`)  | **Everything**: bookings, locations, tables, accounts, brand and email settings.                                                                                                                                                |
+| Data Protection keys            | `/data/dp-keys`, in the same volume        | Encrypt the saved SMTP password and the guest "recent bookings" cookie. Lose them and you re-enter the SMTP password; no bookings are lost. **Optional, and kept apart from the database backup** (see [Keys](#keys-optional)). |
+| Uploaded media                  | `/app/wwwroot/media` (volume `media_data`) | Hero image, location photos and menu PDFs.                                                                                                                                                                                      |
+| `.env` and `docker-compose.yml` | Next to each other on the host             | Your secrets and settings, including the VAPID keys browsers subscribed with.                                                                                                                                                   |
+| `./wallet`, `./well-known`      | Next to `docker-compose.yml`               | Only if you set up Wallet passes or a native app.                                                                                                                                                                               |
 
 The commands below are run from the directory that holds `docker-compose.yml`. They reach the
 volumes through the backend container (`--volumes-from`), so they work whatever Docker named
@@ -34,13 +34,37 @@ docker compose stop backend
 
 docker run --rm --volumes-from "$(docker compose ps -aq backend)" \
   -v "$PWD/backups":/backups alpine \
-  tar czf "/backups/openresto-$(date +%Y%m%d-%H%M%S).tar.gz" -C / data app/wwwroot/media
+  tar czf "/backups/openresto-$(date +%Y%m%d-%H%M%S).tar.gz" --exclude=data/dp-keys -C / data app/wwwroot/media
 
 docker compose start backend
 ```
 
-That one archive holds the database, the keys and the media. Copy `.env` and `backups/` somewhere
-off the server too: a backup on the same disk doesn't help if the disk dies.
+That archive holds the database and the media, and leaves the keys out on purpose. The database
+keeps the SMTP password encrypted and the keys are what decrypt it, so an archive holding both
+(and archives get copied around, emailed and left on shared drives) hands over the mail account.
+Copy `.env` and `backups/` somewhere off the server too: a backup on the same disk doesn't help
+if the disk dies.
+
+### Keys (optional)
+
+Skipping the keys costs you little: after a restore you enter the SMTP password again under
+**Settings → Email**, and guests' "recent bookings" cookies stop working until they book or look
+up a booking again. If you would rather not redo that, back the keys up on their own, encrypted
+with a passphrase, and keep that file somewhere other than the database backups:
+
+```bash
+docker run --rm --volumes-from "$(docker compose ps -aq backend)" alpine \
+  tar cz -C /data dp-keys \
+  | openssl enc -aes-256-cbc -pbkdf2 -salt -out "backups/openresto-keys-$(date +%Y%m%d).tar.gz.enc"
+```
+
+`openssl` asks for the passphrase; store it in a password manager, not next to the file. To put
+the keys back (with the backend stopped):
+
+```bash
+openssl enc -d -aes-256-cbc -pbkdf2 -in backups/openresto-keys-DATE.tar.gz.enc \
+  | docker run --rm -i --volumes-from "$(docker compose ps -aq backend)" alpine tar xz -C /data
+```
 
 ### Without stopping anything
 
@@ -67,10 +91,14 @@ docker compose stop backend
 # Swap TIMESTAMP for the backup you want.
 docker run --rm --volumes-from "$(docker compose ps -aq backend)" \
   -v "$PWD/backups":/backups alpine \
-  sh -c 'rm -rf /data/* /app/wwwroot/media/* && tar xzf /backups/openresto-TIMESTAMP.tar.gz -C /'
+  sh -c 'find /data -mindepth 1 -maxdepth 1 ! -name dp-keys -exec rm -rf {} + && rm -rf /app/wwwroot/media/* && tar xzf /backups/openresto-TIMESTAMP.tar.gz -C /'
 
 docker compose start backend
 ```
+
+The keys already on the server are left alone, so restoring onto the same install keeps the SMTP
+password working. On a new server there are no keys yet: restore the encrypted keys file first
+(see [Keys](#keys-optional)) or enter the SMTP password again.
 
 To restore a `.db` snapshot instead, stop the backend, copy it over `/data/openresto.db` the
 same way (and delete any `openresto.db-wal` and `openresto.db-shm` beside it), then start it.
@@ -124,7 +152,9 @@ can also just copy the folder while the backend is stopped:
 
 ```bash
 docker compose -f docker-compose.vps.yml stop backend
-cp -r ./data "./backups/openresto-data-$(date +%Y%m%d-%H%M%S)"
+DEST="./backups/openresto-data-$(date +%Y%m%d-%H%M%S)"
+cp -r ./data "$DEST"
+rm -r "$DEST/dp-keys"   # the keys travel separately, see above
 docker compose -f docker-compose.vps.yml start backend
 ```
 

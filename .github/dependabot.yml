@@ -1,0 +1,45 @@
+# Weekly, grouped version updates. Nothing here merges anything: PRs are reviewed like any other
+# (dependency-automerge.yml decides separately which of them may auto-merge).
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directories:
+      - "/"
+      - "/openresto-frontend"
+      - "/openresto-cli"
+      - "/docs-site"
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      nuget-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directories:
+      - "/OpenRestoApi"
+      - "/openresto-frontend"
+      - "/openresto-cli"
+      - "/nginx"
+      - "/nginx-vps"
+    schedule:
+      interval: weekly
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]

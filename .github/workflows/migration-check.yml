@@ -6,11 +6,9 @@ on:
     paths:
       - "OpenRestoApi.Infrastructure/Migrations/**.cs"
       - "OpenRestoApi.Infrastructure/Persistence/AppDbContext.cs"
-  push:
-    branches: [main]
-    paths:
-      - "OpenRestoApi.Infrastructure/Migrations/**.cs"
-      - "OpenRestoApi.Infrastructure/Persistence/AppDbContext.cs"
+  # A push to main runs this through ci.yml, so deploy can list it in `needs`
+  # (a `needs` entry cannot point at a job in another workflow run).
+  workflow_call:
 
 permissions:
   contents: read
