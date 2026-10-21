@@ -775,19 +775,15 @@ public class AuthControllerTests(TestWebAppFactory factory) : IClassFixture<Test
     }
 
     [Fact]
-    public async Task Me_WithAPreMultiUserToken_StillResolvesTheAccount()
+    public async Task Me_WithATokenWithoutAUserId_Returns401_EvenWhenItsEmailNamesARealAccount()
     {
-        // A 30-day token minted before the upgrade carries no user id and the retired "Admin"
-        // role — it must keep working rather than silently signing the operator out. A fresh
-        // account, because other tests here revoke the seeded admin's sessions.
-        await SeedSessionAsync("legacy-session@test.com", "LegacyPass123!");
-        HttpClient client = _factory.CreateClientWithToken(TestWebAppFactory.GenerateLegacyJwt("legacy-session@test.com"));
+        // A token minted before multi-user support names an email but no account id. The email
+        // is not an identity, so it signs the holder out instead of resolving the account.
+        // A fresh account, because other tests here revoke the seeded admin's sessions.
+        await SeedSessionAsync("no-id-session@test.com", "NoIdPass123!");
+        HttpClient client = _factory.CreateClientWithToken(TestWebAppFactory.GenerateJwtWithoutUserId("no-id-session@test.com"));
 
-        HttpResponseMessage response = await client.GetAsync("/api/admin/auth/me");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        JsonElement body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal("legacy-session@test.com", body.GetProperty("email").GetString());
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/admin/auth/me")).StatusCode);
     }
 
     [Fact]

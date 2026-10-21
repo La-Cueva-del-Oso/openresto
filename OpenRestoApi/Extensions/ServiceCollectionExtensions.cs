@@ -280,15 +280,13 @@ public static class ServiceCollectionExtensions
             });
 
         // The role → capability mapping lives here and nowhere else; controllers only ever
-        // name a policy. LegacyAdmin satisfies both because it is what the pre-multi-user
-        // build minted for the one and only admin, who becomes an Owner on upgrade — honouring
-        // it keeps in-flight 30-day sessions working instead of silently signing everyone out.
+        // name a policy.
         services.AddAuthorization(options =>
         {
             options.AddPolicy(AuthPolicies.RequireAdmin, policy =>
-                policy.RequireRole(UserRoles.Owner, UserRoles.Manager, UserRoles.LegacyAdmin));
+                policy.RequireRole(UserRoles.Owner, UserRoles.Manager));
             options.AddPolicy(AuthPolicies.RequireOwner, policy =>
-                policy.RequireRole(UserRoles.Owner, UserRoles.LegacyAdmin));
+                policy.RequireRole(UserRoles.Owner));
         });
 
         return services;
@@ -310,7 +308,7 @@ public static class ServiceCollectionExtensions
     {
         ClaimsPrincipal principal = context.Principal!;
         IAdminCredentialRepository credentials = context.HttpContext.RequestServices.GetRequiredService<IAdminCredentialRepository>();
-        AdminCredential? account = await CurrentUserResolver.ResolveAsync(principal.UserId(), principal.Email(), credentials);
+        AdminCredential? account = await CurrentUserResolver.ResolveAsync(principal.UserId(), credentials);
         if (account is null)
         {
             context.Fail("Session no longer matches an active account.");

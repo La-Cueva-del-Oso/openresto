@@ -4,9 +4,8 @@ using OpenRestoApi.Core.Domain;
 namespace OpenRestoApi.Tests.TestInfrastructure;
 
 /// <summary>
-/// Stands in for the claims on the request. <see cref="ForLegacyToken"/> models the tokens
-/// minted before multi-user support — email claim only, no user id — which services must still
-/// resolve.
+/// Stands in for the claims on the request. <see cref="WithoutUserId"/> models a token that names
+/// an email but no account id, which services must not resolve.
 /// </summary>
 internal sealed class FakeCurrentUser : ICurrentUserService
 {
@@ -32,10 +31,10 @@ internal sealed class FakeCurrentUser : ICurrentUserService
         Role = user.Role,
     };
 
-    public static FakeCurrentUser ForLegacyToken(string email) => new()
+    public static FakeCurrentUser WithoutUserId(string email) => new()
     {
         Email = email,
-        Role = UserRoles.LegacyAdmin,
+        Role = UserRoles.Owner,
     };
 
     public static FakeCurrentUser Anonymous() => new();

@@ -167,8 +167,7 @@ public class UserService(
             ?? throw new NotFoundException($"User {id} not found.") { Code = ErrorCodes.UserNotFound, Args = new Dictionary<string, object> { ["id"] = id } };
 
     private bool IsSelf(AdminCredential user)
-        => _currentUser.UserId == user.Id
-            || string.Equals(_currentUser.Email, user.Email, StringComparison.OrdinalIgnoreCase);
+        => _currentUser.UserId == user.Id;
 
     // Losing the last active Owner would leave the instance with nobody able to manage users —
     // unrecoverable through the UI. The action is part of the rule rather than a value inside it:

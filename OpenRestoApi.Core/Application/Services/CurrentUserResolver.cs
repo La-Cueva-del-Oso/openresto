@@ -11,29 +11,21 @@ namespace OpenRestoApi.Core.Application.Services;
 /// </summary>
 public static class CurrentUserResolver
 {
-    /// <summary>
-    /// The active account named by the caller's claims, or null. Tokens minted before
-    /// multi-user support carry no id claim, so the email claim is honoured as a fallback
-    /// rather than logging those in-flight sessions out.
-    /// </summary>
+    /// <summary>The active account the caller's id claim names, or null.</summary>
+    /// <seealso>CurrentUserResolverTests.ResolveAsync_ResolvesNothing_ForATokenWithoutAUserId</seealso>
     public static Task<AdminCredential?> ResolveAsync(
         ICurrentUserService currentUser,
         IAdminCredentialRepository credentialRepository)
-        => ResolveAsync(currentUser.UserId, currentUser.Email, credentialRepository);
+        => ResolveAsync(currentUser.UserId, credentialRepository);
 
     /// <inheritdoc cref="ResolveAsync(ICurrentUserService, IAdminCredentialRepository)"/>
     public static async Task<AdminCredential?> ResolveAsync(
         int? userId,
-        string? email,
         IAdminCredentialRepository credentialRepository)
     {
-        AdminCredential? cred = userId.HasValue
-            ? await credentialRepository.GetByIdAsync(userId.Value)
-            : null;
+        if (!userId.HasValue) return null;
 
-        if (cred == null && !string.IsNullOrWhiteSpace(email))
-            cred = await credentialRepository.GetByEmailAsync(email);
-
+        AdminCredential? cred = await credentialRepository.GetByIdAsync(userId.Value);
         return cred?.IsActive == true ? cred : null;
     }
 }

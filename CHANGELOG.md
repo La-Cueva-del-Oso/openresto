@@ -56,6 +56,7 @@ How each feature behaves, its API fields and its error codes are in
 
 - Existing admin push subscriptions have no owner to attribute them to and are discarded by the upgrade. A browser that already had notifications on registers itself again the next time an admin opens the admin area, so most installs need no action; if notifications stay silent, turn them off and on again in Settings. Until then, the notifications page still lists new bookings, but nothing is pushed to the device.
 - Failed-email records now expire after 30 days and admin notifications after 90 (`Retention:EmailFailureDays`, `Retention:NotificationDays`; a value of 0 or less keeps them forever). Before, they were kept indefinitely along with the guest's address and name.
+- Security: a sign-in token that names no account id (the kind issued before multi-user admin accounts existed) is now refused instead of being matched to an account by its email, and the old `Admin` role in such a token is no longer accepted. Self-hosters upgrading from 1.7 or earlier with a session still open must sign in again once.
 
 ### Fixed
 

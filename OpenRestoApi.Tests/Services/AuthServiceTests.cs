@@ -251,21 +251,11 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task ChangePasswordAsync_Resolves_Caller_By_Email_For_Tokens_Without_A_User_Id()
+    public async Task ChangePasswordAsync_Returns_Null_For_A_Token_Without_A_User_Id_Even_When_Its_Email_Matches()
     {
-        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangePasswordAsync_Resolves_Caller_By_Email_For_Tokens_Without_A_User_Id));
-        SeedCredential(db, "legacy@example.com", "old");
-        AuthService svc = CreateService(db, FakeCurrentUser.ForLegacyToken("legacy@example.com"));
-
-        Assert.NotNull(await svc.ChangePasswordAsync("old", "newpass"));
-    }
-
-    [Fact]
-    public async Task ChangePasswordAsync_Returns_Null_When_The_Token_Names_No_Live_Account()
-    {
-        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangePasswordAsync_Returns_Null_When_The_Token_Names_No_Live_Account));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(ChangePasswordAsync_Returns_Null_For_A_Token_Without_A_User_Id_Even_When_Its_Email_Matches));
         SeedCredential(db, "admin@example.com", "old");
-        AuthService svc = CreateService(db, FakeCurrentUser.ForLegacyToken("ghost@example.com"));
+        AuthService svc = CreateService(db, FakeCurrentUser.WithoutUserId("admin@example.com"));
 
         Assert.Null(await svc.ChangePasswordAsync("old", "newpass"));
     }

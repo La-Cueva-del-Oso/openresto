@@ -223,24 +223,14 @@ public class SecurityQuestionsServiceTests
     }
 
     [Fact]
-    public async Task SetupAsync_Resolves_Caller_By_Email_For_Tokens_Without_A_User_Id()
+    public async Task SetupAsync_Throws_For_A_Token_Without_A_User_Id_Even_When_Its_Email_Matches()
     {
-        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(SetupAsync_Resolves_Caller_By_Email_For_Tokens_Without_A_User_Id));
+        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(SetupAsync_Throws_For_A_Token_Without_A_User_Id_Even_When_Its_Email_Matches));
         SeedCredential(db, "legacy@openresto.com");
-        (SecurityQuestionsService svc, _) = CreateService(db, FakeCurrentUser.ForLegacyToken("legacy@openresto.com"));
+        (SecurityQuestionsService svc, _) = CreateService(db, FakeCurrentUser.WithoutUserId("legacy@openresto.com"));
 
-        await svc.SetupAsync(BootstrapPassword, "Q?", "a");
-
-        Assert.Equal("Q?", (await db.AdminCredentials.SingleAsync()).PvqQuestion);
-    }
-
-    [Fact]
-    public async Task SetupAsync_Throws_When_The_Session_Names_No_Live_Account()
-    {
-        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(SetupAsync_Throws_When_The_Session_Names_No_Live_Account));
-        (SecurityQuestionsService svc, _) = CreateService(db, FakeCurrentUser.ForLegacyToken("ghost@openresto.com"));
-
-        await Assert.ThrowsAsync<NotFoundException>(() => svc.SetupAsync(BootstrapPassword, "Q?", "A"));
+        await Assert.ThrowsAsync<NotFoundException>(() => svc.SetupAsync(BootstrapPassword, "Q?", "a"));
+        Assert.Null((await db.AdminCredentials.SingleAsync()).PvqQuestion);
     }
 
     [Fact]

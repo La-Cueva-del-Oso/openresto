@@ -339,18 +339,6 @@ public class UserServiceTests
     }
 
     [Fact]
-    public async Task SetActiveAsync_Recognises_The_Caller_By_Email_On_A_Pre_MultiUser_Token()
-    {
-        using AppDbContext db = TestDbFactory.CreateSqlite(nameof(SetActiveAsync_Recognises_The_Caller_By_Email_On_A_Pre_MultiUser_Token));
-        AdminCredential caller = Seed(db, "legacy@example.com");
-        Seed(db, "owner2@example.com");
-        UserService svc = CreateService(db, FakeCurrentUser.ForLegacyToken("legacy@example.com"));
-
-        await Assert.ThrowsAsync<BusinessRuleException>(
-            () => svc.SetActiveAsync(caller.Id, new SetUserActiveRequest { IsActive = false }));
-    }
-
-    [Fact]
     public async Task SetActiveAsync_Refuses_To_Deactivate_The_Last_Active_Owner()
     {
         using AppDbContext db = TestDbFactory.CreateSqlite(nameof(SetActiveAsync_Refuses_To_Deactivate_The_Last_Active_Owner));

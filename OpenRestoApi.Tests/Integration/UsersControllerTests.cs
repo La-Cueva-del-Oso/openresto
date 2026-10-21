@@ -90,13 +90,11 @@ public class UsersControllerTests(TestWebAppFactory factory) : IClassFixture<Tes
     }
 
     [Fact]
-    public async Task List_WithAPreMultiUserToken_IsTreatedAsOwner()
+    public async Task List_WithATokenWithoutAUserId_Returns401()
     {
-        // The single admin of a pre-upgrade instance becomes an Owner, so their in-flight
-        // token must keep reaching Owner-only endpoints.
-        HttpClient legacy = _factory.CreateClientWithToken(TestWebAppFactory.GenerateLegacyJwt());
+        HttpClient noId = _factory.CreateClientWithToken(TestWebAppFactory.GenerateJwtWithoutUserId());
 
-        Assert.Equal(HttpStatusCode.OK, (await legacy.GetAsync("/api/admin/users")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await noId.GetAsync("/api/admin/users")).StatusCode);
     }
 
     // ── CRUD ─────────────────────────────────────────────────────────────────
